@@ -32,7 +32,9 @@ Read-only UE package table inspection also finds these exports in both supplied 
 | `Icons.leftPanel` | Engine.Texture | 4,177 | 4,177 |
 | `Icons.QuidMatchBoxTexture` | Engine.Texture | 16,446 | 16,446 |
 
-Thus these are unresolved **unqualified code references**, not missing texture exports. The smallest correction candidate is to qualify the ten literals as `Texture'HGame.Icons.leftPanel'` / `Texture'HGame.Icons.QuidMatchBoxTexture'`, then run UCC again and verify warning removal plus the affected UI. `Cutscene/CutSceneManager.uc:252` already uses the qualified leftPanel object.
+Thus these are unresolved **code references during parsing**, not missing texture exports. The first correction attempted fully qualified literals; build `20260920-152111-762` still reports all ten warnings with those qualified names. Qualification alone does not fix this M212 build path. The warnings occur during `Parsing` (log lines 972 and 1190–1198), before `Compiling` (baseWarning at 2006, FEQuidPage at 2132) and `Importing Defaults` (starting at 2142).
+
+The narrow revised fix keeps both `#exec Texture Import` directives and their actual resource names, adds `WarningBackgroundTexture` / `QuidMatchButtonTexture` fields, and binds the qualified textures in `defaultproperties`. Executable code reads those fields. This follows the already working source pattern in `Cutscene/CutSceneManager.uc:252`, which binds the same leftPanel object in defaults. It avoids a repeated runtime load and does not substitute or remove the resources. The observed phase ordering supports an import-availability explanation; the exact native parser implementation was not inspected. A new build must verify both warning removal **and valid default object references**, followed by rendered UI checks.
 
 Runtime exposure: baseWarning.Draw assigns the unresolved object to Background and immediately accesses Alpha/bTransparent, then draws it. FEQuidPage assigns the unresolved object to the Up/Down/Over textures of menu buttons. This can cause missing UI and Accessed None behavior; it is not cosmetic compiler noise. Actual rendered behavior was not tested by this audit.
 
@@ -100,10 +102,25 @@ Class-count delta is one Function, one BoolProperty and six ObjectProperty expor
 
 ## Minimal correction order
 
-1. Qualify ten unresolved texture literals; rebuild and check those warnings disappear.
+1. Bind the two imported textures through fields initialized in `defaultproperties`, replacing ten executable literals with field reads; rebuild, verify actual default object references, and check the UI.
 2. Resolve the three duplicate experiment class declarations; rebuild and ensure canonical NPC classes retain their intended defaults.
 3. Remove unsupported defaults or replace the nonexistent coop flag with explicit coop-session behavior; do not change marker inheritance blindly.
 4. Retain and document remaining naming/shadow warnings. Address native movement field identity as part of the movement audit, with focused runtime checks.
 5. Preserve supplied binary plus source manifests, explicitly track the missing spectator extension, and label source rebuild as a distinct baseline.
 
 Suggested gate distinguishes: compile errors; unresolved resources; ignored defaults; class/file mismatches; known naming diagnostics. A single total warning count cannot identify regressions. All output remains local; no EA packages or extracted resources were published by this audit.
+
+## Revised recipe and development-copy migration
+
+`patches/v18-compile-cleanup.json` now describes the original-v18 to revised-output transformation. The three distinct character-class corrections are unchanged. The recipe remains ASCII JSON with byte-preserving Latin-1 replacements and whole-file input/result hashes.
+
+The already patched development copy was moved from the qualification-only output to the revised output with the explicit local recipe `.local/patch-migrations/v18-compile-cleanup-texture-defaults-migration.json`. Its archived predecessor is `.local/patch-migrations/v18-compile-cleanup.qualification-v1.json`. These are ignored local migration artifacts, not additional recipes loaded by the normal build.
+
+| Development source | Qualification-only input SHA-256 | Revised output SHA-256 |
+| --- | --- | --- |
+| `HGame/Classes/baseWarning.uc` | `f06f9630d5ba135f06e374ba096a0745b66ee6c961d8bb32d4bac040cf6b13bc` | `91a2556de095569e49fa6ad8562722794befd470c8ae4ed9aba06c81818eba2e` |
+| `HGame/Classes/Menu/FEQuidPage.uc` | `8720b511e57e0a944e2b701741c885435cf1f342220f98ace43f38d62312247f` | `5f87c7e1d1120c1c8b14aeb84a2fdfe5962b9b2d65d6fe63045d67d8c36435cc` |
+
+Before changing the development copy, the actual patch applier was exercised on a temporary marked tree: original source → previous recipe → migration → current recipe (already-applied skip) → migration (already-applied skip). All hashes and intermediate backups matched. The six recipe unit tests passed after the revision. The explicit migration then changed only the two listed development source files; the applier preserved their previous bytes under `.local/game/.patch-backups/v18-compile-cleanup-texture-defaults-migration/`.
+
+At the time of this migration, UCC had **not yet compiled the revised texture bindings**. Subsequent build `20260920-153659-290` finished with 0 errors / 268 warnings, removing the ten unresolved texture warnings. Independent read-only decoding of both UClass tagged-defaults confirmed non-None references to the exact `Engine.Texture` exports. See [the compile-cleanup verification report](../iterations/20260920_COMPILE_CLEANUP.md) for package hash, object indices, tests and remaining runtime checks.

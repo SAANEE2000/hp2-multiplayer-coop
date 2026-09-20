@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "name": "v18-compile-cleanup",
+  "description": "Narrow byte-checked corrections for three duplicate experiment class declarations and ten texture uses. Texture resources remain imported and are bound through Texture fields in defaultproperties after script parsing. No mesh, superclass or ignored-default changes. Do not apply to original snapshots.",
+  "source_snapshot": "supplied v18/v18/HGame/Classes",
+  "string_encoding": "latin-1-byte-preserving",
+  "format_note": "This JSON file is ASCII. JSON old/new strings represent exact source bytes via Latin-1 code points; encode each value using latin-1 before binary comparison/replacement. Do not decode source as UTF-8 or normalize line endings.",
+  "apply_policy": [
+    "Target only a marked development copy. Validate every whole-file input SHA before any write.",
+    "If the whole-file SHA equals result_sha256, skip that file as already applied. Otherwise require source_sha256; reject all other states.",
+    "Each old byte sequence must occur exactly once. Apply replacements in listed order to an in-memory byte buffer.",
+    "Validate the complete output SHA before atomically writing that file. Never accept partial matches or patch by line number.",
+    "Build with UCC and confirm the three class/file mismatch diagnostics and ten unresolved texture warnings disappear. Verify both new Texture defaults resolve to the actual imported objects; warning removal alone is insufficient."
+  ],
+  "asset_verification": {
+    "method": "Read-only HPModels.u name/import/export table inspection; exact export-table end equals file size. These three exports resolve to Engine.SkeletalMesh. Source PSK files also exist.",
+    "package_path": ".local/game/System/HPModels.u",
+    "package_sha256": "7f8aa5baf5f700fd87662e81c00fa9bfd8b6a6ea78e6a138a1a23eb2e857054a",
+    "package_version": 115,
+    "resources": [
+      {
+        "object": "HPModels.skronPlayerMesh",
+        "class": "Engine.SkeletalMesh",
+        "serialized_bytes": 38622
+      },
+      {
+        "object": "HPModels.skhermionePlayerMesh",
+        "class": "Engine.SkeletalMesh",
+        "serialized_bytes": 41487
+      },
+      {
+        "object": "HPModels.skHagridPlayerMesh",
+        "class": "Engine.SkeletalMesh",
+        "serialized_bytes": 32885
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "HGame/Classes/Characters/RonPlayer.uc",
+      "source_sha256": "0a2e5ef4acd5ad8819096f89ea86cf7923db1a8587d3946e10bf464674771ce3",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "class declaration",
+          "action": "match-class-name-to-file",
+          "source_lines": [
+            5,
+            5
+          ],
+          "old_sha256": "5920fcd99236802c41af709aea264bb33f1d46d8c187e297e684ae795a8bd822",
+          "new_sha256": "c4839bacad41aea15349fd26c3ac5f1958a5d34db4256492fdacea6b17627b6f",
+          "old": "class Ron extends Characters;\n",
+          "new": "class RonPlayer extends Characters;\n"
+        }
+      ],
+      "result_sha256": "e326302c984e2d0b4b668829e20274dfc01c5f6dc758a590c2e8344afb441aa4"
+    },
+    {
+      "path": "HGame/Classes/Characters/HermionePlayer.uc",
+      "source_sha256": "31f76780bf364ae63e031fb16b75a84a349141a70500ddf9cf15a6514e077617",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "class declaration",
+          "action": "match-class-name-to-file",
+          "source_lines": [
+            5,
+            5
+          ],
+          "old_sha256": "7ab3682cd0d9ba3ea3de1b1ae8304b45134a1ef969eb76aee7deada86e4b87f5",
+          "new_sha256": "e3d6f5fd0800fc3cc83a7317d3a61248beb332c7dc0584095acb984b19477fe9",
+          "old": "class Hermione extends Characters;\n",
+          "new": "class HermionePlayer extends Characters;\n"
+        }
+      ],
+      "result_sha256": "95879b15bf8855e831e11023474e5ea25f1dffb767389a833cdba15412df60f9"
+    },
+    {
+      "path": "HGame/Classes/Characters/HagridPlayer.uc",
+      "source_sha256": "93d76c147915dc313ff20a5026a8db8eed008bf2359c516aa2dcb2144ff4308b",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "class declaration",
+          "action": "match-class-name-to-file",
+          "source_lines": [
+            5,
+            5
+          ],
+          "old_sha256": "c08a448c85363345c917039183b1b867dfe1398f03d74346a6a56834e35b02c4",
+          "new_sha256": "cef27839964bcb711306c1e224e6d457bcac367cf52510302150217440f95948",
+          "old": "class Hagrid extends Characters;\n",
+          "new": "class HagridPlayer extends Characters;\n"
+        }
+      ],
+      "result_sha256": "911261de4f128975b683ce7a718312534a025349a392f0a07b05e445e9b36eac"
+    },
+    {
+      "path": "HGame/Classes/baseWarning.uc",
+      "source_sha256": "d63d5e9592df88b9d312a5880c1e7123b2852281e5c3346231e9a47970d10488",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "Texture field",
+          "action": "declare-default-bound-texture",
+          "source_lines": [
+            12,
+            12
+          ],
+          "old_sha256": "cb0f388218214a8e3ffa4f8364abc64c273ae17c8db48014bd4cbdb4e7b4f7ab",
+          "new_sha256": "11f18724309b7bc8a32fa1916e0813dbdbc6c74ef086c528d828bb1cf82e8a8b",
+          "old": "var bool bShow;\n",
+          "new": "var bool bShow;\nvar Texture WarningBackgroundTexture;\n"
+        },
+        {
+          "function": "Draw",
+          "action": "use-default-bound-texture",
+          "source_lines": [
+            36,
+            36
+          ],
+          "old_sha256": "592950fdfe83c87b0704e2a8c118f8744bcf6582228a465ce0490c470edaabc8",
+          "new_sha256": "c231af9c2f25723c14ab58bba2866a0a972c7350f576ddf969ca2280e287d92d",
+          "old": "    Background = Texture'leftPanel';\n",
+          "new": "    Background = WarningBackgroundTexture;\n"
+        },
+        {
+          "function": "defaultproperties",
+          "action": "bind-imported-texture-in-defaults",
+          "source_lines": [
+            67,
+            67
+          ],
+          "old_sha256": "2f08063315a762b8c1c2b00ea3492351251f07051559f490c4bf7beac5ab4e0a",
+          "new_sha256": "372007151f92921a8ecee367df69bf01c51b1fc0007732088cfcc87ebc28b51a",
+          "old": "    DisplayText=\"WARNING\"\n",
+          "new": "    DisplayText=\"WARNING\"\n    WarningBackgroundTexture=Texture'HGame.Icons.leftPanel'\n"
+        }
+      ],
+      "result_sha256": "91a2556de095569e49fa6ad8562722794befd470c8ae4ed9aba06c81818eba2e"
+    },
+    {
+      "path": "HGame/Classes/Menu/FEQuidPage.uc",
+      "source_sha256": "6528a639a26628003f39033d0ac24846513c7f4e41490946e5c3456337ed668c",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "Texture field",
+          "action": "declare-default-bound-texture",
+          "source_lines": [
+            18,
+            18
+          ],
+          "old_sha256": "3338e0539d5b5fa21b7d19b264fd326aeb89c0edf8018607f2634526f7dde799",
+          "new_sha256": "7935dbf11b75e42897818da8c6207c162fbfd74944584b210893be3f875d2549",
+          "old": "var Texture lockedTexture;\n",
+          "new": "var Texture lockedTexture;\nvar Texture QuidMatchButtonTexture;\n"
+        },
+        {
+          "function": "PreSwitchPage locked buttons",
+          "action": "use-default-bound-texture",
+          "source_lines": [
+            120,
+            124
+          ],
+          "old_sha256": "073a59150b51042ad69a1c2aa5994557c8affdbd7ee6933bb3f270cb21e80a6f",
+          "new_sha256": "60ceecdf6b6f3a8510540467df7ed3fdfb73ed5b330f673be00eff2f90526202",
+          "old": "\t\t\t\tstartGameButtons[I].ToolTipString = GetLocalFEString(\"Quidditch_0045\");\n\t\t\t}\n\t\t\tstartGameButtons[i].UpTexture=texture 'QuidMatchBoxTexture'; \n\t\t\tstartGameButtons[i].DownTexture=texture 'QuidMatchBoxTexture'; \n\t\t\tstartGameButtons[i].OverTexture=texture 'QuidMatchBoxTexture';  \n",
+          "new": "\t\t\t\tstartGameButtons[I].ToolTipString = GetLocalFEString(\"Quidditch_0045\");\n\t\t\t}\n\t\t\tstartGameButtons[i].UpTexture=QuidMatchButtonTexture; \n\t\t\tstartGameButtons[i].DownTexture=QuidMatchButtonTexture; \n\t\t\tstartGameButtons[i].OverTexture=QuidMatchButtonTexture;  \n"
+        },
+        {
+          "function": "PreSwitchPage unlocked buttons",
+          "action": "use-default-bound-texture",
+          "source_lines": [
+            143,
+            147
+          ],
+          "old_sha256": "b7fea7da056e652c67093b98084b9e4b6833ebe654d8e4ef4680fafb4080009c",
+          "new_sha256": "31a1bb069f27f1af8900cdbac5ee7f65d96cd65b3b92a006700fc1d0a9b2e52b",
+          "old": "\t\t\t\tstartGameButtons[I].ToolTipString = GetLocalFEString(\"Quidditch_0020\") $ \" \" $I + 1;\n\t\t\t}\n\t\t\tstartGameButtons[i].UpTexture=texture 'QuidMatchBoxTexture'; \n\t\t\tstartGameButtons[i].DownTexture=texture 'QuidMatchBoxTexture'; \n\t\t\tstartGameButtons[i].OverTexture=texture 'QuidMatchBoxTexture'; \n",
+          "new": "\t\t\t\tstartGameButtons[I].ToolTipString = GetLocalFEString(\"Quidditch_0020\") $ \" \" $I + 1;\n\t\t\t}\n\t\t\tstartGameButtons[i].UpTexture=QuidMatchButtonTexture; \n\t\t\tstartGameButtons[i].DownTexture=QuidMatchButtonTexture; \n\t\t\tstartGameButtons[i].OverTexture=QuidMatchButtonTexture; \n"
+        },
+        {
+          "function": "Created button textures",
+          "action": "use-default-bound-texture",
+          "source_lines": [
+            307,
+            309
+          ],
+          "old_sha256": "06439c3f49528bb3b53e25fd91ed75965782bd7b616afe736b7248ea63b6fc00",
+          "new_sha256": "f9687a092bb0a4d1d7964c0364fe2ee4e6778117f47889899d481d1cca276c63",
+          "old": "\t\tstartGameButtons[i].UpTexture\t\t= Texture 'QuidMatchBoxTexture'; \n\t\tstartGameButtons[i].DownTexture\t\t= Texture 'QuidMatchBoxTexture'; \n\t\tstartGameButtons[i].OverTexture\t\t= Texture 'QuidMatchBoxTexture'; \n",
+          "new": "\t\tstartGameButtons[i].UpTexture\t\t= QuidMatchButtonTexture; \n\t\tstartGameButtons[i].DownTexture\t\t= QuidMatchButtonTexture; \n\t\tstartGameButtons[i].OverTexture\t\t= QuidMatchButtonTexture; \n"
+        },
+        {
+          "function": "defaultproperties",
+          "action": "bind-imported-texture-in-defaults",
+          "source_lines": [
+            416,
+            417
+          ],
+          "old_sha256": "44848c5c632aa1aaffb0e19785bd666f17f4e806ea018fc592fa26dda3c66bac",
+          "new_sha256": "08ec35c710b6d1fc81cc51b86f929fe7a7795e1e1208866b1a03c5cad1583858",
+          "old": "\tSuper.Notify(C,E);\n}\n",
+          "new": "\tSuper.Notify(C,E);\n}\n\ndefaultproperties\n{\n    QuidMatchButtonTexture=Texture'HGame.Icons.QuidMatchBoxTexture'\n}\n"
+        }
+      ],
+      "result_sha256": "5f87c7e1d1120c1c8b14aeb84a2fdfe5962b9b2d65d6fe63045d67d8c36435cc"
+    }
+  ],
+  "texture_binding_note": "Qualification alone was tested and still failed during Parsing. Existing same-package imports are available when Importing Defaults runs. Bind their qualified Engine.Texture objects in defaults and read the fields in executable code; verify both defaults and resources in the rebuilt package."
+}

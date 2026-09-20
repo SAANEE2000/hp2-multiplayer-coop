@@ -2,16 +2,23 @@
 class HPCoopGame extends GameInfo;
 
 var HPCoopHarry CoopPlayers[2];
+var byte ReadyPlayers[2];
 var HPCoopHarry StoryLeader;
 var harry LegacyStoryHarry;
 var byte PendingLoginSlot;
 var bool bLoginInProgress;
 var PlayerStart CompanionStart;
+var string CanonicalCutName;
+var int RequiredPlayers;
+var bool bWaitingForPlayers;
 
 event InitGame(string Options, out string Error)
 {
     Super.InitGame(Options, Error);
     MaxPlayers = 2;
+    RequiredPlayers = Clamp(GetIntOption(Options, "RequiredPlayers", 2), 1, 2);
+    bWaitingForPlayers = True;
+    Level.Pauser = "WaitingForCoopPlayers";
     Log("[MP_LOGIN] mode=coop build=foundation-1 maxPlayers=2");
 }
 
@@ -24,8 +31,10 @@ event PostBeginPlay()
     if (LegacyStoryHarry != None && HPCoopHarry(LegacyStoryHarry) == None)
     {
         LegacyStoryHarry.bHidden = True;
+        LegacyStoryHarry.bIsPlayer = False;
         LegacyStoryHarry.SetCollision(False, False, False);
         LegacyStoryHarry.Disable('Tick');
+        CanonicalCutName = LegacyStoryHarry.CutName;
     }
 }
 
@@ -46,6 +55,13 @@ function bool IsCoopPlayer(Actor A)
     return A != None && (A == CoopPlayers[0] || A == CoopPlayers[1]);
 }
 
+function bool IsAliveCoopPlayer(HPCoopHarry H)
+{
+    // Original Harry damage changes StatusItemHealth, not Pawn.Health.
+    return H != None && !H.bDeleteMe && H.Player != None
+        && IsCoopPlayer(H) && H.managerStatus != None && !H.HarryIsDead();
+}
+
 function int GetAliveCoopPlayers(out HPCoopHarry First, out HPCoopHarry Second)
 {
     local byte I;
@@ -53,8 +69,7 @@ function int GetAliveCoopPlayers(out HPCoopHarry First, out HPCoopHarry Second)
     First = None;
     Second = None;
     for (I = 0; I < 2; I++)
-        if (CoopPlayers[I] != None && CoopPlayers[I].Player != None
-            && CoopPlayers[I].Health > 0 && !CoopPlayers[I].bDeleteMe)
+        if (IsAliveCoopPlayer(CoopPlayers[I]))
         {
             if (Count == 0)
                 First = CoopPlayers[I];
@@ -69,7 +84,7 @@ function HPCoopHarry ResolveAITarget(Pawn Seeker, optional Pawn Attacker)
 {
     local HPCoopHarry A, B;
     GetAliveCoopPlayers(A, B);
-    if (IsCoopPlayer(Attacker) && Attacker.Health > 0)
+    if (IsAliveCoopPlayer(HPCoopHarry(Attacker)))
         return HPCoopHarry(Attacker);
     if (A == None || Seeker == None)
         return A;
@@ -80,7 +95,7 @@ function HPCoopHarry ResolveAITarget(Pawn Seeker, optional Pawn Attacker)
 
 function RefreshSession()
 {
-    local byte I, Count;
+    local byte I, Count, ReadyCount;
     local HPCoopGRI G;
     local HPCoopPRI P;
     G = HPCoopGRI(GameReplicationInfo);
@@ -88,6 +103,8 @@ function RefreshSession()
         if (CoopPlayers[I] != None)
         {
             Count++;
+            if (ReadyPlayers[I] != 0 && IsAliveCoopPlayer(CoopPlayers[I]))
+                ReadyCount++;
             P = HPCoopPRI(CoopPlayers[I].PlayerReplicationInfo);
             if (P != None)
             {
@@ -97,6 +114,8 @@ function RefreshSession()
         }
     if (StoryLeader != None)
         Level.PlayerHarryActor = StoryLeader;
+    else
+        Level.PlayerHarryActor = LegacyStoryHarry;
     if (G != None)
     {
         G.StoryLeader = StoryLeader;
@@ -104,6 +123,76 @@ function RefreshSession()
         if (StoryLeader != None)
             G.SharedGameState = StoryLeader.CurrentGameState;
     }
+    if (bWaitingForPlayers && ReadyCount >= RequiredPlayers)
+    {
+        bWaitingForPlayers = False;
+        if (Level.Pauser == "WaitingForCoopPlayers")
+            Level.Pauser = "";
+        Log("[MP_STORY] session-ready players=" $ Count $ " ready=" $ ReadyCount $ " leader=" $ StoryLeader);
+    }
+}
+
+function PlayerContextReady(HPCoopHarry H)
+{
+    local byte I;
+    // Called by the owning pawn's server RPC after its local context is ready.
+    // Resolve the slot through the registry; never trust a supplied slot value.
+    if (Role != ROLE_Authority || !IsAliveCoopPlayer(H))
+        return;
+    for (I = 0; I < 2; I++)
+        if (CoopPlayers[I] == H)
+        {
+            if (ReadyPlayers[I] == 0)
+            {
+                ReadyPlayers[I] = 1;
+                Log("[MP_LOGIN] context-ready pawn=" $ H $ " slot=" $ I);
+            }
+            RefreshSession();
+            return;
+        }
+}
+
+function bool SetPause(bool bPause, PlayerPawn P)
+{
+    // The lobby owns this pause until the required clients acknowledge ready.
+    if (bWaitingForPlayers)
+        return False;
+    return Super.SetPause(bPause, P);
+}
+
+function AdoptStoryLeader(HPCoopHarry NewLeader, harry Previous)
+{
+    local HPawn A;
+    local Director D;
+    local harry Canonical;
+    StoryLeader = NewLeader;
+    Canonical = NewLeader;
+    if (Canonical == None)
+        Canonical = LegacyStoryHarry;
+    if (Canonical != None)
+    {
+        if (Previous != None && Previous != Canonical)
+        {
+            Canonical.CurrentGameState = Previous.CurrentGameState;
+            if (CanonicalCutName == "") CanonicalCutName = Previous.CutName;
+            Previous.CutName = "";
+        }
+        Canonical.CutName = CanonicalCutName;
+    }
+    // Only migrate references to the previous canonical actor. This is not an
+    // AI targeting policy and does not touch independent carry/combat owners.
+    // Last logout migrates them back to the retained map actor before the
+    // departing pawn is destroyed, so the next login can adopt them again.
+    if (Previous != None)
+    {
+        foreach AllActors(Class'HPawn', A)
+            if (A.PlayerHarry == Previous)
+                A.PlayerHarry = Canonical;
+        foreach AllActors(Class'Director', D)
+            if (D.PlayerHarry == Previous)
+                D.PlayerHarry = Canonical;
+    }
+    Level.PlayerHarryActor = Canonical;
 }
 
 event PlayerPawn Login(string Portal, string Options, out string Error, class<PlayerPawn> SpawnClass)
@@ -123,14 +212,24 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
     bLoginInProgress = False;
     H = HPCoopHarry(P);
     if (H == None)
-        return P;
+    {
+        Error = "Co-op requires a separate HPCoopHarry for each connection.";
+        if (P != None)
+        {
+            Super.Logout(P);
+            P.Destroy();
+        }
+        return None;
+    }
     H.CoopSlot = PendingLoginSlot;
     CoopPlayers[PendingLoginSlot] = H;
+    ReadyPlayers[PendingLoginSlot] = 0;
     if (StoryLeader == None)
+        AdoptStoryLeader(H, LegacyStoryHarry);
+    else
     {
-        StoryLeader = H;
-        if (LegacyStoryHarry != None)
-            H.CurrentGameState = LegacyStoryHarry.CurrentGameState;
+        H.CurrentGameState = StoryLeader.CurrentGameState;
+        H.CutName = "CoopCompanion";
     }
     RefreshSession();
     Log("[MP_LOGIN] accepted pawn=" $ H $ " slot=" $ H.CoopSlot $ " leader=" $ StoryLeader);
@@ -141,7 +240,11 @@ event PostLogin(PlayerPawn NewPlayer)
 {
     Super.PostLogin(NewPlayer);
     if (HPCoopHarry(NewPlayer) != None)
+    {
+        HPCoopHarry(NewPlayer).EnsureCoopWand();
+        Log("[MP_LOGIN] post-login pawn=" $ NewPlayer $ " weapon=" $ NewPlayer.Weapon);
         HPCoopHarry(NewPlayer).ClientCoopReady(HPCoopHarry(NewPlayer).CoopSlot);
+    }
 }
 
 function NavigationPoint FindPlayerStart(Pawn Player, optional byte InTeam, optional string incomingName)
@@ -179,16 +282,29 @@ function NavigationPoint FindPlayerStart(Pawn Player, optional byte InTeam, opti
 function Logout(Pawn Exiting)
 {
     local byte I;
+    local HPCoopHarry Successor;
     for (I = 0; I < 2; I++)
         if (CoopPlayers[I] == Exiting)
+        {
             CoopPlayers[I] = None;
+            ReadyPlayers[I] = 0;
+        }
     if (StoryLeader == Exiting)
     {
-        StoryLeader = CoopPlayers[0];
-        if (StoryLeader == None)
-            StoryLeader = CoopPlayers[1];
+        Successor = CoopPlayers[0];
+        if (Successor == None)
+            Successor = CoopPlayers[1];
+        AdoptStoryLeader(Successor, harry(Exiting));
     }
     Super.Logout(Exiting);
+    if (CoopPlayers[0] == None && CoopPlayers[1] == None)
+    {
+        ReadyPlayers[0] = 0;
+        ReadyPlayers[1] = 0;
+        bWaitingForPlayers = True;
+        Level.Pauser = "WaitingForCoopPlayers";
+        Log("[MP_STORY] waiting-for-players reason=empty-session");
+    }
     RefreshSession();
     Log("[MP_LOGIN] logout pawn=" $ Exiting $ " leader=" $ StoryLeader);
 }

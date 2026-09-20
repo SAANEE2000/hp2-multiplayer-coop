@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "name": "coop-spell-caster",
+  "description": "Use a registered co-op projectile caster only for the original HChar Flipendo shove; preserve single-player fallback and persistent enemy PlayerHarry context.",
+  "source_snapshot": "installed/v18 HGame/Classes/HChar.uc",
+  "string_encoding": "latin-1-byte-preserving",
+  "format_note": "ASCII JSON. Encode old/new strings as latin-1; preserve LF source bytes. Apply only to a marked development copy via scripts/apply_patches.py.",
+  "scope": [
+    "HChar.HandleSpellFlipendo only; no map, AI target, enemy state, health, damage or movement changes.",
+    "Authority co-op: prefer registered spell.Instigator; fallback to registered spell.Owner. If neither qualifies, retain original PlayerHarry.",
+    "All non-co-op calls, client calls, absent/deleted spells and unregistered casters keep original PlayerHarry direction.",
+    "Existing Super callback, bFlipPushable gate, PHYS_Falling, XY magnitude, Z force and return are preserved."
+  ],
+  "known_gaps": [
+    "firecrab.pushDirection still uses canonical PlayerHarry for subsequent ledge decisions.",
+    "Co-op enemy AI target selection and target vulnerability replication remain separate work."
+  ],
+  "files": [
+    {
+      "path": "HGame/Classes/HChar.uc",
+      "source_sha256": "8da013b92c445bd5a675f1bcc3609a47319bb9c318ed75613c01397a9c657fad",
+      "result_sha256": "5772ddde74bb6d357fffad082322c270ee33ad2e8ad7e3d6558b734aec4d43e0",
+      "upstream_sha256_by_commit": {
+        "7105bae78ee2e7c5a3b4d2dff65e1ea7cc903e8b": "8da013b92c445bd5a675f1bcc3609a47319bb9c318ed75613c01397a9c657fad",
+        "d052c5bdb3ed2e232fa0f71d0189880d585b295d": "8da013b92c445bd5a675f1bcc3609a47319bb9c318ed75613c01397a9c657fad"
+      },
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "HChar.HandleSpellFlipendo",
+          "action": "owner-scoped-coop-shove",
+          "source_lines": [
+            913,
+            923
+          ],
+          "old_sha256": "b4537adc89e10321b9028a43535c0a0cf433ecaf28ddeae7bc8624719ac5825a",
+          "new_sha256": "2b635485cea734ffd5ec60717485fbce2d65e01ba505f5de5116eac0114d42fa",
+          "old": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n\tSuper.HandleSpellFlipendo(spell,vHitLocation);\n\tif ( bFlipPushable == True )\n\t{\n\t\tSetPhysics(PHYS_Falling);\n\t\tVelocity = Normal(Location - PlayerHarry.Location) * fFlipPushForceXY;\n\t\tVelocity.Z = fFlipPushForceZ;\n\t}\n\treturn True;\n}\n",
+          "new": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n\tlocal HPCoopGame CoopGame;\n\tlocal harry PushSource, CoopCaster;\n\n\tSuper.HandleSpellFlipendo(spell,vHitLocation);\n\tif ( bFlipPushable == True )\n\t{\n\t\t// Preserve the original actor context; only this shove uses its caster.\n\t\tPushSource = PlayerHarry;\n\t\tCoopGame = HPCoopGame(Level.Game);\n\t\tif ( Role == ROLE_Authority && Level.NetMode != NM_Client\n\t\t\t&& CoopGame != None && spell != None && !spell.bDeleteMe )\n\t\t{\n\t\t\tCoopCaster = harry(spell.Instigator);\n\t\t\tif ( CoopCaster == None || CoopCaster.bDeleteMe\n\t\t\t\t|| !CoopGame.IsCoopPlayer(CoopCaster) )\n\t\t\t\tCoopCaster = harry(spell.Owner);\n\t\t\tif ( CoopCaster != None && !CoopCaster.bDeleteMe\n\t\t\t\t&& CoopGame.IsCoopPlayer(CoopCaster) )\n\t\t\t\tPushSource = CoopCaster;\n\t\t}\n\t\tSetPhysics(PHYS_Falling);\n\t\tVelocity = Normal(Location - PushSource.Location) * fFlipPushForceXY;\n\t\tVelocity.Z = fFlipPushForceZ;\n\t}\n\treturn True;\n}\n"
+        }
+      ]
+    }
+  ]
+}

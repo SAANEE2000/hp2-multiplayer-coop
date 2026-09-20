@@ -46,9 +46,12 @@ $buildBranch = (& git -C $repo branch --show-current 2>$null)
 $buildDirty = [bool](& git -C $repo status --porcelain 2>$null)
 if (!$Baseline) {
     $recipes = @(Get-ChildItem -LiteralPath (Join-Path $repo 'patches') -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)
-    foreach ($recipe in $recipes) {
-        & python (Join-Path $repo 'scripts\apply_patches.py') --work-root $WorkRoot $recipe.FullName
-        if ($LASTEXITCODE -ne 0) { throw "Patch failed: $($recipe.Name)" }
+    if ($recipes.Count -gt 0) {
+        # One batch validates all files and orders each source/result hash chain.
+        # File-name order cannot express recipes that patch the same source.
+        $recipePaths = @($recipes | ForEach-Object { $_.FullName })
+        & python (Join-Path $repo 'scripts\apply_patches.py') --work-root $WorkRoot @recipePaths
+        if ($LASTEXITCODE -ne 0) { throw 'Patch batch failed; no build was started.' }
     }
     $overlay = Join-Path $repo 'mod\HGame\Classes'
     if (Test-Path -LiteralPath $overlay) {

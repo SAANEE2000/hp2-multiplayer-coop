@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "name": "coop-presentation-guards",
+  "description": "Guard optional Harry noise listeners and Spongify effect references; restrict landed cursor changes to the owning viewport. Preserve all landing movement, damage, noise and pad interactions.",
+  "source_snapshot": "harry.uc after restore-legacy-gameplay recipe",
+  "string_encoding": "latin-1-byte-preserving",
+  "format_note": "ASCII JSON. Encode old/new strings as latin-1; preserve LF bytes. Apply only to a marked development copy.",
+  "apply_after": [
+    "restore-legacy-gameplay",
+    "coop-spell-caster"
+  ],
+  "apply_policy": [
+    "Whole-file source/result hashes and unique byte anchors are mandatory.",
+    "Apply after restore-legacy-gameplay; the build coordinator must preserve dependency ordering and repeated-build idempotence."
+  ],
+  "scope": [
+    "Optional HearHarryRecipient callback is skipped only when absent; every existing MakeNoise call remains unchanged.",
+    "StopSpongifyEffects disables each effect only when that effect exists.",
+    "Only the two SpellCursor.SetLOSDistance calls in PlayerWalking.Landed require Player, local Viewport and SpellCursor.",
+    "No changes to Landed damage, SpongifyPad selection, physics, animation, sound, ShakeView or AutoHitAreaEffect.",
+    "StartAiming/makeTarget/native fire-bit guards belong to HPCoopHarry and are outside this base-source recipe."
+  ],
+  "files": [
+    {
+      "path": "HGame/Classes/harry.uc",
+      "source_sha256": "09d939227a6e3b4844990d0206b322ac2fd2738d58425df0d7e5274062a48ef0",
+      "result_sha256": "66c9574c7c9335cebf3e0233cf8e3ffd6481a801b272f46160e57a19d6d10e64",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "harry.PlayFootStep",
+          "action": "nullable-gameplay-listener",
+          "source_lines": [
+            2582,
+            2586
+          ],
+          "old_sha256": "e0b2cd793052775ea017c77bc5934e0f7ddc0c50b68c014c73fd768b215459be",
+          "new_sha256": "9f19513e2b66730b30d3ada26c34bfd108f705604d9a1c5971c472d3755a925e",
+          "old": "  if ( bMakeNoise )\n  {\n    HearHarryRecipient.PawnHearHarryNoise();\n    MakeNoise(10.0);\n  }",
+          "new": "  if ( bMakeNoise )\n  {\n    if ( HearHarryRecipient != None )\n      HearHarryRecipient.PawnHearHarryNoise();\n    MakeNoise(10.0);\n  }"
+        },
+        {
+          "function": "harry.PlayLandedSound",
+          "action": "nullable-gameplay-listener",
+          "source_lines": [
+            3352,
+            3353
+          ],
+          "old_sha256": "b88f29bdb4ca9ea44367fa11bbbed49e25fff33dd69ed9dd8206e42e65f7cdc3",
+          "new_sha256": "21a49bcd01e1bc3ed610f17fec1527fa3f30435aec5aaf71295e7a283c805a6f",
+          "old": "\tHearHarryRecipient.PawnHearHarryNoise();\n\tMakeNoise( 10 );",
+          "new": "\tif ( HearHarryRecipient != None )\n\t\tHearHarryRecipient.PawnHearHarryNoise();\n\tMakeNoise( 10 );"
+        },
+        {
+          "function": "harry.StopSpongifyEffects",
+          "action": "nullable-presentation-effect",
+          "source_lines": [
+            4245,
+            4246
+          ],
+          "old_sha256": "7f4b2be8b62edb2aa79965898ee5d61d34acb60a06cda676b5944974c28a6efc",
+          "new_sha256": "0d896cb0700f02056e1c011f864c67a527e1e3b33d8308781c9c1dba65653568",
+          "old": "\tfor( i = 0; i < NUM_SPONGIFY_FX; i++ )\n\t\tSpongifyFX[i].bEmit = false;",
+          "new": "\tfor( i = 0; i < NUM_SPONGIFY_FX; i++ )\n\t\tif ( SpongifyFX[i] != None )\n\t\t\tSpongifyFX[i].bEmit = false;"
+        },
+        {
+          "function": "harry.PlayerWalking.Landed",
+          "action": "owner-cursor-normal-range",
+          "source_lines": [
+            4445,
+            4446
+          ],
+          "old_sha256": "6b7d1dc14c02c0f45c4a1b61072d095572c2df2566536bf213d4198001b65eec",
+          "new_sha256": "f1d066a7c873dc9e069a5443205da4b492e4ed3eb69a9c4a8b16ca33cb0fd2ec",
+          "old": "\tif( !bExtendedTargetting && AnimFalling == SpongifyFallAnim )\n\t\tSpellCursor.SetLOSDistance( 0 );",
+          "new": "\tif( !bExtendedTargetting && AnimFalling == SpongifyFallAnim\n\t\t&& Player != None && Viewport(Player) != None && SpellCursor != None )\n\t\tSpellCursor.SetLOSDistance( 0 );"
+        },
+        {
+          "function": "harry.PlayerWalking.Landed",
+          "action": "owner-cursor-spongify-range",
+          "source_lines": [
+            4464,
+            4465
+          ],
+          "old_sha256": "8db4a2b51e625c696a5eac6467ce4a8602fac49e147e00e99778b9536329be06",
+          "new_sha256": "8ac5534500901951ca600a36aa7cc24352397aae65849248bea3f2f599c54fdc",
+          "old": "\t\t\tif( !bExtendedTargetting )\n\t\t\t\tSpellCursor.SetLOSDistance( 1024 );",
+          "new": "\t\t\tif( !bExtendedTargetting && Player != None\n\t\t\t\t&& Viewport(Player) != None && SpellCursor != None )\n\t\t\t\tSpellCursor.SetLOSDistance( 1024 );"
+        }
+      ]
+    }
+  ]
+}

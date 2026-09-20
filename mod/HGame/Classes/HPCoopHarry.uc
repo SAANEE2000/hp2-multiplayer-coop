@@ -744,17 +744,25 @@ function TakeDamage(int Damage, Pawn InstigatedBy, vector HitLocation,
     vector Momentum, name DamageType)
 {
     local HPCoopGame G;
+    local HPCoopAISnailProbe SnailProbe;
+    local int BeforeHealth;
     G = HPCoopGame(Level.Game);
     if (Role != ROLE_Authority || G == None || !G.IsCoopPlayer(self)
         || bCoopDead || Damage <= 0) return;
     EnsureCoopStatus();
     EnsureCoopAnimation();
     if (managerStatus == None || HarryAnimChannel == None) return;
+    if (G.RuntimeProbe ~= "AISnail") BeforeHealth = GetHealthCount();
     // The restored original retains difficulty, acid throttle, lethal damage
     // types, hurt audio, knockback, carried-object rules and automatic potion.
     bCoopInDamage = True;
     Super.TakeDamage(Damage, InstigatedBy, HitLocation, Momentum, DamageType);
     bCoopInDamage = False;
+    // Passive fixture witness after the unchanged original damage call.
+    if (G.RuntimeProbe ~= "AISnail")
+        foreach AllActors(Class'HPCoopAISnailProbe', SnailProbe)
+            SnailProbe.ActualHit(self, InstigatedBy, DamageType,
+                BeforeHealth, GetHealthCount());
     PublishCoopStatus();
 }
 

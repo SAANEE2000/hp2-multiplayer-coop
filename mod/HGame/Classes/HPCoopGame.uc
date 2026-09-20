@@ -41,13 +41,14 @@ event InitGame(string Options, out string Error)
         || !(TestStage ~= "RictusempraLessonComplete")
         || (RuntimeProbe != "" && !(RuntimeProbe ~= "AIInspect")
             && !(RuntimeProbe ~= "AICombat")
+            && !(RuntimeProbe ~= "AISnail")
             && !(RuntimeProbe ~= "MountRootB0")
             && !(RuntimeProbe ~= "MountRootB1"))))
     {
         Error = "CoopCapturedAuthority requires dedicated Ch1 with no active probe.";
         return;
     }
-    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat") && !(RuntimeProbe ~= "MountRootB0") && !(RuntimeProbe ~= "MountRootB1")
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat") && !(RuntimeProbe ~= "AISnail") && !(RuntimeProbe ~= "MountRootB0") && !(RuntimeProbe ~= "MountRootB1")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
@@ -152,6 +153,7 @@ event PostBeginPlay()
     }
     if (RuntimeProbe ~= "AIInspect") Spawn(Class'HPCoopAIInspectProbe', self);
     if (RuntimeProbe ~= "AICombat") Spawn(Class'HPCoopAICombatProbe', self);
+    if (RuntimeProbe ~= "AISnail") Spawn(Class'HPCoopAISnailProbe', self);
     if ((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1"))
         Spawn(Class'HPCoopMountRootProbe', self);
     if (LegacyStoryHarry == None)

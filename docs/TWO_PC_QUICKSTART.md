@@ -18,7 +18,7 @@ Prepare создаёт `.hp2-development-copy.json` и выбирает отде
 Из одного приватного test kit положите одинаковые binary ZIP и runtime JSON в `.local\distribution` обоих source-каталогов. Для текущего комплекта:
 
 ```powershell
-$artifact = '.local\distribution\hp2-test-build-20260920-174718-213-0e6031d4.zip'
+$artifact = '.local\distribution\hp2-test-build-20260920-205803-579-ac856139.zip'
 $runtime = '.local\distribution\hp2-runtime-20260920-163839-818-d45d6265.json'
 .\scripts\Test-RuntimeCompatibility.ps1 -WorkRoot $workRoot -Manifest $runtime
 if ($LASTEXITCODE -ne 0) { throw 'Runtime differs; keep the INCOMPATIBLE report and stop here.' }
@@ -28,7 +28,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Runtime differs; keep the INCOMPATIBLE report 
 
 Требуется `COMPATIBLE`, затем успешный import. `MISSING`, `AMBIGUOUS` или `MISMATCH` перечисляют конкретные файлы; сравните свою версию M212 с комплектом до запуска. Не подменяйте эталон JSON и не копируйте случайные DLL. Проверяются Engine/Core DLL и U, Game/UCC EXE, IpDrv DLL/U, Entry и Ch1 карты. HGame.u и M212Share.u проверяются отдельно внутри import. Этот набор хешей не проверяет все textures/audio/drivers и сам по себе не доказывает gameplay.
 
-ZIP содержит одну сборку HGame.u + M212Share.u; его SHA-256: `32478d7eb852f8d06329761dcd519c699679d2194d537bfd0e7294a932543a59`. Runtime JSON SHA-256: `cebbaa5db04fad8b87ae0df4798858df2819044d79f0a9e70c8610db133b4fd0`. После import не пересобирайте пакеты независимо на двух ПК: UCC GUID может различаться. В этом artifact `sourceDirty=true`; source commit/ZIP не являются утверждением, что бинарники собраны из чистого commit. Точные пакеты определяются записанными хешами.
+ZIP содержит одну сборку HGame.u + M212Share.u; его SHA-256: `1fefd3678cdf7e861a930f69c5c9a92064803a9d60fbc875ba352f7cd87c1c54`. Runtime JSON SHA-256: `cebbaa5db04fad8b87ae0df4798858df2819044d79f0a9e70c8610db133b4fd0`. После import не пересобирайте пакеты независимо на двух ПК: UCC GUID может различаться. В этом artifact `sourceDirty=true`; build-time HEAD `7f84ddb` и source ZIP не означают чистую сборку из того commit. Исходники были затем зафиксированы; точную сборку определяют хеши пакетов и source manifest.
 
 ## 2. Запустить сервер и два клиента
 
@@ -37,7 +37,7 @@ ZIP содержит одну сборку HGame.u + M212Share.u; его SHA-256
 На **ПК A** в том же PowerShell:
 
 ```powershell
-$hostRun = .\scripts\Launch-Multiplayer.ps1 -Mode Coop -Role Host -WorkRoot $workRoot -Map Ch1Rictusempra -Port 7777 -TestStage RictusempraLessonComplete
+$hostRun = .\scripts\Launch-Multiplayer.ps1 -Mode Coop -Role Host -WorkRoot $workRoot -Map Ch1Rictusempra -Port 7777 -TestStage RictusempraLessonComplete -CapturedAuthorityDiagnostic -FirstIntroPreflight
 $joinRun = .\scripts\Launch-Multiplayer.ps1 -Mode Coop -Role Join -WorkRoot $workRoot -Server 127.0.0.1 -Port 7777 -PlayerName HarryA
 $hostRun, $joinRun | Format-Table session, processId, status
 ```
@@ -49,20 +49,20 @@ $joinRun = .\scripts\Launch-Multiplayer.ps1 -Mode Coop -Role Join -WorkRoot $wor
 $joinRun | Format-Table session, processId, status
 ```
 
-Host — скрытый dedicated server; у игрока A отдельный Join. До подключения/готовности обоих ожидается пауза. `STARTED` означает только создание процесса. `-TestStage` нужен **только Host**: явно задаёт Ch1/GSTATE030 с Flipendo, Lumos, Alohomora, Rictusempra после урока; это тестовый старт, не восстановленное сохранение.
+Host — скрытый dedicated server; у игрока A отдельный Join. До подключения/готовности обоих ожидается пауза. `STARTED` означает только создание процесса. `-TestStage` нужен **только Host**: явно задаёт Ch1/GSTATE030 с Flipendo, Lumos, Alohomora, Rictusempra после урока; это тестовый старт, не восстановленное сохранение. Два дополнительных флага включают проверенный локально барьер оригинальной первой катсцены: сервер ждёт обе камеры до запуска, ведущий проходит штатный CutMark0 и затем оба владельца подтверждают возврат управления. Эти флаги пока не включены в обычный co-op по умолчанию. `-IntroFault` не используйте: это только тест отказов.
 
 ## 3. Проверить 10–15 минут и записать результат
 
-- Intro: оба видят одну сцену; управление блокируется и возвращается обоим. Нет повторного intro, зависшего кадра или чужой камеры.
+- Intro: оба видят одну сцену; управление блокируется и возвращается обоим. Гарри ведущего должен действительно пройти к CutMark0. Нет повторного intro, зависшего кадра или чужой камеры. Если появляется сообщение о необходимости перезапустить host, прекратите эту сессию и сохраните логи: это защитная остановка, а не штатное завершение сцены.
 - По очереди походить WASD, повернуть камеру мышью, выполнить обычный прыжок Space на ровном месте. Второй игрок наблюдает движение, но его собственная камера/управление не меняются. Не использовать ledge/mount как критерий этого smoke test.
 - Наведение и ЛКМ используют исходный выбор заклинания по цели, **не клавиши Versus 1–6**. Проверить Rictusempra на улитке/крабе, Flipendo на доступной подходящей цели, Alohomora на подходящем замке/сундуке; повторить доступные действия от обоих игроков. Записать отдельно появление FX, реальное изменение цели и то, что видит наблюдатель. Недоступную без дальнейшего прохождения цель отметить NOT RUN.
 - Lumos: у доступной гаргульи активировать свет сначала одним, затем другим игроком. Проверить видимость света у обоих, работу светового объекта и отсутствие выключения чужого источника при завершении своего. Записать место и последовательность; если до гаргульи не дошли, отметить NOT RUN.
 - Урон/смерть: после проверки управления по очереди дать одному игроку получить естественный урон, пока второй жив и стоит на ровном безопасном полу. Записать чей HUD меняется, анимацию смерти, появление рядом с напарником с 41 HP и восстановление управления. Затем поменяться ролями. Движущиеся платформы пока не подходят для этой проверки. Если оба умерли, ожидается сообщение о недоступном shared checkpoint; закончить эту сессию и собрать логи.
 - При первом дефекте записать ПК A/B, примерное время, действие и ожидаемое/фактическое поведение. Не применять `set`, summon, all-spells, force release или другие ручные исправления: исходный дефект нужен в логах.
 
-Известные ограничения этого комплекта: канонический Гарри ещё может не выполнять scripted walk во вступлении, хотя камера и release проходят; AI пока не адаптирован для выбора обоих игроков. Подбор предметов, книги checkpoint и меню save/load ещё не готовы — в этом smoke test их не использовать. Не включать `-RuntimeProbe`: автоматические fixtures меняют здоровье/инвентарь и предназначены для отдельной разработки.
+Известные ограничения этого комплекта: scripted walk во вступлении прошёл локальный loopback, но не физический двух-ПК тест; AI пока не адаптирован для выбора обоих игроков. Ch1 Frog/Wiggenwell личный подбор проверен автоматическим native Touch fixture; если предмет встретится естественно, запишите результат для каждого и его исчезновение на обоих экранах. Книги checkpoint и меню save/load пока заблокированы — в этом smoke test их не использовать. Не включать `-RuntimeProbe`: автоматические fixtures меняют здоровье/инвентарь и предназначены для отдельной разработки.
 
-В клиентских логах ожидается `local-initial-state=GSTATE030 spells=4 test-stage=True`. Для диагностики полезны `[MP_LOGIN]`, `[MP_CAMERA]`, `[MP_CUTSCENE]`, `[MP_SPELL]`, `[MP_LUMOS]`. Native `Can't find a valid player` при client map screening — известная незакрытая граница; её наличие не скрывать. Начальный snapshot не доказывает полную корректность client world state.
+В клиентских логах ожидается `local-initial-state=GSTATE030 spells=4 test-stage=True`. Для диагностики полезны `[MP_LOGIN]`, `[MP_CAMERA]`, `[MP_CUTSCENE]`, `[MP_INTRO]`, `[MP_CAPTURE_WALK]`, `[MP_SPELL]`, `[MP_LUMOS]`. Сервер должен записать две `ready slot`, original walk/cue, две resume и `complete`; каждый клиент — `owner-complete`. Логи не заменяют визуальную проверку. Native `Can't find a valid player` при client map screening — известная незакрытая граница; её наличие не скрывать. Начальный snapshot не доказывает полную корректность client world state.
 
 ## 4. Вернуть логи
 

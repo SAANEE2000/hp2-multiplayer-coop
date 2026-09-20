@@ -12,5 +12,7 @@ See CURRENT_STATE.md for evidence and outstanding work. A successful compile
 does not establish campaign or two-physical-PC compatibility.
 
 On the prepared Windows development PC, double-click `Play-Menu-Test.cmd` to
-launch the verified `.local/game` copy into the Single Player / Multiplayer
-menu. See `docs/MENU_TEST_QUICKSTART.md` for setup on another PC.
+open a start menu using the original menu art, with Single Player, Co-op and
+Versus routes into the verified `.local/game` copy. The native three-button
+Game.exe front-end is preserved for save loading and settings. See
+`docs/MENU_TEST_QUICKSTART.md` for setup on another PC.

@@ -1,5 +1,12 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidateSet('Original','Single','CoopHost','CoopJoin','VersusHost','VersusJoin')]
+    [string]$LaunchMode = 'Original',
+    [string]$Server = '127.0.0.1',
+    [ValidateRange(1024,65535)][int]$Port = 7777,
+    [string]$PlayerName = 'Harry',
+    [switch]$DryRun
+)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $gameRoot = Join-Path $repo '.local\game'
@@ -35,22 +42,48 @@ foreach ($name in @('HGame.u', 'M212Share.u')) {
     }
 }
 
-foreach ($running in @(Get-Process -Name Game -ErrorAction SilentlyContinue)) {
-    $path = $null
-    try { $path = $running.Path } catch { }
-    if ($path -and [string]::Equals($path, $exe, [StringComparison]::OrdinalIgnoreCase)) {
-        Write-Output "Test game is already running (PID $($running.Id)): $exe"
-        return
+if ($PlayerName -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') {
+    throw 'Player name must be 1-23 letters, digits, _ or -.'
+}
+if ($LaunchMode -in @('CoopJoin','VersusJoin')) {
+    if ($Server -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$' -or
+        [Uri]::CheckHostName($Server) -notin @([UriHostNameType]::Dns,[UriHostNameType]::IPv4)) {
+        throw 'Server must be an IPv4 address or DNS name without URL options.'
     }
 }
 
 $logName = 'HP2MP-menu-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log'
-$prepared = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') -Mode Coop -Role Join -PrepareOnly
+$profileMode = if ($LaunchMode -like 'Versus*') { 'Versus' } else { 'Coop' }
+$prepared = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
+    -Mode $profileMode -Role Join -PrepareOnly -PlayerName $PlayerName
 if ($prepared.status -ne 'PREPARED') { throw 'Could not prepare the isolated menu profile.' }
 $runRoot = $prepared.runRoot
-$arguments = @('startup.unr?game=Engine.GameInfo', '-windowed', '-NOFRONTEND', '-NewWindow',
+$url = switch ($LaunchMode) {
+    Original   { 'startup.unr?game=Engine.GameInfo' }
+    Single     { 'PrivetDr.unr?game=Engine.GameInfo' }
+    CoopHost   { "Ch1Rictusempra.unr?game=HGame.HPCoopGame?listen?MaxPlayers=2?Name=$PlayerName" }
+    CoopJoin   { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Coop" }
+    VersusHost { "HPV_Entry.unr?game=HGame.HPVersusGame?listen?MaxPlayers=2?Name=$PlayerName`?ScoreLimit=3" }
+    VersusJoin { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Versus" }
+}
+$mapName = switch ($LaunchMode) {
+    Original { 'startup.unr' }
+    Single { 'PrivetDr.unr' }
+    CoopHost { 'Ch1Rictusempra.unr' }
+    VersusHost { 'HPV_Entry.unr' }
+    default { 'Entry.unr' }
+}
+if (!(Test-Path -LiteralPath (Join-Path $gameRoot "Maps\$mapName") -PathType Leaf)) {
+    throw "Map is missing from the test game: $mapName"
+}
+$arguments = @($url, '-windowed', '-NOFRONTEND', '-NewWindow',
     ('INI=' + (Split-Path $prepared.engineIni -Leaf)),
     ('USERINI=' + (Split-Path $prepared.userIni -Leaf)), "-log=$logName", '-FORCEFLUSH')
+if ($DryRun) {
+    [PSCustomObject]@{LaunchMode=$LaunchMode; URL=$url; Arguments=$arguments;
+        EngineIni=$prepared.engineIni; UserIni=$prepared.userIni; Executable=$exe}
+    return
+}
 $previousCompat = $env:__COMPAT_LAYER
 try {
     $env:__COMPAT_LAYER = 'RunAsInvoker'
@@ -66,5 +99,5 @@ Start-Sleep -Seconds 3
 $process.Refresh()
 if ($process.HasExited) { throw "Game.exe exited immediately with code $($process.ExitCode)." }
 $documents = [Environment]::GetFolderPath('MyDocuments')
-Write-Output "Test game is running (PID $($process.Id)): $exe"
+Write-Output "Test game is running (PID $($process.Id), mode $LaunchMode): $exe"
 Write-Output "Expected log: $(Join-Path (Join-Path $documents 'HP2-Multiplayer-Development') $logName)"

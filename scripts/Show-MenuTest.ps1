@@ -212,8 +212,13 @@ function Show-HostMenu {
         if ($script:currentMode -eq 'Coop') { Show-CoopStartMenu }
         else { Show-ModeMenu $script:currentMode }
     })
-    if ($script:currentMode -eq 'Coop' -and $script:coopMap -ne 'Ch1Rictusempra') {
-        [void](Add-MenuLabel 'Экспериментальный прямой старт: прогресс не переносится.' 674 28 9)
+    if ($script:currentMode -eq 'Coop') {
+        $hint = if ($script:coopMap -eq 'Ch1Rictusempra') {
+            'Запустятся отдельный сервер и ваше окно игры.'
+        } else {
+            'Экспериментальный старт; сервер откроет ваше окно игры.'
+        }
+        [void](Add-MenuLabel $hint 674 28 9)
     }
 }
 
@@ -298,7 +303,8 @@ try {
         }) | Select-Object -First 1
         $hostButton.PerformClick()
         if ($script:lastTestLaunch.LaunchMode -ne 'CoopHost' -or
-            $script:lastTestLaunch.URL -notmatch '^Ch1Rictusempra\.unr\?game=HGame\.HPCoopGame\?listen') {
+            $script:lastTestLaunch.URL -ne 'Ch1Rictusempra.unr?game=HGame.HPCoopGame?MaxPlayers=2' -or
+            $script:lastTestLaunch.Arguments[0] -ne 'server') {
             throw 'Co-op host menu route failed.'
         }
         Show-CoopLevelsMenu
@@ -311,7 +317,7 @@ try {
         }) | Select-Object -First 1
         $hostButton.PerformClick()
         if ($script:lastTestLaunch.CoopMap -ne 'Ch3Diffindo' -or
-            $script:lastTestLaunch.URL -notmatch '^Ch3Diffindo\.unr\?game=HGame\.HPCoopGame\?listen') {
+            $script:lastTestLaunch.URL -ne 'Ch3Diffindo.unr?game=HGame.HPCoopGame?MaxPlayers=2') {
             throw 'Co-op level-selection route failed.'
         }
         Show-ModeMenu 'Versus'

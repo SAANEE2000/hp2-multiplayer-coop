@@ -18,3 +18,6 @@ Game.exe front-end is preserved for save loading and settings. See
 `docs/MENU_TEST_QUICKSTART.md` for setup on another PC.
 Co-op server creation offers a new Ch1 test, direct level launch for Ch1–Ch4,
 and an honest load screen: co-op save/load is not implemented yet.
+The co-op menu starts a dedicated UCC server and a separate local Game client;
+closing the local client stops its matching server. This avoids the cutscene
+camera-capture failure observed when the earlier menu used a listen server.

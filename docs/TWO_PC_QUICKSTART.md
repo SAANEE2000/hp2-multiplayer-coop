@@ -18,7 +18,7 @@ Prepare создаёт `.hp2-development-copy.json` и выбирает отде
 Из одного приватного test kit положите одинаковые binary ZIP и runtime JSON в `.local\distribution` обоих source-каталогов. Для текущего комплекта:
 
 ```powershell
-$artifact = '.local\distribution\hp2-test-build-20260920-205803-579-ac856139.zip'
+$artifact = '.local\distribution\hp2-test-build-20260920-223752-969-14bd0bb8.zip'
 $runtime = '.local\distribution\hp2-runtime-20260920-163839-818-d45d6265.json'
 .\scripts\Test-RuntimeCompatibility.ps1 -WorkRoot $workRoot -Manifest $runtime
 if ($LASTEXITCODE -ne 0) { throw 'Runtime differs; keep the INCOMPATIBLE report and stop here.' }
@@ -28,7 +28,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Runtime differs; keep the INCOMPATIBLE report 
 
 Требуется `COMPATIBLE`, затем успешный import. `MISSING`, `AMBIGUOUS` или `MISMATCH` перечисляют конкретные файлы; сравните свою версию M212 с комплектом до запуска. Не подменяйте эталон JSON и не копируйте случайные DLL. Проверяются Engine/Core DLL и U, Game/UCC EXE, IpDrv DLL/U, Entry и Ch1 карты. HGame.u и M212Share.u проверяются отдельно внутри import. Этот набор хешей не проверяет все textures/audio/drivers и сам по себе не доказывает gameplay.
 
-ZIP содержит одну сборку HGame.u + M212Share.u; его SHA-256: `1fefd3678cdf7e861a930f69c5c9a92064803a9d60fbc875ba352f7cd87c1c54`. Runtime JSON SHA-256: `cebbaa5db04fad8b87ae0df4798858df2819044d79f0a9e70c8610db133b4fd0`. После import не пересобирайте пакеты независимо на двух ПК: UCC GUID может различаться. В этом artifact `sourceDirty=true`; build-time HEAD `7f84ddb` и source ZIP не означают чистую сборку из того commit. Исходники были затем зафиксированы; точную сборку определяют хеши пакетов и source manifest.
+ZIP содержит одну сборку HGame.u + M212Share.u; его SHA-256: `7e2a5a94e0e34a59e0a12848c0e75f57bf432eb586b0d78797a9f6035bf1d68d`. Runtime JSON SHA-256: `cebbaa5db04fad8b87ae0df4798858df2819044d79f0a9e70c8610db133b4fd0`. После import не пересобирайте пакеты независимо на двух ПК: UCC GUID может различаться. В этом artifact `sourceDirty=false`, build-time HEAD `7a4f4b1`; точную сборку определяют хеши пакетов и source manifest. Обновлённый пакет включает исправление inline-сцены первой двери и co-op AI fixtures; сами fixtures в этом тесте не включайте.
 
 ## 2. Запустить сервер и два клиента
 
@@ -60,7 +60,7 @@ Host — скрытый dedicated server; у игрока A отдельный J
 - Урон/смерть: после проверки управления по очереди дать одному игроку получить естественный урон, пока второй жив и стоит на ровном безопасном полу. Записать чей HUD меняется, анимацию смерти, появление рядом с напарником с 41 HP и восстановление управления. Затем поменяться ролями. Движущиеся платформы пока не подходят для этой проверки. Если оба умерли, ожидается сообщение о недоступном shared checkpoint; закончить эту сессию и собрать логи.
 - При первом дефекте записать ПК A/B, примерное время, действие и ожидаемое/фактическое поведение. Не применять `set`, summon, all-spells, force release или другие ручные исправления: исходный дефект нужен в логах.
 
-Известные ограничения этого комплекта: scripted walk во вступлении прошёл локальный loopback, но не физический двух-ПК тест; AI пока не адаптирован для выбора обоих игроков. Ch1 Frog/Wiggenwell личный подбор проверен автоматическим native Touch fixture; если предмет встретится естественно, запишите результат для каждого и его исчезновение на обоих экранах. Книги checkpoint и меню save/load пока заблокированы — в этом smoke test их не использовать. Не включать `-RuntimeProbe`: автоматические fixtures меняют здоровье/инвентарь и предназначены для отдельной разработки.
+Известные ограничения этого комплекта: scripted walk во вступлении прошёл локальный loopback, но не физический двух-ПК тест. Исходные крабы и улитки выбрали обоих игроков в локальных fixtures; размещённые враги и их навигация не приняты. Ch1 Frog/Wiggenwell личный подбор проверен автоматическим native Touch fixture; если предмет встретится естественно, запишите результат для каждого и его исчезновение на обоих экранах. Книги checkpoint и меню save/load пока заблокированы — в этом smoke test их не использовать. Не включать `-RuntimeProbe`: автоматические fixtures меняют здоровье/инвентарь и предназначены для отдельной разработки.
 
 В клиентских логах ожидается `local-initial-state=GSTATE030 spells=4 test-stage=True`. Для диагностики полезны `[MP_LOGIN]`, `[MP_CAMERA]`, `[MP_CUTSCENE]`, `[MP_INTRO]`, `[MP_CAPTURE_WALK]`, `[MP_SPELL]`, `[MP_LUMOS]`. Сервер должен записать две `ready slot`, original walk/cue, две resume и `complete`; каждый клиент — `owner-complete`. Логи не заменяют визуальную проверку. Native `Can't find a valid player` при client map screening — известная незакрытая граница; её наличие не скрывать. Начальный snapshot не доказывает полную корректность client world state.
 

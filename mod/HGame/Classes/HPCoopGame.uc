@@ -40,7 +40,7 @@ event InitGame(string Options, out string Error)
         Error = "CoopCapturedAuthority requires the dedicated Ch1 test stage with no other probe.";
         return;
     }
-    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos")
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
@@ -72,6 +72,7 @@ event PostBeginPlay()
 {
     local CutScene Scene;
     local HPCoopLumosProbe LumosProbe;
+    local HPCoopPickupProbe PickupProbe;
     Super.PostBeginPlay();
     // The two entry scenes observed on the selected milestone map. Only their
     // logging is adapted; the original command/cue interpreter runs on server.
@@ -90,6 +91,16 @@ event PostBeginPlay()
             LumosProbe.bOptIn = True;
             if (!LumosProbe.Arm(self))
                 Log("[MP_PROBE] probe=lumos status=BLOCKED reason=arm-failed");
+        }
+    }
+    if (RuntimeProbe ~= "Pickup")
+    {
+        PickupProbe = Spawn(Class'HPCoopPickupProbe', self, 'HPCoopPickupFixtureEvent');
+        if (PickupProbe != None)
+        {
+            PickupProbe.bOptIn = True;
+            if (!PickupProbe.Arm(self))
+                Log("[MP_PROBE] probe=pickup status=BLOCKED reason=arm-failed");
         }
     }
     if (LegacyStoryHarry == None)

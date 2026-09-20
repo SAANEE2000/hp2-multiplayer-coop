@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "name": "coop-save-load-guards",
+  "description": "Co-op-only early refusal of checkpoint books and audited HP frontend save/load entries; original single-player bodies remain.",
+  "source_snapshot": "current .local/game read-only snapshot; root must merge this edge into the build hash chain",
+  "string_encoding": "latin-1-byte-preserving",
+  "scope": [
+    "SavePoint Touch/OnSaveGame return before health, visibility, timer, destruction or native queue changes.",
+    "HPConsole selected-slot save/load and doLevelSave return before SloMo, pause and metadata writes.",
+    "FEBook save/load page routes return before UI opening/pause and saved-game URLs before queued travel.",
+    "SP and Versus paths pass through the original function bodies unchanged."
+  ],
+  "known_gaps": [
+    "Not a native engine Exec sandbox. Direct native console/frontend commands require their own verified integration.",
+    "Non-Ch1 CutScript LOADSAVE/SAVENUM/LOADNUM and SleepingGoyle reload calls are outside this narrow recipe.",
+    "Does not implement checkpoints, map rollback, save serialization or load recovery."
+  ],
+  "files": [
+    {
+      "path": "HGame/Classes/Misc/SavePoint.uc",
+      "source_sha256": "bf3dff2a8133284e299e1862b725eb409887964f8cd20fe2c9152f68f3368f0d",
+      "result_sha256": "5536b02026ba64ec1eae2e8cdb06a397da30190da6187895b94783b002d0c6b1",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "SavePoint.OnSaveGame",
+          "old_sha256": "2851c469906bd0ac140739f70a10818da4730f14513bd65356b7a7b74b9b8792",
+          "new_sha256": "544fb875ad6c64bb50e071d610212cb9ad77e63273aeb302aba9495edb097f6e",
+          "old": "  local int iHarryHealth;\n\n",
+          "new": "  local int iHarryHealth;\n\n  if ( HPCoopGame(Level.Game) != None || HPCoopHarry(PlayerHarry) != None\n    || HPCoopHarry(Level.PlayerHarryActor) != None )\n  {\n    if ( Role == ROLE_Authority && HPCoopHarry(PlayerHarry) != None )\n      PlayerHarry.ClientMessage(\"Save/load is unavailable in this test build\");\n    Log(\"[MP_CHECKPOINT] blocked origin=SavePoint.OnSaveGame point=\" $ self);\n    return;\n  }\n\n"
+        },
+        {
+          "function": "SavePoint.Touch",
+          "old_sha256": "377b4a77cac3e160d4de18972468a820e03c0fff79c286b7caf0d7c7edda10c4",
+          "new_sha256": "6d5871a3d23f7cfb882d55692ca767c38254c5a7f7b1a457733c7906a160ee60",
+          "old": "function Touch (Actor Other)\n{\n",
+          "new": "function Touch (Actor Other)\n{\n  if ( HPCoopGame(Level.Game) != None || HPCoopHarry(Other) != None\n    || HPCoopHarry(PlayerHarry) != None || HPCoopHarry(Level.PlayerHarryActor) != None )\n  {\n    // The authority addresses the actual touching connection, not PlayerHarry.\n    if ( Role == ROLE_Authority && HPCoopGame(Level.Game) != None\n      && HPCoopHarry(Other) != None && HPCoopGame(Level.Game).IsCoopPlayer(Other) )\n    {\n      HPCoopHarry(Other).ClientMessage(\"Save/load is unavailable in this test build\");\n      Log(\"[MP_CHECKPOINT] blocked origin=SavePoint.Touch point=\" $ self $ \" toucher=\" $ Other);\n    }\n    return;\n  }\n"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Internal/HPConsole.uc",
+      "source_sha256": "8ef1a46de38fa37a5de15368cfb45d8a263371a2672967c97b565000bafce356",
+      "result_sha256": "975a8de2d7e5f5d9ff1926f8733c072bb1802c317aad08a151b09355893f18fd",
+      "line_endings": "CRLF",
+      "replacements": [
+        {
+          "function": "HPConsole.GetCoopSaveLoadOwner/RejectCoopSaveLoad/IsSaveLoadTravelURL",
+          "old_sha256": "4f490c1df4c02221167b53a881c9fea0e20c5cb512f023d022248be94893cf45",
+          "new_sha256": "d291659bc9d58393327cf6b1f6f46effe50988ddb7eeb8419176ecb7458ee0dd",
+          "old": "function SaveSelectedSlot()\r\n",
+          "new": "// This console resolves only its own viewport pawn. Level.PlayerHarryActor and\r\n// GameInfo are intentionally not required on a network client.\r\nfunction HPCoopHarry GetCoopSaveLoadOwner()\r\n{\r\n    local HPCoopHarry H;\r\n    if ( Viewport == None || Viewport.Actor == None ) return None;\r\n    H = HPCoopHarry(Viewport.Actor);\r\n    if ( H != None && !H.bDeleteMe ) return H;\r\n    foreach Viewport.Actor.AllActors(Class'HPCoopHarry', H)\r\n        if ( !H.bDeleteMe && H.Player == Viewport ) return H;\r\n    return None;\r\n}\r\n\r\nfunction bool RejectCoopSaveLoad(optional string Origin)\r\n{\r\n    local HPCoopHarry H;\r\n    H = GetCoopSaveLoadOwner();\r\n    if ( H == None ) return False;\r\n    H.ClientMessage(\"Save/load is unavailable in this test build\");\r\n    if ( menuBook != None && menuBook.StatusBarTextWindow != None )\r\n        menuBook.ToolTip(\"Save/load is unavailable in this test build\");\r\n    Log(\"[MP_CHECKPOINT] blocked origin=\" $ Origin $ \" owner=\" $ H);\r\n    return True;\r\n}\r\n\r\nfunction bool IsSaveLoadTravelURL(string URL)\r\n{\r\n    local string UpperURL, MapPart;\r\n    local int OptionAt;\r\n    UpperURL = Caps(URL);\r\n    if ( InStr(UpperURL, \"?LOAD\") >= 0 ) return True;\r\n    OptionAt = InStr(UpperURL, \"?\");\r\n    MapPart = UpperURL;\r\n    if ( OptionAt >= 0 ) MapPart = Left(UpperURL, OptionAt);\r\n    return Right(MapPart, 4) == \".USA\";\r\n}\r\n\r\nfunction SaveSelectedSlot()\r\n"
+        },
+        {
+          "function": "HPConsole.SaveSelectedSlot",
+          "old_sha256": "f0e1b64d12b9512be44c77f03f05bfb81815b44f2515d3ee49f1609532ca69a5",
+          "new_sha256": "63ffb82eca02844616adb7bdf7279451939fefb3368a7c17fcf9d4000b5dd71b",
+          "old": "function SaveSelectedSlot()\r\n{\r\n",
+          "new": "function SaveSelectedSlot()\r\n{\r\n\tif ( RejectCoopSaveLoad(\"HPConsole.SaveSelectedSlot\") ) return;\r\n"
+        },
+        {
+          "function": "HPConsole.LoadSelectedSlot",
+          "old_sha256": "3c70fd015604513ba88a7cf8ca74a20c1cd7f2a4b4a9b4a4c4bfcd2518faa0d2",
+          "new_sha256": "ee8966c869df3370383af14f371d64b5bb928313c46765ead1afe78f5bf784a6",
+          "old": "function LoadSelectedSlot()\r\n{\r\n",
+          "new": "function LoadSelectedSlot()\r\n{\r\n\tif ( RejectCoopSaveLoad(\"HPConsole.LoadSelectedSlot\") ) return;\r\n"
+        },
+        {
+          "function": "HPConsole.doLevelSave",
+          "old_sha256": "ceadfa770a0bf62c86242e8c509bf70ab13e5176d9cade719be72c82f1d10d37",
+          "new_sha256": "9729996286095c5f3bf9d7833cfcbad03e0fec5872df7c14076851e19108bbd9",
+          "old": "\tlocal int savePointID;\r\n\r\n",
+          "new": "\tlocal int savePointID;\r\n\r\n\tif ( RejectCoopSaveLoad(\"HPConsole.doLevelSave\") ) return;\r\n\r\n"
+        },
+        {
+          "function": "HPConsole.ChangeLevel",
+          "old_sha256": "f468fefaba1d63504ab884ef65079ee1da0f633ff5bcf426e0f04f607aaff3c0",
+          "new_sha256": "9732221629e6818a93780d7fb73c4760bd7e9eeed974d4d0553dced473f3f3d6",
+          "old": "function ChangeLevel (string lev, bool flag)\r\n{\r\n\tlocal harry InputHarry;\r\n\r\n",
+          "new": "function ChangeLevel (string lev, bool flag)\r\n{\r\n\tlocal harry InputHarry;\r\n\r\n\tif ( IsSaveLoadTravelURL(lev) && RejectCoopSaveLoad(\"HPConsole.ChangeLevel\") ) return;\r\n\r\n"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Menu/FEBook.uc",
+      "source_sha256": "36abf78235ed52d51728e94a177034c3f690c53d05cf7f7a7ea33f6bed98c699",
+      "result_sha256": "0a64787ce7834e650927d717cba684367e89527d50adbc3a10bdd0cff9ea2e13",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "FEBook.RejectCoopSaveLoadPage",
+          "old_sha256": "31b53e7bea59eada9894f5433cbb88b6b4b1b5739f0790ab1d0de4894a6fd3a4",
+          "new_sha256": "ce4f830a0f1019487e0463b0f8f5c9f28b9d9df6a11157fb700f7cd40da6fd01",
+          "old": "function SaveSelectedSlot()\n",
+          "new": "// Reject saved-game pages before callers open/pause the menu or change pages.\nfunction bool RejectCoopSaveLoadPage(optional string PageName, optional baseFEPage Page)\n{\n    if ( !(PageName ~= \"SAVE\") && !(PageName ~= \"LOAD\")\n        && (Page == None || (Page != SavePage && Page != LoadPage)) ) return False;\n    return HPConsole(Root.Console).RejectCoopSaveLoad(\"FEBook.SaveLoadPage\");\n}\n\nfunction SaveSelectedSlot()\n"
+        },
+        {
+          "function": "FEBook.SaveSelectedSlot",
+          "old_sha256": "44c221d7d0aaf6b581570cfa0c50130acc8964b1d033d2837a01f1d597d98c6c",
+          "new_sha256": "3eead0658f35065cee3c39ac5fcbbb84d7b908a4e276ade933218407537bb8fc",
+          "old": "function SaveSelectedSlot()\n{\n",
+          "new": "function SaveSelectedSlot()\n{\n\tif ( HPConsole(Root.Console).RejectCoopSaveLoad(\"FEBook.SaveSelectedSlot\") ) return;\n"
+        },
+        {
+          "function": "FEBook.LoadSelectedSlot",
+          "old_sha256": "dc9f81c565800ff83d9279295a44c662c084b7c31fa5bc713c99e11b28d7919d",
+          "new_sha256": "4c9728f9af97536db4724a70dec9f756196ffcd0997f5c62f4073f3ee6078cd4",
+          "old": "function LoadSelectedSlot()\n{\n",
+          "new": "function LoadSelectedSlot()\n{\n\tif ( HPConsole(Root.Console).RejectCoopSaveLoad(\"FEBook.LoadSelectedSlot\") ) return;\n"
+        },
+        {
+          "function": "FEBook.ChangePage",
+          "old_sha256": "36b35bdae7fe905394da749a86acc2c2be832b78ac8cde5f6988b6884bd83fa9",
+          "new_sha256": "bb6477a12e6c7952945369acf699cb42c8afbad4500f62ad5cc80ca99cb6af8b",
+          "old": "function ChangePage (baseFEPage Page)\n{\n",
+          "new": "function ChangePage (baseFEPage Page)\n{\n\tif ( RejectCoopSaveLoadPage(\"\", Page) ) return;\n"
+        },
+        {
+          "function": "FEBook.ChangePageNamed",
+          "old_sha256": "41510947bddff1e8a78f8af51709a544ef3081af6777be18a2af7216595b9adb",
+          "new_sha256": "512e4faa42106f5c08440a2256c6a6aab8342cf84fb79e58bf3a1b632814ddb6",
+          "old": "function ChangePageNamed (string Name)\n{\n",
+          "new": "function ChangePageNamed (string Name)\n{\n\tif ( RejectCoopSaveLoadPage(Name) ) return;\n"
+        },
+        {
+          "function": "FEBook.OpenBook",
+          "old_sha256": "efa4af1bf1ae90412fd33183218c96ce2a4e5871ea8d56aa093a419324c67108",
+          "new_sha256": "92eaf18e1458bd4ac8e2cafbd7f607b3815b93441ae87bb4962faa008883ea70",
+          "old": "function OpenBook (optional string pageName, optional baseFEPage Page)\n{\n",
+          "new": "function OpenBook (optional string pageName, optional baseFEPage Page)\n{\n\tif ( RejectCoopSaveLoadPage(pageName, Page) ) return;\n"
+        },
+        {
+          "function": "FEBook.OpenPage",
+          "old_sha256": "4c73ec20c81507228a3c4aeb52868c6bfc788d8fc33f5a5c55208d7ea5d791bf",
+          "new_sha256": "5ce436ba76950c98c9e8457681f10fd3d2fe03ece816139f8e53fef4f4f5cfa1",
+          "old": "function OpenPage(String Name)\n{\n",
+          "new": "function OpenPage(String Name)\n{\n\tif ( RejectCoopSaveLoadPage(Name) ) return;\n"
+        },
+        {
+          "function": "FEBook.OpenPageWithoutPause",
+          "old_sha256": "35c4f34a3a774ea4da26e979fa9a0e1420ecaf9e1f0a63125f46f1cb8ba163cd",
+          "new_sha256": "1ef31714bc902a4df7a2ff706e8fd89ed17a2b56835e075d2533d03324741240",
+          "old": "function OpenPageWithoutPause(String Name)\n{\n",
+          "new": "function OpenPageWithoutPause(String Name)\n{\n\tif ( RejectCoopSaveLoadPage(Name) ) return;\n"
+        },
+        {
+          "function": "FEBook.RunURL",
+          "old_sha256": "f2799cea2d5ecdb90dd252f09c1945dadc6d7e1c745da001f3c6f669a1cb1e2d",
+          "new_sha256": "7e1548008c21c8a9b1683898d7297d532dbd62dbea330861490a03e3212065b7",
+          "old": "function RunURL (string levURL, bool bTravelItems)\n{\n",
+          "new": "function RunURL (string levURL, bool bTravelItems)\n{\n\tif ( HPConsole(Root.Console).IsSaveLoadTravelURL(levURL)\n        && HPConsole(Root.Console).RejectCoopSaveLoad(\"FEBook.RunURL\") ) return;\n"
+        },
+        {
+          "function": "FEBook.Tick pending saved-game URL",
+          "old_sha256": "5df50db21881de45e3fdbb7ea543e6c50a6ae063dfd29215b076c56647beca5f",
+          "new_sha256": "ad7528151a9d5cfdb070a2485faf0d1f7665fd34abe14d7b970b9040a765c61b",
+          "old": "event Tick (float Delta)\n{\n\tlocal bool bTravelItems;\n\n",
+          "new": "event Tick (float Delta)\n{\n\tlocal bool bTravelItems;\n\n\tif ( _URLToLoad != \"\" && HPConsole(Root.Console).IsSaveLoadTravelURL(_URLToLoad)\n        && HPConsole(Root.Console).RejectCoopSaveLoad(\"FEBook.PendingLoad\") )\n    {\n        _URLToLoad = \"\";\n        return;\n    }\n\n"
+        }
+      ]
+    }
+  ]
+}

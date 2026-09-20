@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-175239-291`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-180631-074`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -53,8 +53,12 @@
    loopback fixture прошла фазы 0–12: оба владельца независимо получают урон,
    умирают и возвращаются с 41 HP; owner HUD snapshots совпали с сервером.
    См. `docs/iterations/20260920_COOP_HEALTH.md`. Это не визуальная/двух-PC приёмка.
-   При смерти обоих shared checkpoint ещё BLOCKED. AI для обоих игроков,
-   authoritative pickup/trigger visibility и multiplayer travel не завершены.
+   При смерти обоих shared checkpoint ещё BLOCKED. Личные Ch1 frog/potion pickups
+   прошли native Touch fixture для обоих владельцев; четыре контакта книг
+   отказаны без изменения статуса/очереди save. См.
+   `docs/iterations/20260920_COOP_PICKUPS.md`. Сетевое исчезновение предметов,
+   native frontend, AI для обоих, trigger visibility и multiplayer travel ещё
+   не подтверждены. Save/load пока явно недоступен через проверенные script routes.
 4. Mounting/MountFinish/root motion исследованы, но сетевое подтягивание не доказано.
 5. Автоматизация UI не смогла захватить игровые окна из-за ошибки идентификации
    владельца окна. Визуальные и ручные игровые проверки не отмечаются PASS.

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "name": "coop-personal-pickup",
+  "description": "Authority actual-toucher pickup for original Ch1 frog/potion actors; single-player fallback unchanged.",
+  "source_snapshot": "Current local development HProp input, unchanged by other recipes",
+  "string_encoding": "latin-1-byte-preserving",
+  "requires": [
+    "HPCoopPersonalPickup.uc",
+    "HPCoopGame registry/readiness",
+    "HPCoopHarry own-status snapshot"
+  ],
+  "scope": [
+    "Two HProp anchors only; no map, asset or full decompiled-source distribution.",
+    "Handled co-op touches return even on refusal; no cached-PlayerHarry fallback.",
+    "SP and non-handled pickup classes retain their original source path."
+  ],
+  "files": [
+    {
+      "path": "HGame/Classes/Props/HProp.uc",
+      "source_sha256": "78e1abdc037401a31ad18c368ebd1098e1b58e0f7e57b0e3e17ef1dc54c7b0c0",
+      "result_sha256": "3933b0e454ec9de10bc5e441d5380128b06c4b0fcb8bcdc18d47d4d2255352d9",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "HProp authority claim field",
+          "old_sha256": "44f7af419a80070e240e89fa31ff6bbda69c5f1cb0d035f982ce8ae34e65b76d",
+          "new_sha256": "5677f774f3410901cea2334febda241c389a49858183e9dcb4471c16049a4891",
+          "old": "var bool bPickupOnTouch;\n",
+          "new": "var bool bPickupOnTouch;\n// Authority-only, never reset after a committed co-op touch.\nvar bool bCoopPickupClaimed;\n"
+        },
+        {
+          "function": "HProp.Touch co-op early branch",
+          "old_sha256": "20343329c35659bdb95523aeb72213fafc6306ebce8702ff2e19bd832e7f937c",
+          "new_sha256": "eaf63ebf4b22c86b16d3a3f5a7d430db3603316be156fe170d40addaeee5a880",
+          "old": "event Touch (Actor Other)\n{\n  if ( CanPickupNow(Other) )\n",
+          "new": "event Touch (Actor Other)\n{\n  local HPCoopGame CoopGame;\n\n  CoopGame = HPCoopGame(Level.Game);\n  if (Class'HPCoopPersonalPickup'.static.Handles(self)\n      && (CoopGame != None || HPCoopHarry(Other) != None))\n  {\n    if (Role == ROLE_Authority && Level.NetMode != NM_Client && CoopGame != None)\n      Class'HPCoopPersonalPickup'.static.TryCollect(self, Other);\n    return;\n  }\n  if ( CanPickupNow(Other) )\n"
+        }
+      ]
+    }
+  ]
+}

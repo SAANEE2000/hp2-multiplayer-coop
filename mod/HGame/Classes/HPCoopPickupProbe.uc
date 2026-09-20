@@ -22,13 +22,15 @@ var float SavedBookWait, SavedBookOpacity, SavedBookDilation;
 var string SavedBookPauser;
 var int SavedBookEventCount;
 
-// G.RuntimeProbe="Pickup", spawn, bOptIn=True, Arm(G); ordinary play never arms it.
+function string ProbeOption() { return "Pickup"; }
+
+// Explicit option, spawn, bOptIn=True, Arm(G); ordinary play never arms it.
 function bool Arm(HPCoopGame G)
 {
     local Actor A;
     if (!bOptIn || bArmed || bFinished || Role != ROLE_Authority
         || Level.NetMode != NM_DedicatedServer || G == None || G != Level.Game
-        || !(G.RuntimeProbe ~= "Pickup")
+        || !(G.RuntimeProbe ~= ProbeOption())
         || !(G.TestStage ~= "RictusempraLessonComplete")
         || !(string(Level.Outer.Name) ~= "Ch1Rictusempra"))
     {

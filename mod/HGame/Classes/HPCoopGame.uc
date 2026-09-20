@@ -40,7 +40,7 @@ event InitGame(string Options, out string Error)
         Error = "CoopCapturedAuthority requires the dedicated Ch1 test stage with no other probe.";
         return;
     }
-    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup")
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
@@ -93,9 +93,12 @@ event PostBeginPlay()
                 Log("[MP_PROBE] probe=lumos status=BLOCKED reason=arm-failed");
         }
     }
-    if (RuntimeProbe ~= "Pickup")
+    if ((RuntimeProbe ~= "Pickup") || (RuntimeProbe ~= "PickupNet"))
     {
-        PickupProbe = Spawn(Class'HPCoopPickupProbe', self, 'HPCoopPickupFixtureEvent');
+        if (RuntimeProbe ~= "PickupNet")
+            PickupProbe = Spawn(Class'HPCoopPickupNetProbe', self, 'HPCoopPickupFixtureEvent');
+        else
+            PickupProbe = Spawn(Class'HPCoopPickupProbe', self, 'HPCoopPickupFixtureEvent');
         if (PickupProbe != None)
         {
             PickupProbe.bOptIn = True;

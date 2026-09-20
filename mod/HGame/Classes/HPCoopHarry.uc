@@ -40,6 +40,7 @@ var bool bCoopWalkIssued, bCoopWalkReached, bCoopWalkCueReceived, bCoopWalkBlock
 var vector CoopWalkStart, CoopWalkGoal;
 var Actor CoopWalkNotify;
 var float CoopWalkNextSample;
+var HPCoopPickupObserver CoopPickupObserver;
 
 replication
 {
@@ -47,15 +48,45 @@ replication
         CoopSlot, ClientCoopReady, bCoopStoryCaptured, ClientCoopCapture, ClientCoopSubtitle,
         CoopCampaignState, ClientCoopStatus, ClientCoopLife,
         ClientCoopDrinkPotion, ClientCoopKnockBack,
-        ClientCoopScenePrepare, ClientCoopSceneRelease, ClientCoopSceneCommitted;
+        ClientCoopScenePrepare, ClientCoopSceneRelease, ClientCoopSceneCommitted,
+        ClientCoopPickupObserve, ClientCoopPickupCollected;
     reliable if (Role < ROLE_Authority)
         ServerCoopReady, ServerCastCoopSpell, ServerCoopDrinkPotion, ServerCoopResume,
-        ServerCoopSceneCaptured, ServerCoopSceneResumed;
+        ServerCoopSceneCaptured, ServerCoopSceneResumed, ServerCoopPickupWitness;
 }
 
 simulated function bool IsLocalCoopPlayer()
 {
     return Player != None && Viewport(Player) != None;
+}
+
+// Test witnesses only report object lifetime; no client report grants an item.
+simulated function ClientCoopPickupObserve(int Serial, HProp Subject)
+{
+    if (Level.NetMode != NM_Client || !IsLocalCoopPlayer()
+        || !(string(Level.Outer.Name) ~= "Ch1Rictusempra")
+        || bCoopStoryCaptured || bCoopDead || bCoopSceneLocalHold || Subject == None)
+        return;
+    if (CoopPickupObserver == None)
+        CoopPickupObserver = Spawn(Class'HPCoopPickupObserver', self);
+    if (CoopPickupObserver != None) CoopPickupObserver.Observe(self, Serial, Subject);
+}
+
+simulated function ClientCoopPickupCollected(int Serial)
+{
+    if (Level.NetMode == NM_Client && IsLocalCoopPlayer() && CoopPickupObserver != None)
+        CoopPickupObserver.Collected(Serial);
+}
+
+function ServerCoopPickupWitness(int Serial, byte Result, HProp Seen)
+{
+    local HPCoopGame G;
+    local HPCoopPickupNetProbe Probe;
+    G = HPCoopGame(Level.Game);
+    if (Role != ROLE_Authority || G == None || !(G.RuntimeProbe ~= "PickupNet")
+        || !G.IsAliveCoopPlayer(self) || Serial <= 0 || Result < 1 || Result > 4) return;
+    foreach AllActors(Class'HPCoopPickupNetProbe', Probe, 'HPCoopPickupFixtureEvent')
+        if (Probe.bArmed && !Probe.bFinished) Probe.ReportWitness(self, Serial, Result, Seen);
 }
 
 event PreBeginPlay()

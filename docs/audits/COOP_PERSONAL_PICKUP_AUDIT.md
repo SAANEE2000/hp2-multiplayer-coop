@@ -60,3 +60,26 @@ This fixture proves only the executed server contact/ownership predicates. It
 does not test simultaneous pickup races, real death/capture contacts, placed-map
 pathfinding, input, rendered HUD/audio, network destruction, menus or two PCs.
 The session must be discarded because its player status is intentionally seeded.
+
+## Native replica lifetime
+
+On the inspected M212 Engine.dll (`e7bd8f53aa1bce2386ba8943fdfc4d4c54c0a27948f49bc0de53dee22cc82391`),
+client LoadMap removes dynamic map actors before channel recreation (RVA
+9B9D1–9BA3F). Server DestroyActor notifies the net driver; NotifyActorDestroyed
+closes the actor channel (130D30–130DCF). Client channel Destroy calls forced
+DestroyActor for a non-temporary actor (125D9B–125F06). The four Ch1 placed frog
+property streams contain no Role/RemoteRole/static/no-delete/temporary override;
+their inherited Pawn RemoteRole is SimulatedProxy. This supports a native path,
+but static evidence alone was not counted as a successful deletion.
+
+The separate PickupNet fixture splits creation from contact. Both owners must
+first acknowledge the exact existing actor reference with Role2, visible and
+collidable. After native Touch consumes it, local read-only observers require
+the saved reference to be absent/deleted and no live actor with its previously
+observed client-local Name/Class. Both repeat this absence check for two seconds.
+No client hide/destroy call or item relevance/role override is used.
+
+Build182426-014 passed this lifecycle for one original ChocolateFrog and one
+WWellBlueBottle. These are explicitly spawned stationary test props, not natural
+placed-map pickup navigation or visual acceptance. Report:
+`docs/iterations/20260920_COOP_PICKUP_REPLICATION.md`.

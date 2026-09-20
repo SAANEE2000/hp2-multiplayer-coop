@@ -9,7 +9,7 @@ param(
     [ValidateRange(1024,65532)][int]$Port = 7777,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$')][string]$PlayerName = 'Harry',
     [ValidateSet('None','RictusempraLessonComplete')][string]$TestStage = 'None',
-    [ValidateSet('None','Health','Lumos','Pickup')][string]$RuntimeProbe = 'None',
+    [ValidateSet('None','Health','Lumos','Pickup','PickupNet')][string]$RuntimeProbe = 'None',
     [switch]$CapturedAuthorityDiagnostic,
     [switch]$PrepareOnly,
     [switch]$Unattended

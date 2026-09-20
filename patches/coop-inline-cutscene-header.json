@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "name": "coop-inline-cutscene-header",
+  "description": "Treat a standalone inline [Main] header as a comment in co-op and ignore absent Harry in the legacy Trigger death check.",
+  "files": [
+    {
+      "path": "HGame/Classes/Cutscene/CutScene.uc",
+      "source_sha256": "0398733be7ca79b6c02869547b096e1feb4c18aef5a4719d1455dfb49c311635",
+      "result_sha256": "50ba5f84f552d01fa29b5aa61aa9aeb05cb82fce87fa3513e2d6e3d9d7f2aff6",
+      "replacements": [
+        {
+          "old": "\tlocal array<string> SA;\n\n\tif(UncompiledFileName != \"\")",
+          "new": "\tlocal array<string> SA;\n\tlocal int HeaderAt;\n\n\tif(UncompiledFileName != \"\")",
+          "old_sha256": "f8c6073f31f8b2cc4f833453ef912acaa5d073804533aec53c43ffb67c69b9ae",
+          "new_sha256": "b158d7e1e1a6ab70f02b43cdcef1f6c1d146fef4518f0a63309496ed6ea3b20f"
+        },
+        {
+          "old": "\t\t\t\taThreads[I].Script = aThreadScripts[I];",
+          "new": "\t\t\t\taThreads[I].Script = aThreadScripts[I];\n\t\t\t\t// Inline map scripts may contain the uncompiled [Main] header.\n\t\t\t\t// The uncompiled loader comments it out; do likewise in co-op.\n\t\t\t\tif (HPCoopGame(Level.Game) != None)\n\t\t\t\t{\n\t\t\t\t\tHeaderAt = InStr(aThreads[I].Script, \"[Main]\");\n\t\t\t\t\tif (HeaderAt >= 0)\n\t\t\t\t\t{\n\t\t\t\t\t\tif ((HeaderAt == 0 || Mid(aThreads[I].Script, HeaderAt - 1, 1) == Chr(10))\n\t\t\t\t\t\t\t&& (HeaderAt + 6 == Len(aThreads[I].Script)\n\t\t\t\t\t\t\t\t|| Mid(aThreads[I].Script, HeaderAt + 6, 1) == Chr(10)\n\t\t\t\t\t\t\t\t|| Mid(aThreads[I].Script, HeaderAt + 6, 1) == Chr(13)))\n\t\t\t\t\t\t\taThreads[I].Script = Left(aThreads[I].Script, HeaderAt) $ \"//\"\n\t\t\t\t\t\t\t\t$ Mid(aThreads[I].Script, HeaderAt);\n\t\t\t\t\t}\n\t\t\t\t}",
+          "old_sha256": "40ef76c67699829826684b6edbc2c697fa890146d13b3112180d68fe743d624e",
+          "new_sha256": "106062c4c4ac2e00c6250c08c99310e06165156fbaa1cc3f2aa3602f39c1e6ed"
+        },
+        {
+          "old": "\t\tif ( harry(Other).HarryIsDead() )\n\t\t{\n\t\t\treturn;\n\t\t}",
+          "new": "\t\tif ( harry(Other) != None )\n\t\t{\n\t\t\tif ( harry(Other).HarryIsDead() ) return;\n\t\t}",
+          "old_sha256": "b7ea6ba343c9fcab86b8b05a075070b42c80d735d753c7babc29c646f72d18f9",
+          "new_sha256": "bfef5a61f10c69e9bacec845fd11f338ca496f4d49983882d3383eeebdb4c6e5"
+        }
+      ]
+    }
+  ]
+}

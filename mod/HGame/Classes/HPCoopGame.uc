@@ -41,6 +41,7 @@ event InitGame(string Options, out string Error)
         || !(TestStage ~= "RictusempraLessonComplete")
         || (RuntimeProbe != "" && !(RuntimeProbe ~= "AIInspect")
             && !(RuntimeProbe ~= "AICombat")
+            && !(RuntimeProbe ~= "AICombatDeath")
             && !(RuntimeProbe ~= "AISnail")
             && !(RuntimeProbe ~= "MountRootB0")
             && !(RuntimeProbe ~= "MountRootB1"))))
@@ -48,7 +49,7 @@ event InitGame(string Options, out string Error)
         Error = "CoopCapturedAuthority requires dedicated Ch1 with no active probe.";
         return;
     }
-    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat") && !(RuntimeProbe ~= "AISnail") && !(RuntimeProbe ~= "MountRootB0") && !(RuntimeProbe ~= "MountRootB1")
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat") && !(RuntimeProbe ~= "AICombatDeath") && !(RuntimeProbe ~= "AISnail") && !(RuntimeProbe ~= "MountRootB0") && !(RuntimeProbe ~= "MountRootB1")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
@@ -114,13 +115,18 @@ event PostBeginPlay()
     local HPCoopLumosProbe LumosProbe;
     local HPCoopPickupProbe PickupProbe;
     Super.PostBeginPlay();
-    // The two entry scenes observed on the selected milestone map. Only their
-    // logging is adapted; the original command/cue interpreter runs on server.
+    // Keep the original command/cue interpreters; dedicated servers have no
+    // local Harry console for the legacy logging path.
     foreach AllActors(Class'CutScene', Scene)
-        if (Scene.FileName ~= "Ch1RictuIntro" || Scene.FileName ~= "02080Ch1FireCrabIntro")
+    {
+        if (Scene.FileName == "")
+            Scene.CutscriptClass = Class'HPCoopCutScript';
+        else if (Scene.FileName ~= "Ch1RictuIntro"
+            || Scene.FileName ~= "02080Ch1FireCrabIntro")
         {
             Scene.CutscriptDiskClass = Class'HPCoopCutScriptDisk';
         }
+    }
     StoryView = Spawn(Class'HPCoopCutsceneView', self);
     if (bCoopFirstIntroPreflight)
     {
@@ -152,7 +158,8 @@ event PostBeginPlay()
         }
     }
     if (RuntimeProbe ~= "AIInspect") Spawn(Class'HPCoopAIInspectProbe', self);
-    if (RuntimeProbe ~= "AICombat") Spawn(Class'HPCoopAICombatProbe', self);
+    if ((RuntimeProbe ~= "AICombat") || (RuntimeProbe ~= "AICombatDeath"))
+        Spawn(Class'HPCoopAICombatProbe', self);
     if (RuntimeProbe ~= "AISnail") Spawn(Class'HPCoopAISnailProbe', self);
     if ((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1"))
         Spawn(Class'HPCoopMountRootProbe', self);

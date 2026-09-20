@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "coop-ch1-ai-death-witness",
+  "description": "Include explicit AICombatDeath in the passive post-original-fire-damage witness.",
+  "files": [
+    {
+      "path": "HGame/Classes/Spells/spellFireSmall.uc",
+      "source_sha256": "3efa72cf1070ceebccadf93297d52113f40518227b534ad5c7cd941d9473b81f",
+      "result_sha256": "b28a0f7b6bbdb82bc176c874907a5d9b03ff47106d3998ec3ec53f32cc70e094",
+      "replacements": [
+        {
+          "old": "if (G.RuntimeProbe ~= \"AICombat\")",
+          "new": "if ((G.RuntimeProbe ~= \"AICombat\") || (G.RuntimeProbe ~= \"AICombatDeath\"))",
+          "old_sha256": "9c625c40ac9e666cb9f9b1fb1be53782b11e24701d126e3d6a00f193f8ae6674",
+          "new_sha256": "113e0ca5cb52fcbddb839f68183423f7ed2a1adaa4e521a2efa93eb4ff3cba62"
+        }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@ param(
     [ValidateRange(1024,65532)][int]$Port = 7777,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$')][string]$PlayerName = 'Harry',
     [ValidateSet('None','RictusempraLessonComplete')][string]$TestStage = 'None',
-    [ValidateSet('None','Health','Lumos','Pickup','PickupNet','AIInspect','AICombat','AISnail','MountRootB0','MountRootB1')][string]$RuntimeProbe = 'None',
+    [ValidateSet('None','Health','Lumos','Pickup','PickupNet','AIInspect','AICombat','AICombatDeath','AISnail','MountRootB0','MountRootB1')][string]$RuntimeProbe = 'None',
     [switch]$CapturedAuthorityDiagnostic,
     [switch]$FirstIntroPreflight,
     [ValidateSet('None','MissingAck0','MissingAck1','DuplicateCallbacks','DeathWalk0','DeathWalk1')][string]$IntroFault = 'None',
@@ -100,7 +100,7 @@ if ($TestStage -ne 'None' -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or $mapNa
 if ($RuntimeProbe -ne 'None' -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or $TestStage -ne 'RictusempraLessonComplete')) {
     throw 'RuntimeProbe is an explicit disposable Coop Host Ch1 fixture; ordinary play keeps it off.'
 }
-if ($CapturedAuthorityDiagnostic -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or $mapName -ine 'Ch1Rictusempra' -or $TestStage -ne 'RictusempraLessonComplete' -or $RuntimeProbe -notin @('None','AIInspect','AICombat','AISnail','MountRootB0','MountRootB1'))) {
+if ($CapturedAuthorityDiagnostic -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or $mapName -ine 'Ch1Rictusempra' -or $TestStage -ne 'RictusempraLessonComplete' -or $RuntimeProbe -notin @('None','AIInspect','AICombat','AICombatDeath','AISnail','MountRootB0','MountRootB1'))) {
     throw 'CapturedAuthorityDiagnostic requires Coop Host Ch1 lesson-complete stage without another active probe.'
 }
 if ($FirstIntroPreflight -and !$CapturedAuthorityDiagnostic) {

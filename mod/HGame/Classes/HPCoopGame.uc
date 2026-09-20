@@ -26,7 +26,7 @@ var HPCoopIntroCoordinator IntroCoordinator;
 event InitGame(string Options, out string Error)
 {
     local harry MapHarry;
-    local string CaptureMode, IntroMode;
+    local string CaptureMode, IntroMode, TravelSpells, TravelSource;
     Super.InitGame(Options, Error);
     TestStage = ParseOption(Options, "CoopTestStage");
     RuntimeProbe = ParseOption(Options, "CoopProbe");
@@ -43,13 +43,14 @@ event InitGame(string Options, out string Error)
             && !(RuntimeProbe ~= "AICombat")
             && !(RuntimeProbe ~= "AICombatDeath")
             && !(RuntimeProbe ~= "AISnail")
+            && !(RuntimeProbe ~= "Travel")
             && !(RuntimeProbe ~= "MountRootB0")
             && !(RuntimeProbe ~= "MountRootB1"))))
     {
         Error = "CoopCapturedAuthority requires dedicated Ch1 with no active probe.";
         return;
     }
-    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat") && !(RuntimeProbe ~= "AICombatDeath") && !(RuntimeProbe ~= "AISnail") && !(RuntimeProbe ~= "MountRootB0") && !(RuntimeProbe ~= "MountRootB1")
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat") && !(RuntimeProbe ~= "AICombatDeath") && !(RuntimeProbe ~= "AISnail") && !(RuntimeProbe ~= "Travel") && !(RuntimeProbe ~= "MountRootB0") && !(RuntimeProbe ~= "MountRootB1")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
@@ -61,6 +62,21 @@ event InitGame(string Options, out string Error)
             LegacyStoryHarry = MapHarry;
             break;
         }
+    TravelSpells = ParseOption(Options, "CoopTravelSpells");
+    TravelSource = ParseOption(Options, "CoopTravelSource");
+    if (TravelSpells != "" || TravelSource != "")
+    {
+        if (!(TravelSource ~= "Ch1Rictusempra")
+            || !(string(Level.Outer.Name) ~= "Entryhall_hub")
+            || Level.NetMode != NM_DedicatedServer || TestStage != ""
+            || RuntimeProbe != ""
+            || !Class'HPCoopCampaignState'.static.SeedTravelState(
+                LegacyStoryHarry, ParseOption(Options, "GameState"), TravelSpells))
+        {
+            Error = "Invalid co-op travel handoff.";
+            return;
+        }
+    }
     if (TestStage != "")
     {
         if (!(TestStage ~= "RictusempraLessonComplete")
@@ -96,10 +112,11 @@ event InitGame(string Options, out string Error)
         Error = "CoopFirstIntroPreflight requires captured diagnostic and two players.";
         return;
     }
-    if (((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1"))
+    if (((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1")
+        || (RuntimeProbe ~= "Travel"))
         && (!bCoopFirstIntroPreflight || CoopIntroFault != ""))
     {
-        Error = "MountRoot diagnostic requires the normal first-intro preflight.";
+        Error = "Movement/travel diagnostic requires the normal first-intro preflight.";
         return;
     }
     MaxPlayers = 2;
@@ -121,11 +138,8 @@ event PostBeginPlay()
     {
         if (Scene.FileName == "")
             Scene.CutscriptClass = Class'HPCoopCutScript';
-        else if (Scene.FileName ~= "Ch1RictuIntro"
-            || Scene.FileName ~= "02080Ch1FireCrabIntro")
-        {
+        else
             Scene.CutscriptDiskClass = Class'HPCoopCutScriptDisk';
-        }
     }
     StoryView = Spawn(Class'HPCoopCutsceneView', self);
     if (bCoopFirstIntroPreflight)
@@ -161,6 +175,7 @@ event PostBeginPlay()
     if ((RuntimeProbe ~= "AICombat") || (RuntimeProbe ~= "AICombatDeath"))
         Spawn(Class'HPCoopAICombatProbe', self);
     if (RuntimeProbe ~= "AISnail") Spawn(Class'HPCoopAISnailProbe', self);
+    if (RuntimeProbe ~= "Travel") Spawn(Class'HPCoopTravelProbe', self);
     if ((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1"))
         Spawn(Class'HPCoopMountRootProbe', self);
     if (LegacyStoryHarry == None)

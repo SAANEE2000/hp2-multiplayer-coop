@@ -13,6 +13,81 @@ var bool bInitialized;
 var bool bIsTestStage;
 var string FixtureName;
 
+// Explicit travel probe handoff. Only the game's known spell classes are
+// accepted; a map or package with an unknown spell cannot silently lose it.
+static function Class<baseSpell> KnownSpellAt(int Slot)
+{
+    if (Slot == Class'spellFlipendo'.Default.SpellType) return Class'spellFlipendo';
+    if (Slot == Class'spellLumos'.Default.SpellType) return Class'spellLumos';
+    if (Slot == Class'spellAlohomora'.Default.SpellType) return Class'spellAlohomora';
+    if (Slot == Class'spellSkurge'.Default.SpellType) return Class'spellSkurge';
+    if (Slot == Class'spellRictusempra'.Default.SpellType) return Class'spellRictusempra';
+    if (Slot == Class'spellDiffindo'.Default.SpellType) return Class'spellDiffindo';
+    if (Slot == Class'spellSpongify'.Default.SpellType) return Class'spellSpongify';
+    if (Slot == Class'spellDuelRictusempra'.Default.SpellType) return Class'spellDuelRictusempra';
+    if (Slot == Class'spellDuelMimblewimble'.Default.SpellType) return Class'spellDuelMimblewimble';
+    if (Slot == Class'spellDuelExpelliarmus'.Default.SpellType) return Class'spellDuelExpelliarmus';
+    return None;
+}
+
+static function string EncodeTravelSpells(harry H)
+{
+    local int I;
+    local string Mask;
+    if (H == None || H.Role != ROLE_Authority) return "";
+    if (H.SpellBook[Class'spellFlipendo'.Default.SpellType] != Class'spellFlipendo'
+        || H.SpellBook[Class'spellLumos'.Default.SpellType] != Class'spellLumos'
+        || H.SpellBook[Class'spellAlohomora'.Default.SpellType] != Class'spellAlohomora')
+        return "";
+    for (I = 0; I < 32; I++)
+    {
+        if (H.SpellBook[I] == None)
+            Mask = Mask $ "0";
+        else
+        {
+            if (H.SpellBook[I] != KnownSpellAt(I)) return "";
+            Mask = Mask $ "1";
+        }
+    }
+    return Mask;
+}
+
+// InitGame runs before native game-state screening. The GameState URL option
+// sets only the string on the map Harry, so complete its coherent index and
+// spellbook here, before CaptureFrom and before accepting destination logins.
+static function bool SeedTravelState(harry H, string State, string Mask)
+{
+    local int I;
+    local Class<baseSpell> S;
+    if (H == None || H.bDeleteMe || H.Role != ROLE_Authority
+        || H.Level == None || H.Level.TimeSeconds != 0)
+        return False;
+    if (Len(State) != 9 || !(Left(State, 6) ~= "GSTATE")
+        || Len(Mask) != 32 || !(H.CurrentGameState ~= State))
+        return False;
+    for (I = 6; I < 9; I++)
+        if (InStr("0123456789", Mid(State, I, 1)) < 0)
+            return False;
+    for (I = 0; I < 32; I++)
+    {
+        if (Mid(Mask, I, 1) != "0" && Mid(Mask, I, 1) != "1") return False;
+        S = KnownSpellAt(I);
+        if (Mid(Mask, I, 1) == "1" && S == None) return False;
+    }
+    if (Mid(Mask, Class'spellFlipendo'.Default.SpellType, 1) != "1"
+        || Mid(Mask, Class'spellLumos'.Default.SpellType, 1) != "1"
+        || Mid(Mask, Class'spellAlohomora'.Default.SpellType, 1) != "1")
+        return False;
+    for (I = 0; I < 32; I++)
+        if (Mid(Mask, I, 1) == "1") H.SpellBook[I] = KnownSpellAt(I);
+        else H.SpellBook[I] = None;
+    H.iGameState = int(Right(State, 3));
+    H.bNoSpellBookCheck = False;
+    Log("[MP_STORY_STATE] origin=travel-probe phase=InitGame state=" $ State
+        $ " index=" $ H.iGameState $ " mask=" $ Mask $ " pawn=" $ H);
+    return True;
+}
+
 replication
 {
     reliable if (Role == ROLE_Authority)
@@ -91,6 +166,11 @@ function bool CaptureFrom(harry H, optional string AppliedFixture)
     FixtureName = AppliedFixture;
     bIsTestStage = AppliedFixture != "";
     bInitialized = True;
+    Log("[MP_STORY_STATE] captured map=" $ Level.Outer.Name
+        $ " state=" $ StoryState $ " index=" $ StoryIndex
+        $ " spells=" $ LearnedSpellCount $ " fixture=" $ FixtureName
+        $ " ready=" $ IsSnapshotReady()
+        $ " rictusempra=" $ LearnedSpells[Class'spellRictusempra'.Default.SpellType]);
     return True;
 }
 

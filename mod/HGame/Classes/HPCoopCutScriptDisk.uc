@@ -22,7 +22,7 @@ function CutLog(string Str)
 
 function CutError(string Str)
 {
-    if (Role != ROLE_Authority || !bLogCutscene)
+    if (Role != ROLE_Authority)
         return;
     Log("[MP_CUT_ERROR] " $ CoopLogContext() $ " -> " $ Str);
 }

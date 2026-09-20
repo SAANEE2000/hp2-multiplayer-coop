@@ -93,5 +93,19 @@ physical PCs, later scenes and world rollback/recovery. Terminal failure still
 requires leaving the host; checkpoint reload is not implemented. The original
 script may already have modified other world actors before a late failure.
 
-Next step: two-PC visual/input check and original ledge/AI work. The user kit
-`60f6173` predates this change.
+Next step: two-PC visual/input check and original ledge/AI work. The private
+two-PC kit `hp2-two-pc-intro-afa46a0.zip` includes the tested intro/failure
+build. It predates the later AI, MountRoot and passive camera observations.
+
+Later camera-delivery observation (`20260920-213904-070`, UCC 0/268): a
+passive one-second owner pulse now records the shared-view actor and its
+received scene/snapshot. In a successful normal intro run
+`coop-host-20260920-213947-285-695757`, the second owner initially held
+`HPCoopCutsceneView0` with `view-scene=0`, `view-snapshot=0`, expected scene 1;
+one second later it had scene 1 and snapshot 201. Two earlier cold local
+MountRoot runs kept a zero owner camera count through the 20-second preflight
+deadline and stopped safely, while later reruns of the same binary passed.
+Those older runs did not log the view actor's received fields, so they do not
+prove the link was absent or the actor remained at scene 0. The intermittent
+delivery cause is unresolved. Do not extend or bypass the camera ACK gate
+without a measured recovery path.

@@ -1146,6 +1146,7 @@ simulated function EnsureCoopIntroOwner()
 
 simulated function PollCoopIntroOwner()
 {
+    local int ViewScene, ViewSnapshot;
     if (!IsLocalCoopPlayer() || !bCoopIntroLocalActive) return;
     if (Level.TimeSeconds > CoopIntroOwnerDeadline && !bCoopIntroOwnerTimeoutReported)
     {
@@ -1192,10 +1193,18 @@ simulated function PollCoopIntroOwner()
     if (Level.TimeSeconds >= CoopIntroNextPulse)
     {
         CoopIntroNextPulse = Level.TimeSeconds + 1;
+        if (CoopStoryView != None)
+        {
+            ViewScene = CoopStoryView.SceneSerial;
+            ViewSnapshot = CoopStoryView.SnapshotSerial;
+        }
         Log("[MP_INTRO] owner-pulse serial=" $ CoopLocalSceneSerial
             $ " role=" $ Role $ " hold=" $ bCoopSceneLocalHold
             $ " camera-calls=" $ CoopIntroCameraCalls
-            $ " snapshot=" $ CoopIntroLastSnapshot);
+            $ " snapshot=" $ CoopIntroLastSnapshot
+            $ " view=" $ CoopStoryView $ " view-scene=" $ ViewScene
+            $ " view-snapshot=" $ ViewSnapshot
+            $ " expected-scene=" $ CoopIntroViewSerial);
     }
 }
 

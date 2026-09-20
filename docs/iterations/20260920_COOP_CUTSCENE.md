@@ -131,6 +131,24 @@ HGame SHA256 `c337fb0e9b868d8ee05a9a8fcd6c5176f97b4052c2fd3c1e3d7a9e2c7d64fe01`,
 M212Share SHA256
 `24e0b53cc28cec93caab45501542edb0f26e006e360ceeffbc9fdb9ac5ebd9ea`
 прошли export/validate-only import. Исходники сборки были чистыми на
-`7a4f4b1`; именно эта сборка входит в следующий приватный test kit. Её
-runtime-повтор после export не выполнялся, поэтому все игровые свидетельства
-выше относятся к двум предшествующим локальным бинарникам.
+`7a4f4b1`; именно эта сборка входит в следующий приватный test kit. Описанные
+выше бои и `CutScene9` относятся к двум предшествующим локальным бинарникам.
+
+После экспорта выполнен локальный intro smoke test **точных пакетов комплекта**:
+host `coop-host-20260920-224049-192-9ac362`, clients
+`coop-join-20260920-224049-565-2d4ff0` и
+`coop-join-20260920-224058-613-acadea`. Сервер прошёл original MoveTo
+на 462,69 XY units, один `complete` после обеих resume barriers. Каждый
+клиент записал собственный shared-view actor со сценой 1 и валидным snapshot,
+`local-capture=False` на своей BaseCam и `owner-complete` в Role3.
+Все три процесса остановлены, engine logs собраны: сервер 0 Critical и два
+прежних map-Harry Accessed None; клиенты 0 Critical/Accessed None. Это не
+визуальная и не двух-PC приёмка.
+
+Приватный комплект `.local/distribution/hp2-two-pc-intro-87447c6.zip`,
+SHA256 `e7fd8127b8ba6608e64abe2a46092bc2d9fcb7cd50a73d8eb23d23947f639734`,
+содержит committed source/docs (`87447c6`), этот чистый binary artifact,
+runtime compatibility manifest и инструкции. ZIP проверен на полноту,
+внутренние SHA-256 и чтение всех записей. Runtime subset = COMPATIBLE, а
+`Import-TestBuild -ValidateOnly` = VALIDATED на development copy. Исходная
+установка и пользовательские saves не включены.

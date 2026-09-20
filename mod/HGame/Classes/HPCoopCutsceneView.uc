@@ -13,6 +13,15 @@ var int SnapshotSerial;
 var BaseCam SourceCamera;
 var HPCoopHarry SourceCanonical;
 
+// Local render interpolation only; the original camera and script keep their
+// server clock. Never interpolate a new scene from the previous scene's view.
+var bool bPresentationReady;
+var int PresentedScene, PresentedSnapshot;
+var float ReceivedAt, BlendDuration;
+var vector BlendStartPosition, BlendEndPosition;
+var rotator BlendStartRotation, BlendEndRotation;
+var float BlendStartFOV, BlendEndFOV;
+
 replication
 {
     reliable if (Role == ROLE_Authority)
@@ -79,6 +88,56 @@ simulated function bool HasCoopView()
     return bCaptured && SnapshotSerial > 0;
 }
 
+simulated function GetCoopView(out vector Position, out rotator Facing, out float FOV)
+{
+    local float Alpha;
+    local rotator Delta;
+    if (!bPresentationReady || Role == ROLE_Authority || PresentedScene != SceneSerial)
+    {
+        bPresentationReady = True;
+        PresentedScene = SceneSerial;
+        PresentedSnapshot = SnapshotSerial;
+        ReceivedAt = Level.TimeSeconds;
+        BlendDuration = 0;
+        BlendStartPosition = CameraPosition;
+        BlendEndPosition = CameraPosition;
+        BlendStartRotation = CameraRotation;
+        BlendEndRotation = CameraRotation;
+        BlendStartFOV = CameraFOV;
+        BlendEndFOV = CameraFOV;
+    }
+    Alpha = 1;
+    if (BlendDuration > 0)
+        Alpha = FClamp((Level.TimeSeconds - ReceivedAt) / BlendDuration, 0, 1);
+    Position = BlendStartPosition + (BlendEndPosition - BlendStartPosition) * Alpha;
+    Delta = Normalize(BlendEndRotation - BlendStartRotation);
+    Facing = BlendStartRotation + Delta * Alpha;
+    FOV = BlendStartFOV + (BlendEndFOV - BlendStartFOV) * Alpha;
+    if (PresentedSnapshot == SnapshotSerial) return;
+
+    // Continue from the currently rendered point, so uneven packet arrival
+    // cannot pull the camera backwards. Bound added latency to 80 ms.
+    BlendDuration = FClamp(Level.TimeSeconds - ReceivedAt, 0.016, 0.08);
+    ReceivedAt = Level.TimeSeconds;
+    PresentedSnapshot = SnapshotSerial;
+    Delta = Normalize(CameraRotation - BlendEndRotation);
+    // Preserve abrupt authored camera cuts instead of flying through walls.
+    if (VSize(CameraPosition - BlendEndPosition) > 256
+        || Abs(Delta.Yaw) > 16384 || Abs(Delta.Pitch) > 16384)
+    {
+        Position = CameraPosition;
+        Facing = CameraRotation;
+        FOV = CameraFOV;
+        BlendDuration = 0;
+    }
+    BlendStartPosition = Position;
+    BlendStartRotation = Facing;
+    BlendStartFOV = FOV;
+    BlendEndPosition = CameraPosition;
+    BlendEndRotation = CameraRotation;
+    BlendEndFOV = CameraFOV;
+}
+
 event Tick(float DeltaTime)
 {
     if (Role == ROLE_Authority && bCaptured)
@@ -98,5 +157,6 @@ defaultproperties
     bBlockActors=False
     bBlockPlayers=False
     NetUpdateFrequency=30
+    NetPriority=3
     CameraFOV=90
 }

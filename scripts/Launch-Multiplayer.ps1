@@ -241,6 +241,11 @@ $config = Set-IniValues $config 'URL' ([ordered]@{
 $config = Set-IniValues $config 'FirstRun' ([ordered]@{FirstRun=469; Reconfig=0; ForceSoftware=0})
 $config = Set-IniValues $config 'Engine.Engine' ([ordered]@{DefaultGame=$localGameClass; DefaultServerGame=$localGameClass})
 $config = Set-IniValues $config 'Engine.GameInfo' ([ordered]@{MaxPlayers=2})
+if ($Mode -eq 'Coop') {
+    # The inherited 2600-byte modem rate starves camera and enemy updates.
+    $config = Set-IniValues $config 'Engine.Player' ([ordered]@{ConfiguredInternetSpeed=50000; ConfiguredLanSpeed=50000})
+    $config = Set-IniValues $config 'IpDrv.TcpNetDriver' ([ordered]@{MaxClientRate=50000})
+}
 $config = Set-IniValues $config $gameClass ([ordered]@{MaxPlayers=2})
 if ($Mode -eq 'Versus') { $config = Set-IniValues $config $gameClass ([ordered]@{ScoreLimit=3}) }
 $config = Set-IniValues $config 'IpDrv.UdpBeacon' ([ordered]@{DoBeacon='False'})

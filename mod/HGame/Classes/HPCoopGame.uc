@@ -17,7 +17,7 @@ var HPCoopCampaignState CampaignState;
 var string TestStage;
 var string RuntimeProbe;
 var bool bCoopRecoveryBlocked;
-// Explicit first-intro diagnostic, not enabled by normal co-op sessions.
+// Native captured movement is also required by a normal fresh Ch1 session.
 var bool bCoopCapturedAuthorityDiagnostic, bCoopCapturedAuthorityUsed;
 var bool bCoopFirstIntroPreflight;
 var string CoopIntroFault;
@@ -30,7 +30,25 @@ event InitGame(string Options, out string Error)
     Super.InitGame(Options, Error);
     TestStage = ParseOption(Options, "CoopTestStage");
     RuntimeProbe = ParseOption(Options, "CoopProbe");
+    foreach AllActors(Class'harry', MapHarry)
+        if (HPCoopHarry(MapHarry) == None && MapHarry.bIsPlayer)
+        {
+            LegacyStoryHarry = MapHarry;
+            break;
+        }
+    // Level selection skips the preceding lesson. Supply its exact completed
+    // state before native actor screening, but never overwrite carried state.
+    if (TestStage == "" && RuntimeProbe == "" && LegacyStoryHarry != None
+        && Level.NetMode == NM_DedicatedServer
+        && (string(Level.Outer.Name) ~= "Ch1Rictusempra")
+        && (LegacyStoryHarry.CurrentGameState == ""
+            || (LegacyStoryHarry.CurrentGameState ~= "None")))
+        TestStage = "RictusempraLessonComplete";
     CaptureMode = ParseOption(Options, "CoopCapturedAuthority");
+    if (CaptureMode == "" && RuntimeProbe == ""
+        && Level.NetMode == NM_DedicatedServer
+        && (TestStage ~= "RictusempraLessonComplete"))
+        CaptureMode = "1";
     if (CaptureMode != "" && CaptureMode != "0" && CaptureMode != "1")
     {
         Error = "CoopCapturedAuthority must be 0 or 1.";
@@ -56,12 +74,6 @@ event InitGame(string Options, out string Error)
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
         return;
     }
-    foreach AllActors(Class'harry', MapHarry)
-        if (HPCoopHarry(MapHarry) == None && MapHarry.bIsPlayer)
-        {
-            LegacyStoryHarry = MapHarry;
-            break;
-        }
     TravelSpells = ParseOption(Options, "CoopTravelSpells");
     TravelSource = ParseOption(Options, "CoopTravelSource");
     if (TravelSpells != "" || TravelSource != "")
@@ -87,6 +99,10 @@ event InitGame(string Options, out string Error)
         }
     }
     IntroMode = ParseOption(Options, "CoopFirstIntroPreflight");
+    if (IntroMode == "" && RuntimeProbe == ""
+        && bCoopCapturedAuthorityDiagnostic
+        && GetIntOption(Options, "RequiredPlayers", 2) == 2)
+        IntroMode = "1";
     if (IntroMode != "" && IntroMode != "0" && IntroMode != "1")
     {
         Error = "CoopFirstIntroPreflight must be 0 or 1.";
@@ -232,7 +248,9 @@ function SetStoryCaptured(bool bCapture)
         if (bCapture && IntroCoordinator != None && IntroCoordinator.Phase == 1
             && IntroCoordinator.IsMember(H))
             H.BeginCoopAuthorityCapture(StoryView);
-        else if (bCapture && bCoopCapturedAuthorityDiagnostic && !bCoopCapturedAuthorityUsed
+        else if (bCapture && bCoopCapturedAuthorityDiagnostic
+            && (!bCoopCapturedAuthorityUsed
+                || (IntroCoordinator != None && IntroCoordinator.Phase == 5))
             && H == StoryLeader && ReadyPlayers[I] != 0 && IsAliveCoopPlayer(H)
             && H.RemoteRole == ROLE_AutonomousProxy)
         {

@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-154831-033`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-160817-611`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -31,9 +31,11 @@
 
 ## Текущие блокеры первого уровня
 
-1. Shared cutscene camera/input/subtitles и очистка при disconnect: intro исполняется
-   на сервере, но legacy код обращается к отсутствующим HUD/Console. Отключение
-   StoryLeader посреди intro привело к ошибке release; исправление ещё требуется.
+1. Shared camera/input/subtitles реализованы: intro завершилось в loopback,
+   оба клиента получили валидный camera snapshot через PlayerCalcView и release
+   к личной BaseCam. Подробности: `docs/iterations/20260920_COOP_CUTSCENE.md`.
+   Визуальная/физическая проверка не пройдена. Отключение StoryLeader посреди
+   сцены, перенос captured actors/controllers и аварийная очистка ещё требуют решения.
 2. Снимок выученных заклинаний при запуске середины кампании: Rictusempra выдаётся
    предшествующим уроком. Lumos требует owner-aware света и shared reveal policy.
 3. AI для обоих игроков, health/status replication, death/respawn/checkpoint,

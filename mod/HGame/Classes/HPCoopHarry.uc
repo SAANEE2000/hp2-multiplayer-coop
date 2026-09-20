@@ -11,11 +11,16 @@ var bool bCoopReadySent;
 var float NextCoopCastTime;
 var float LastCoopRejectLogTime;
 var float CoopCastInterval;
+var bool bCoopStoryCaptured;
+var bool bLocalCaptureApplied;
+var HPCoopCutsceneView CoopStoryView;
+var float PreCutFOV;
+var int LastPresentedScene;
 
 replication
 {
     reliable if (Role == ROLE_Authority)
-        CoopSlot, ClientCoopReady;
+        CoopSlot, ClientCoopReady, bCoopStoryCaptured, ClientCoopCapture, ClientCoopSubtitle;
     reliable if (Role < ROLE_Authority)
         ServerCoopReady, ServerCastCoopSpell;
 }
@@ -56,6 +61,8 @@ event PostBeginPlay()
     }
     EnsureCoopAnimation();
     EnsureCoopWand();
+    if (Role == ROLE_Authority && Level.NetMode == NM_DedicatedServer && myHUD == None)
+        myHUD = Spawn(Class'HPCoopServerHUD', self);
     fTimeLastDrank = -1;
     SetTimer(1, True);
 }
@@ -221,6 +228,149 @@ function EnsureLocalCoopContext()
         ServerCoopReady();
         Log("[MP_LOGIN] local-context-ready pawn=" $ self $ " slot=" $ CoopSlot);
     }
+    ApplyCoopCapturePresentation();
+}
+
+function ClearCoopPrediction()
+{
+    local SavedMove Move;
+    while (SavedMoves != None)
+    {
+        Move = SavedMoves;
+        SavedMoves = Move.NextMove;
+        Move.Clear();
+        Move.NextMove = FreeMoves;
+        FreeMoves = Move;
+    }
+    if (PendingMove != None)
+    {
+        PendingMove.Clear();
+        PendingMove.NextMove = FreeMoves;
+        FreeMoves = PendingMove;
+        PendingMove = None;
+    }
+    bUpdatePosition = False;
+}
+
+function ClientCoopCapture(bool bCapture, HPCoopCutsceneView NewView,
+    vector AuthorityLocation, rotator AuthorityRotation)
+{
+    bCoopStoryCaptured = bCapture;
+    CoopStoryView = NewView;
+    if (!IsLocalCoopPlayer()) return;
+    ClearCoopPrediction();
+    if (!bCapture)
+    {
+        SetLocation(AuthorityLocation);
+        SetRotation(AuthorityRotation);
+        ViewRotation = AuthorityRotation;
+        Velocity = vect(0,0,0);
+        Acceleration = vect(0,0,0);
+    }
+    ApplyCoopCapturePresentation();
+}
+
+function ApplyCoopCapturePresentation()
+{
+    if (!IsLocalCoopPlayer() || myHUD == None
+        || bLocalCaptureApplied == bCoopStoryCaptured) return;
+    bLocalCaptureApplied = bCoopStoryCaptured;
+    bIsCaptured = bCoopStoryCaptured;
+    bKeepStationary = bCoopStoryCaptured;
+    bPressedJump = False;
+    bAltFire = 0;
+    bFire = 0;
+    ClearCoopPrediction();
+    if (bCoopStoryCaptured)
+    {
+        PreCutFOV = FOVAngle;
+        if (SpellCursor != None && HPCoopWand(Weapon) != None)
+            TurnOffSpellCursor();
+        myHUD.StartCutScene();
+    }
+    else
+    {
+        myHUD.ClearSubtitleText();
+        myHUD.EndCutScene();
+        FOVAngle = PreCutFOV;
+        Cam = LocalCoopCamera;
+        ViewTarget = LocalCoopCamera;
+        if (Cam != None)
+        {
+            Cam.PlayerHarry = self;
+            Cam.InitTarget(self);
+            Cam.InitPositionAndRotation(True);
+        }
+    }
+    Log("[MP_CUTSCENE] local-capture=" $ bCoopStoryCaptured $ " pawn=" $ self
+        $ " camera=" $ Cam $ " view=" $ ViewTarget);
+}
+
+function ClientCoopSubtitle(string Text, float Duration)
+{
+    if (!IsLocalCoopPlayer() || myHUD == None) return;
+    if (Text == "") myHUD.ClearSubtitleText();
+    else myHUD.SetSubtitleText(Text, Duration);
+}
+
+event PlayerCalcView(out Actor ViewActor, out vector CameraLocation, out rotator CameraRotation)
+{
+    if (bCoopStoryCaptured && CoopStoryView != None && CoopStoryView.HasCoopView())
+    {
+        ViewActor = LocalCoopCamera;
+        CameraLocation = CoopStoryView.CameraPosition;
+        CameraRotation = CoopStoryView.CameraRotation;
+        FOVAngle = CoopStoryView.CameraFOV;
+        if (LastPresentedScene != CoopStoryView.SceneSerial)
+        {
+            LastPresentedScene = CoopStoryView.SceneSerial;
+            Log("[MP_CAMERA] shared-view pawn=" $ self $ " scene=" $ LastPresentedScene
+                $ " snapshot=" $ CoopStoryView.SnapshotSerial);
+        }
+        return;
+    }
+    Super.PlayerCalcView(ViewActor, CameraLocation, CameraRotation);
+}
+
+function ServerMove(float TimeStamp, vector InAccel, vector ClientLoc,
+    bool NewbRun, bool NewbDuck, bool NewbJumpStatus, bool bFired,
+    bool bAltFired, bool bForceFire, bool bForceAltFire, eDodgeDir DodgeMove,
+    byte ClientRoll, int View, optional byte OldTimeDelta, optional int OldAccel)
+{
+    // Protect both the new move and the redundant old move before native
+    // MoveAutonomous is reached. Scripted CutCommand movement is independent.
+    if (Role == ROLE_Authority && bCoopStoryCaptured)
+    {
+        CurrentTimeStamp = FMax(CurrentTimeStamp, TimeStamp);
+        return;
+    }
+    // Harry's AltFire is owner-side aiming/animation, not the gameplay cast.
+    // Only the validated ServerCastCoopSpell RPC creates a world projectile.
+    Super.ServerMove(TimeStamp, InAccel, ClientLoc, NewbRun, NewbDuck,
+        NewbJumpStatus, False, False, False, False,
+        DodgeMove, ClientRoll, View, OldTimeDelta, OldAccel);
+}
+
+exec function AltFire(optional float F)
+{
+    if (!IsLocalCoopPlayer() || bCoopStoryCaptured || Level.Pauser != "") return;
+    Super.AltFire(F);
+}
+
+function makeTarget()
+{
+    if (!IsLocalCoopPlayer() || bCoopStoryCaptured) return;
+    Super.makeTarget();
+}
+
+function TurnOffSpellCursor()
+{
+    bIsAimingWithCharge = False;
+    if (baseWand(Weapon) != None)
+        baseWand(Weapon).StopChargingSpell();
+    if (SpellCursor != None)
+        SpellCursor.TurnTargetingOff();
+    GroundSpeed = GroundRunSpeed;
 }
 
 // The original animation-channel notify calls Cast when the wand is released.
@@ -367,6 +517,17 @@ event PlayerInput(float DeltaTime)
     // reads HUD/Console here, which only exist in the owning viewport.
     if (!IsLocalCoopPlayer()) return;
     EnsureLocalCoopContext();
+    if (bCoopStoryCaptured)
+    {
+        bPressedJump = False;
+        bAltFire = 0;
+        bFire = 0;
+        aForward = 0;
+        aStrafe = 0;
+        aTurn = 0;
+        aLookUp = 0;
+        return;
+    }
     if (myHUD != None)
         Super.PlayerInput(DeltaTime);
 }
@@ -389,13 +550,19 @@ simulated event Tick(float DeltaTime)
 
 state PlayerWalking
 {
+    function StartAiming(bool bUsingSword)
+    {
+        if (!IsLocalCoopPlayer() || bCoopStoryCaptured || Level.Pauser != "") return;
+        Super.StartAiming(bUsingSword);
+    }
+
     event PlayerTick(float DeltaTime)
     {
         // The original state continues after Global.PlayerTick. Its remaining
         // body accesses camera/cursor, so guard this dispatch on dedicated too.
         if (!IsLocalCoopPlayer()) return;
         EnsureLocalCoopContext();
-        if (Level.Pauser != "")
+        if (Level.Pauser != "" || bCoopStoryCaptured)
         {
             bPressedJump = False;
             return;
@@ -405,7 +572,7 @@ state PlayerWalking
 
     function PlayerMove(float DeltaTime)
     {
-        if (Level.Pauser != "") return;
+        if (Level.Pauser != "" || bCoopStoryCaptured) return;
         Super.PlayerMove(DeltaTime);
     }
 

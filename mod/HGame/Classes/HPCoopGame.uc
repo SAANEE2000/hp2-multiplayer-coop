@@ -11,6 +11,8 @@ var PlayerStart CompanionStart;
 var string CanonicalCutName;
 var int RequiredPlayers;
 var bool bWaitingForPlayers;
+var bool bStoryCaptured;
+var HPCoopCutsceneView StoryView;
 
 event InitGame(string Options, out string Error)
 {
@@ -24,7 +26,16 @@ event InitGame(string Options, out string Error)
 
 event PostBeginPlay()
 {
+    local CutScene Scene;
     Super.PostBeginPlay();
+    // The two entry scenes observed on the selected milestone map. Only their
+    // logging is adapted; the original command/cue interpreter runs on server.
+    foreach AllActors(Class'CutScene', Scene)
+        if (Scene.FileName ~= "Ch1RictuIntro" || Scene.FileName ~= "02080Ch1FireCrabIntro")
+        {
+            Scene.CutscriptDiskClass = Class'HPCoopCutScriptDisk';
+        }
+    StoryView = Spawn(Class'HPCoopCutsceneView', self);
     LegacyStoryHarry = harry(Level.PlayerHarryActor);
     // Retain the canonical map actor until a real connection is available.
     // Its story fields may be needed by native game-state screening.
@@ -36,6 +47,42 @@ event PostBeginPlay()
         LegacyStoryHarry.Disable('Tick');
         CanonicalCutName = LegacyStoryHarry.CutName;
     }
+}
+
+function SetStoryCaptured(bool bCapture)
+{
+    local byte I;
+    local HPCoopHarry H;
+    if (Role != ROLE_Authority || bStoryCaptured == bCapture) return;
+    bStoryCaptured = bCapture;
+    if (HPCoopGRI(GameReplicationInfo) != None)
+        HPCoopGRI(GameReplicationInfo).bStoryCaptured = bCapture;
+    if (StoryView != None && StoryLeader != None)
+        StoryView.SetCoopCapture(bCapture, StoryLeader.Cam, StoryLeader);
+    for (I = 0; I < 2; I++)
+    {
+        H = CoopPlayers[I];
+        if (H == None || H.bDeleteMe) continue;
+        H.bCoopStoryCaptured = bCapture;
+        H.bIsCaptured = bCapture;
+        H.bKeepStationary = bCapture;
+        if (bCapture)
+        {
+            H.Velocity = vect(0,0,0);
+            H.Acceleration = vect(0,0,0);
+        }
+        H.ClientCoopCapture(bCapture, StoryView, H.Location, H.Rotation);
+    }
+    Log("[MP_CUTSCENE] shared-capture=" $ bCapture $ " leader=" $ StoryLeader);
+}
+
+function BroadcastCoopSubtitle(string Text, float Duration)
+{
+    local byte I;
+    if (Role != ROLE_Authority) return;
+    for (I = 0; I < 2; I++)
+        if (CoopPlayers[I] != None && !CoopPlayers[I].bDeleteMe)
+            CoopPlayers[I].ClientCoopSubtitle(Text, Duration);
 }
 
 function HPCoopHarry GetStoryLeader()
@@ -244,6 +291,13 @@ event PostLogin(PlayerPawn NewPlayer)
         HPCoopHarry(NewPlayer).EnsureCoopWand();
         Log("[MP_LOGIN] post-login pawn=" $ NewPlayer $ " weapon=" $ NewPlayer.Weapon);
         HPCoopHarry(NewPlayer).ClientCoopReady(HPCoopHarry(NewPlayer).CoopSlot);
+        if (bStoryCaptured)
+        {
+            HPCoopHarry(NewPlayer).bCoopStoryCaptured = True;
+            HPCoopHarry(NewPlayer).bIsCaptured = True;
+            HPCoopHarry(NewPlayer).bKeepStationary = True;
+            HPCoopHarry(NewPlayer).ClientCoopCapture(True, StoryView, NewPlayer.Location, NewPlayer.Rotation);
+        }
     }
 }
 

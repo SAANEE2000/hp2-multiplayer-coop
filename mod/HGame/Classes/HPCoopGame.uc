@@ -17,13 +17,29 @@ var HPCoopCampaignState CampaignState;
 var string TestStage;
 var string RuntimeProbe;
 var bool bCoopRecoveryBlocked;
+// Explicit first-intro diagnostic, not enabled by normal co-op sessions.
+var bool bCoopCapturedAuthorityDiagnostic, bCoopCapturedAuthorityUsed;
 
 event InitGame(string Options, out string Error)
 {
     local harry MapHarry;
+    local string CaptureMode;
     Super.InitGame(Options, Error);
     TestStage = ParseOption(Options, "CoopTestStage");
     RuntimeProbe = ParseOption(Options, "CoopProbe");
+    CaptureMode = ParseOption(Options, "CoopCapturedAuthority");
+    if (CaptureMode != "" && CaptureMode != "0" && CaptureMode != "1")
+    {
+        Error = "CoopCapturedAuthority must be 0 or 1.";
+        return;
+    }
+    bCoopCapturedAuthorityDiagnostic = CaptureMode == "1";
+    if (bCoopCapturedAuthorityDiagnostic && (Level.NetMode != NM_DedicatedServer
+        || !(TestStage ~= "RictusempraLessonComplete") || RuntimeProbe != ""))
+    {
+        Error = "CoopCapturedAuthority requires the dedicated Ch1 test stage with no other probe.";
+        return;
+    }
     if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
@@ -116,7 +132,17 @@ function SetStoryCaptured(bool bCapture)
             H.Velocity = vect(0,0,0);
             H.Acceleration = vect(0,0,0);
         }
-        H.ClientCoopCapture(bCapture, StoryView, H.Location, H.Rotation);
+        if (bCapture && bCoopCapturedAuthorityDiagnostic && !bCoopCapturedAuthorityUsed
+            && H == StoryLeader && ReadyPlayers[I] != 0 && IsAliveCoopPlayer(H)
+            && H.RemoteRole == ROLE_AutonomousProxy)
+        {
+            bCoopCapturedAuthorityUsed = True;
+            H.BeginCoopAuthorityCapture(StoryView);
+        }
+        else if (!bCapture && H.bCoopSceneMode)
+            H.EndCoopAuthorityCapture();
+        else
+            H.ClientCoopCapture(bCapture, StoryView, H.Location, H.Rotation);
     }
     Log("[MP_CUTSCENE] shared-capture=" $ bCapture $ " leader=" $ StoryLeader);
 }
@@ -596,6 +622,7 @@ function Logout(Pawn Exiting)
 
 defaultproperties
 {
+    bCoopCapturedAuthorityDiagnostic=False
     GameName="Harry Potter Campaign Co-op"
     MaxPlayers=2
     DefaultPlayerClass=Class'HPCoopHarry'

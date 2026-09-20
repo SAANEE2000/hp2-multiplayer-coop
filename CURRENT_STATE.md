@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-174112-409`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-175239-291`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -35,9 +35,12 @@
 1. Shared camera/input/subtitles реализованы: intro завершилось в loopback,
    оба клиента получили валидный camera snapshot через PlayerCalcView и release
    к личной BaseCam. Подробности: `docs/iterations/20260920_COOP_CUTSCENE.md`.
-   Это не доказывает scripted walk Гарри: `walkto ... *` асинхронен, а native
-   ProcessState удалённого authority pawn пропускается. Визуальная/физическая
-   проверка не пройдена. Отключение StoryLeader посреди
+   Отдельный opt-in captured-authority режим восстановил native ProcessState:
+   оригинальный walk прошёл 462,4 units к CutMark0, выдал original cue, после
+   release владелец восстановил Role3 и подтвердил resume. См.
+   `docs/iterations/20260920_COOP_CAPTURED_AUTHORITY.md`. Режим выключен по умолчанию;
+   визуальная/физическая приёмка и непрерывность owner presentation не доказаны.
+   Отключение StoryLeader посреди
    сцены, перенос captured actors/controllers и аварийная очистка ещё требуют решения.
 2. Явный тестовый старт `RictusempraLessonComplete` передал GSTATE030 и четыре
    spells обоим loopback клиентам до readiness. Lumos owner-aware реализация

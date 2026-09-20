@@ -24,15 +24,33 @@ var int CoopStatusRevision, CoopHealth, CoopHealthPotential, CoopHealthLimit, Co
 var int CoopLifeSerial, LastCoopLifeSerial;
 var float CoopRespawnAfter, NextCoopStatusTime, NextCoopPotionRequest;
 var float CoopDeathAnimationEndedAt;
+// Per-transition serials and explicit owner hold; no transient per-tick role swap.
+var bool bCoopSceneMode, bCoopSceneEnterArmed, bCoopSceneAwaitRelease;
+var bool bCoopSceneLocalHold, bCoopSceneLocalEnterPending;
+var bool bCoopSceneLocalReleasePending, bCoopSceneLocalResumeSent, bCoopSceneSawSimulated;
+var bool bCoopSavedClientAnim;
+var ENetRole CoopSavedRemoteRole;
+var int CoopSceneSerial, CoopLocalSceneSerial;
+var float CoopSceneArmTime, CoopSceneResumeFloor, CoopSceneReleaseStamp;
+var float CoopSceneOwnerHoldStamp, CoopSceneServerHoldTime;
+var vector CoopSceneReleaseLocation;
+var rotator CoopSceneReleaseRotation;
+var EPhysics CoopSceneReleasePhysics;
+var bool bCoopWalkIssued, bCoopWalkReached, bCoopWalkCueReceived, bCoopWalkBlocked;
+var vector CoopWalkStart, CoopWalkGoal;
+var Actor CoopWalkNotify;
+var float CoopWalkNextSample;
 
 replication
 {
     reliable if (Role == ROLE_Authority)
         CoopSlot, ClientCoopReady, bCoopStoryCaptured, ClientCoopCapture, ClientCoopSubtitle,
         CoopCampaignState, ClientCoopStatus, ClientCoopLife,
-        ClientCoopDrinkPotion, ClientCoopKnockBack;
+        ClientCoopDrinkPotion, ClientCoopKnockBack,
+        ClientCoopScenePrepare, ClientCoopSceneRelease, ClientCoopSceneCommitted;
     reliable if (Role < ROLE_Authority)
-        ServerCoopReady, ServerCastCoopSpell, ServerCoopDrinkPotion, ServerCoopResume;
+        ServerCoopReady, ServerCastCoopSpell, ServerCoopDrinkPotion, ServerCoopResume,
+        ServerCoopSceneCaptured, ServerCoopSceneResumed;
 }
 
 simulated function bool IsLocalCoopPlayer()
@@ -251,7 +269,7 @@ function EnsureLocalCoopContext()
     ApplyCoopStatus();
 }
 
-function ClearCoopPrediction()
+simulated function ClearCoopPrediction()
 {
     local SavedMove Move;
     while (SavedMoves != None)
@@ -292,6 +310,7 @@ function ClientCoopCapture(bool bCapture, HPCoopCutsceneView NewView,
 
 function ApplyCoopCapturePresentation()
 {
+    if (bCoopSceneLocalHold && !bCoopStoryCaptured) return;
     if (!IsLocalCoopPlayer() || myHUD == None
         || bLocalCaptureApplied == bCoopStoryCaptured) return;
     bLocalCaptureApplied = bCoopStoryCaptured;
@@ -326,15 +345,25 @@ function ApplyCoopCapturePresentation()
         $ " camera=" $ Cam $ " view=" $ ViewTarget);
 }
 
-function ClientCoopSubtitle(string Text, float Duration)
+simulated function ClientCoopSubtitle(string Text, float Duration)
 {
     if (!IsLocalCoopPlayer() || myHUD == None) return;
     if (Text == "") myHUD.ClearSubtitleText();
     else myHUD.SetSubtitleText(Text, Duration);
 }
 
-event PlayerCalcView(out Actor ViewActor, out vector CameraLocation, out rotator CameraRotation)
+simulated event PlayerCalcView(out Actor ViewActor, out vector CameraLocation, out rotator CameraRotation)
 {
+    // Source bCaptured can clear before the role update arrives. Retain the
+    // last valid snapshot through the handoff; do not call non-sim Super at Role2.
+    if (bCoopSceneLocalHold && CoopStoryView != None && CoopStoryView.SnapshotSerial > 0)
+    {
+        ViewActor = LocalCoopCamera;
+        CameraLocation = CoopStoryView.CameraPosition;
+        CameraRotation = CoopStoryView.CameraRotation;
+        FOVAngle = CoopStoryView.CameraFOV;
+        return;
+    }
     if (bCoopStoryCaptured && CoopStoryView != None && CoopStoryView.HasCoopView())
     {
         ViewActor = LocalCoopCamera;
@@ -359,11 +388,12 @@ function ServerMove(float TimeStamp, vector InAccel, vector ClientLoc,
 {
     // Protect both the new move and the redundant old move before native
     // MoveAutonomous is reached. Scripted CutCommand movement is independent.
-    if (Role == ROLE_Authority && (bCoopStoryCaptured || bCoopDead || bCoopAwaitResume))
+    if (Role == ROLE_Authority && (bCoopStoryCaptured || bCoopDead || bCoopAwaitResume || bCoopSceneAwaitRelease))
     {
         CurrentTimeStamp = FMax(CurrentTimeStamp, TimeStamp);
         return;
     }
+    if (Role == ROLE_Authority && TimeStamp <= CoopSceneResumeFloor) return;
     // Harry's AltFire is owner-side aiming/animation, not the gameplay cast.
     // Only the validated ServerCastCoopSpell RPC creates a world projectile.
     Super.ServerMove(TimeStamp, InAccel, ClientLoc, NewbRun, NewbDuck,
@@ -377,7 +407,7 @@ function ClientAdjustPosition(float TimeStamp, name NewState, EPhysics NewPhysic
 {
     // A correction queued before death must not re-enter walking or replay
     // prediction. Only the reliable lifecycle message can revive this owner.
-    if (bCoopDead || bCoopStoryCaptured || NewState == 'CoopDead' || NewState == 'stateDead')
+    if (bCoopDead || bCoopStoryCaptured || bCoopSceneLocalHold || NewState == 'CoopDead' || NewState == 'stateDead')
         return;
     Super.ClientAdjustPosition(TimeStamp, NewState, NewPhysics,
         NewLocX, NewLocY, NewLocZ, NewVelX, NewVelY, NewVelZ, NewBase);
@@ -385,13 +415,13 @@ function ClientAdjustPosition(float TimeStamp, name NewState, EPhysics NewPhysic
 
 exec function AltFire(optional float F)
 {
-    if (!IsLocalCoopPlayer() || bCoopStoryCaptured || Level.Pauser != "") return;
+    if (!IsLocalCoopPlayer() || bCoopStoryCaptured || bCoopSceneLocalHold || Level.Pauser != "") return;
     Super.AltFire(F);
 }
 
 function makeTarget()
 {
-    if (!IsLocalCoopPlayer() || bCoopStoryCaptured) return;
+    if (!IsLocalCoopPlayer() || bCoopStoryCaptured || bCoopSceneLocalHold) return;
     Super.makeTarget();
 }
 
@@ -409,7 +439,8 @@ function TurnOffSpellCursor()
 // Only the owning viewport chooses a target; gameplay is resolved by the server.
 function Cast()
 {
-    if (!IsLocalCoopPlayer() || SpellCursor == None || HPCoopWand(Weapon) == None)
+    if (!IsLocalCoopPlayer() || bCoopStoryCaptured || bCoopSceneLocalHold
+        || SpellCursor == None || HPCoopWand(Weapon) == None)
         return;
     if (SpellCursor.IsLockedOn() && !bInDuelingMode && !bHarryUsingSword)
         ServerCastCoopSpell(SpellCursor.aCurrentTarget, SpellCursor.vTargetOffset);
@@ -440,6 +471,7 @@ function ServerCastCoopSpell(Actor Target, vector TargetOffset)
     W = HPCoopWand(Weapon);
     if (G == None || !G.IsCoopPlayer(self) || Player == None || bDeleteMe
         || G.bWaitingForPlayers || bIsCaptured || !bCanCast || HarryIsDead()
+        || bCoopStoryCaptured || bCoopAwaitResume || bCoopSceneAwaitRelease
         || !IsInState('PlayerWalking') || CarryingActor != None
         || bInDuelingMode || bHarryUsingSword || W == None || W.Owner != self)
     {
@@ -534,8 +566,9 @@ function OnEngineNetworkCorrectionApplied()
         Log("[MP_MOVE] correction pawn=" $ self $ " state=" $ GetStateName() $ " loc=" $ Location);
 }
 
-function PlayerTick(float DeltaTime)
+simulated function PlayerTick(float DeltaTime)
 {
+    if (CoopSceneOwnerTick()) return;
     if (IsLocalCoopPlayer())
     {
         EnsureLocalCoopContext();
@@ -549,7 +582,7 @@ event PlayerInput(float DeltaTime)
     // reads HUD/Console here, which only exist in the owning viewport.
     if (!IsLocalCoopPlayer()) return;
     EnsureLocalCoopContext();
-    if (bCoopStoryCaptured || bCoopDead)
+    if (bCoopStoryCaptured || bCoopDead || bCoopSceneLocalHold)
     {
         bPressedJump = False;
         bAltFire = 0;
@@ -590,6 +623,7 @@ function CoopAuthorityTick(float DeltaTime)
             NextCoopStatusTime = Level.TimeSeconds + 0.1;
             PublishCoopStatus();
         }
+        CoopSceneAuthorityTick();
         CoopAuthorityMovementTick(DeltaTime);
     }
 }
@@ -622,12 +656,13 @@ state PlayerWalking
 
     function StartAiming(bool bUsingSword)
     {
-        if (!IsLocalCoopPlayer() || bCoopStoryCaptured || Level.Pauser != "") return;
+        if (!IsLocalCoopPlayer() || bCoopStoryCaptured || bCoopSceneLocalHold || Level.Pauser != "") return;
         Super.StartAiming(bUsingSword);
     }
 
-    event PlayerTick(float DeltaTime)
+    simulated event PlayerTick(float DeltaTime)
     {
+        if (CoopSceneOwnerTick()) return;
         // The original state continues after Global.PlayerTick. Its remaining
         // body accesses camera/cursor, so guard this dispatch on dedicated too.
         if (!IsLocalCoopPlayer()) return;
@@ -642,7 +677,7 @@ state PlayerWalking
 
     function PlayerMove(float DeltaTime)
     {
-        if (Level.Pauser != "" || bCoopStoryCaptured) return;
+        if (Level.Pauser != "" || bCoopStoryCaptured || bCoopSceneLocalHold) return;
         Super.PlayerMove(DeltaTime);
     }
 
@@ -756,7 +791,7 @@ function DoDrinkWiggenwell()
 {
     if (Role < ROLE_Authority)
     {
-        if (IsLocalCoopPlayer() && !bCoopDead && !bCoopStoryCaptured
+        if (IsLocalCoopPlayer() && !bCoopDead && !bCoopStoryCaptured && !bCoopSceneLocalHold
             && Level.TimeSeconds >= NextCoopPotionRequest)
         {
             NextCoopPotionRequest = Level.TimeSeconds + 0.25;
@@ -774,6 +809,7 @@ function ServerCoopDrinkPotion()
     G = HPCoopGame(Level.Game);
     if (Role != ROLE_Authority || G == None || !G.IsAliveCoopPlayer(self)
         || G.bWaitingForPlayers || bCoopDead || bCoopStoryCaptured
+        || bCoopAwaitResume || bCoopSceneAwaitRelease
         || bCoopPotionPending || bInDuelingMode || bHarryUsingSword
         || (!bCoopInDamage && (!IsInState('PlayerWalking') || Physics != PHYS_Walking))) return;
     EnsureCoopAnimation();
@@ -967,6 +1003,296 @@ function SaveGame()
 {
     bQueuedToSaveGame = False;
     Log("[MP_CHECKPOINT] blocked reason=native-save-contract-unverified pawn=" $ self);
+}
+
+// Diagnostic only: preserve the original native state/physics clock for one
+// Ch1 intro capture. No helper calls MoveTo, AutonomousPhysics or ProcessState.
+function BeginCoopAuthorityCapture(HPCoopCutsceneView SharedView)
+{
+    if (Role != ROLE_Authority || bCoopSceneMode) return;
+    bCoopSceneMode = True;
+    bCoopSceneAwaitRelease = False;
+    bCoopSceneEnterArmed = False;
+    bCoopWalkIssued = False;
+    bCoopWalkReached = False;
+    bCoopWalkCueReceived = False;
+    bCoopWalkBlocked = False;
+    CoopSceneSerial++;
+    CoopSavedRemoteRole = RemoteRole;
+    bCoopSavedClientAnim = bClientAnim;
+    ClientCoopCapture(True, SharedView, Location, Rotation);
+    ClientCoopScenePrepare(CoopSceneSerial, SharedView);
+    Log("[MP_CAPTURE_MODE] prepare serial=" $ CoopSceneSerial $ " pawn=" $ self
+        $ " role=" $ Role $ " remote=" $ RemoteRole $ " location=" $ Location);
+}
+
+simulated function ClientCoopScenePrepare(int Serial, HPCoopCutsceneView SharedView)
+{
+    if (!IsLocalCoopPlayer() || Serial <= CoopLocalSceneSerial) return;
+    CoopLocalSceneSerial = Serial;
+    CoopStoryView = SharedView;
+    bCoopSceneLocalHold = True;
+    bCoopSceneLocalEnterPending = True;
+    bCoopSceneLocalReleasePending = False;
+    bCoopSceneLocalResumeSent = False;
+    bCoopSceneSawSimulated = False;
+    CoopSceneOwnerTick();
+}
+
+function ServerCoopSceneCaptured(int Serial, float OwnerHoldStamp)
+{
+    local HPCoopGame G;
+    G = HPCoopGame(Level.Game);
+    if (Role != ROLE_Authority || G == None || !G.IsAliveCoopPlayer(self)
+        || G.StoryLeader != self || !bCoopSceneMode || !bCoopStoryCaptured
+        || Serial != CoopSceneSerial || bCoopSceneEnterArmed
+        || RemoteRole != ROLE_AutonomousProxy) return;
+    if (!(OwnerHoldStamp >= 0) || !(Abs(OwnerHoldStamp) < 100000000)) return;
+    CoopSceneOwnerHoldStamp = OwnerHoldStamp;
+    CoopSceneServerHoldTime = Level.TimeSeconds;
+    bCoopSceneEnterArmed = True;
+    CoopSceneArmTime = Level.TimeSeconds;
+}
+
+function CoopSceneAuthorityTick()
+{
+    if (!bCoopSceneMode || Role != ROLE_Authority) return;
+    // Commit outside the RPC/native pawn tick, on a later world frame.
+    if (bCoopSceneEnterArmed && bCoopStoryCaptured
+        && Level.TimeSeconds > CoopSceneArmTime)
+    {
+        bCoopSceneEnterArmed = False;
+        bClientAnim = False;
+        RemoteRole = ROLE_SimulatedProxy;
+        Log("[MP_CAPTURE_MODE] authority-native serial=" $ CoopSceneSerial
+            $ " pawn=" $ self $ " state=" $ GetStateName() $ " location=" $ Location);
+    }
+    if (bCoopWalkIssued && !bCoopWalkCueReceived && !bCoopWalkBlocked
+        && Level.TimeSeconds >= CoopWalkNextSample)
+    {
+        CoopWalkNextSample = Level.TimeSeconds + 0.25;
+        Log("[MP_CAPTURE_WALK] sample pawn=" $ self $ " state=" $ GetStateName()
+            $ " role=" $ Role $ " remote=" $ RemoteRole $ " physics=" $ Physics
+            $ " location=" $ Location $ " velocity=" $ Velocity
+            $ " acceleration=" $ Acceleration $ " goal=" $ CoopWalkGoal
+            $ " distance-xy=" $ VSize2d(Location - CoopWalkGoal)
+            $ " cue=" $ sCutNotifyCue $ " notify=" $ CutNotifyActor);
+    }
+}
+
+function EndCoopAuthorityCapture()
+{
+    if (Role != ROLE_Authority || !bCoopSceneMode) return;
+    bCoopSceneEnterArmed = False;
+    bCoopSceneAwaitRelease = True;
+    CoopSceneSerial++;
+    RemoteRole = CoopSavedRemoteRole;
+    bClientAnim = bCoopSavedClientAnim;
+    Velocity = vect(0,0,0);
+    Acceleration = vect(0,0,0);
+    ClientCoopSceneRelease(CoopSceneSerial, Location, Rotation, Physics, CurrentTimeStamp);
+    Log("[MP_CAPTURE_WALK] release issued=" $ bCoopWalkIssued
+        $ " reached=" $ bCoopWalkReached $ " original-cue-received=" $ bCoopWalkCueReceived
+        $ " blocked=" $ bCoopWalkBlocked $ " location=" $ Location
+        $ " distance-xy=" $ VSize2d(Location - CoopWalkGoal));
+}
+
+simulated function ClientCoopSceneRelease(int Serial, vector Position,
+    rotator Facing, EPhysics NewPhysics, float AuthorityTimeStamp)
+{
+    if (!IsLocalCoopPlayer() || Serial <= CoopLocalSceneSerial) return;
+    CoopLocalSceneSerial = Serial;
+    bCoopSceneLocalHold = True;
+    bCoopSceneLocalEnterPending = False;
+    bCoopSceneLocalReleasePending = True;
+    bCoopSceneLocalResumeSent = False;
+    CoopSceneReleaseLocation = Position;
+    CoopSceneReleaseRotation = Facing;
+    CoopSceneReleasePhysics = NewPhysics;
+    CoopSceneReleaseStamp = AuthorityTimeStamp;
+    CoopSceneOwnerTick();
+}
+
+simulated function bool CoopSceneOwnerTick()
+{
+    if (!IsLocalCoopPlayer() || !bCoopSceneLocalHold) return False;
+    if (Role == ROLE_SimulatedProxy && !bCoopSceneSawSimulated)
+    {
+        bCoopSceneSawSimulated = True;
+        Log("[MP_CAPTURE_MODE] owner-simulated serial=" $ CoopLocalSceneSerial
+            $ " role=" $ Role $ " physics=" $ Physics $ " location=" $ Location);
+    }
+    if (bCoopSceneLocalEnterPending && Role == ROLE_AutonomousProxy
+        && bCoopReadySent && bLocalContextReady && myHUD != None
+        && LocalCoopCamera != None && CoopStoryView != None && CoopStoryView.HasCoopView())
+    {
+        // Run local presentation while normal autonomous script calls are legal.
+        bCoopStoryCaptured = True;
+        ApplyCoopCapturePresentation();
+        ClearCoopPrediction();
+        Velocity = vect(0,0,0);
+        Acceleration = vect(0,0,0);
+        SetPhysics(PHYS_None);
+        bCoopSceneLocalEnterPending = False;
+        ServerCoopSceneCaptured(CoopLocalSceneSerial, Level.TimeSeconds);
+        Log("[MP_CAPTURE_MODE] owner-held serial=" $ CoopLocalSceneSerial
+            $ " role=" $ Role $ " physics=" $ Physics $ " location=" $ Location);
+    }
+    if (bCoopSceneLocalReleasePending && Role == ROLE_AutonomousProxy
+        && !bCoopSceneLocalResumeSent)
+    {
+        ClearCoopPrediction();
+        // Network reconciliation of this owner's actual authority endpoint.
+        // This runs after the independent server walk/cue evidence is recorded.
+        if (!SetLocation(CoopSceneReleaseLocation))
+        {
+            Log("[MP_CAPTURE_MODE] BLOCKED reason=owner-release-position serial=" $ CoopLocalSceneSerial);
+            bCoopSceneLocalReleasePending = False;
+            return True;
+        }
+        SetRotation(CoopSceneReleaseRotation);
+        ViewRotation = CoopSceneReleaseRotation;
+        Velocity = vect(0,0,0);
+        Acceleration = vect(0,0,0);
+        SetPhysics(CoopSceneReleasePhysics);
+        CurrentTimeStamp = FMax(CurrentTimeStamp, CoopSceneReleaseStamp);
+        bPressedJump = False;
+        bCoopSceneLocalResumeSent = True;
+        ServerCoopSceneResumed(CoopLocalSceneSerial, Level.TimeSeconds, bJumpStatus);
+        Log("[MP_CAPTURE_MODE] owner-role-restored serial=" $ CoopLocalSceneSerial
+            $ " role=" $ Role $ " saw-simulated=" $ bCoopSceneSawSimulated
+            $ " location=" $ Location);
+    }
+    return True;
+}
+
+function ServerCoopSceneResumed(int Serial, float OwnerResumeStamp, bool OwnerJumpStatus)
+{
+    local HPCoopGame G;
+    G = HPCoopGame(Level.Game);
+    if (Role != ROLE_Authority || G == None || !G.IsAliveCoopPlayer(self)
+        || !bCoopSceneMode || !bCoopSceneAwaitRelease || bCoopStoryCaptured
+        || Serial != CoopSceneSerial || RemoteRole != ROLE_AutonomousProxy) return;
+    // The owner stamp is a chronological barrier, never a position authority.
+    // Paired capture clocks allow generous jitter without accepting NaN,
+    // infinity or a client timestamp arbitrarily far beyond this scene.
+    if (!(Abs(OwnerResumeStamp) < 100000000) || !(OwnerResumeStamp >= CurrentTimeStamp)
+        || !(OwnerResumeStamp >= CoopSceneOwnerHoldStamp)
+        || !(OwnerResumeStamp <= CoopSceneOwnerHoldStamp
+            + FMax(0, Level.TimeSeconds - CoopSceneServerHoldTime) + 5))
+    {
+        Log("[MP_CAPTURE_MODE] BLOCKED reason=resume-stamp serial=" $ Serial);
+        return;
+    }
+    CurrentTimeStamp = FMax(CurrentTimeStamp, OwnerResumeStamp);
+    CoopSceneResumeFloor = CurrentTimeStamp;
+    ServerTimeStamp = Level.TimeSeconds;
+    bJumpStatus = OwnerJumpStatus;
+    bPressedJump = False;
+    bCoopSceneAwaitRelease = False;
+    bCoopSceneMode = False;
+    PublishCoopStatus(True);
+    ClientCoopSceneCommitted(Serial);
+    Log("[MP_CAPTURE_MODE] resumed serial=" $ Serial $ " floor=" $ CoopSceneResumeFloor);
+}
+
+simulated function ClientCoopSceneCommitted(int Serial)
+{
+    if (!IsLocalCoopPlayer() || Serial != CoopLocalSceneSerial
+        || !bCoopSceneLocalResumeSent || Role != ROLE_AutonomousProxy) return;
+    ClearCoopPrediction();
+    bCoopSceneLocalHold = False;
+    bCoopSceneLocalReleasePending = False;
+    bCoopStoryCaptured = False;
+    ApplyCoopCapturePresentation();
+    Log("[MP_CAPTURE_MODE] owner-resumed serial=" $ Serial $ " role=" $ Role);
+}
+
+function DoMoveTo(vector v0, optional bool bSnap, optional float Speed,
+    optional vector v1, optional vector v2, optional vector v3, optional vector v4,
+    optional name FinishState)
+{
+    local Actor Marker, ExpectedMarker;
+    if (Role == ROLE_Authority && bCoopSceneMode && bCoopStoryCaptured)
+    {
+        bSnap = False;
+        bCoopWalkIssued = True;
+        bCoopWalkReached = False;
+        bCoopWalkCueReceived = False;
+        bCoopWalkBlocked = False;
+        CoopWalkStart = Location;
+        CoopWalkGoal = v0;
+        CoopWalkNotify = CutNotifyActor;
+        Log("[MP_CAPTURE_WALK] begin pawn=" $ self $ " start=" $ Location
+            $ " goal=" $ v0 $ " physics=" $ Physics $ " notify=" $ CutNotifyActor);
+        foreach AllActors(Class'Actor', Marker)
+            if (Marker.CutName ~= "CutMark0")
+            {
+                ExpectedMarker = Marker;
+                break;
+            }
+        if (ExpectedMarker == None || VSize(v0 - ExpectedMarker.Location) > 0.1)
+        {
+            bCoopWalkBlocked = True;
+            Log("[MP_CAPTURE_WALK] BLOCKED reason=not-ch1-cutmark0");
+            return;
+        }
+        if (v1 != vect(0,0,0) || v2 != vect(0,0,0) || v3 != vect(0,0,0) || v4 != vect(0,0,0))
+        {
+            bCoopWalkBlocked = True;
+            Log("[MP_CAPTURE_WALK] BLOCKED reason=unsupported-multiple-waypoints");
+            return;
+        }
+    }
+    Super.DoMoveTo(v0, bSnap, Speed, v1, v2, v3, v4, FinishState);
+}
+
+function CoopOriginalWalkCueReceived(Actor Source, string Cue)
+{
+    if (!bCoopSceneMode || !bCoopWalkReached || bCoopWalkCueReceived
+        || Source != CoopWalkNotify || Source != CutNotifyActor
+        || Cue == "" || Cue != sCutNotifyCue) return;
+    bCoopWalkCueReceived = True;
+    Log("[MP_CAPTURE_WALK] original-cue-received cue=" $ Cue $ " notify=" $ Source
+        $ " location=" $ Location $ " distance-xy=" $ VSize2d(Location - CoopWalkGoal));
+}
+
+state stateMovingToLoc
+{
+    function CutBypass()
+    {
+        if (bCoopSceneMode)
+        {
+            bCoopWalkBlocked = True;
+            Log("[MP_CAPTURE_WALK] BLOCKED reason=cut-bypass-requested");
+            GotoState('stateCutIdle');
+            return;
+        }
+        Super.CutBypass();
+    }
+
+    function DoneWithMoveTo()
+    {
+        if (bCoopSceneMode && bCoopWalkIssued)
+        {
+            if (bCoopWalkBlocked || CutNotifyActor != CoopWalkNotify || CoopWalkNotify == None
+                || VSize2d(Location - CoopWalkGoal) > FMax(16, CollisionRadius)
+                || Abs(Location.Z - CoopWalkGoal.Z) > CollisionHeight
+                || VSize2d(Location - CoopWalkStart) <= 1)
+            {
+                bCoopWalkBlocked = True;
+                Log("[MP_CAPTURE_WALK] BLOCKED reason=native-walk-ended-without-arrival"
+                    $ " location=" $ Location $ " goal=" $ CoopWalkGoal);
+                GotoState('stateCutIdle');
+                return;
+            }
+            bCoopWalkReached = True;
+            Log("[MP_CAPTURE_WALK] original-done location=" $ Location
+                $ " distance-xy=" $ VSize2d(Location - CoopWalkGoal)
+                $ " moved-xy=" $ VSize2d(Location - CoopWalkStart));
+        }
+        Super.DoneWithMoveTo();
+    }
 }
 
 state CoopDead

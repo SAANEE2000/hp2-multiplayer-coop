@@ -26,3 +26,12 @@ function CutError(string Str)
         return;
     Log("[MP_CUT_ERROR] " $ CoopLogContext() $ " -> " $ Str);
 }
+
+function CutCue(string Cue)
+{
+    local HPCoopGame G;
+    Super.CutCue(Cue);
+    G = HPCoopGame(Level.Game);
+    if (G != None && G.bCoopCapturedAuthorityDiagnostic && G.StoryLeader != None)
+        G.StoryLeader.CoopOriginalWalkCueReceived(self, Cue);
+}

@@ -9,6 +9,7 @@ param(
     [ValidateRange(1024,65532)][int]$Port = 7777,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$')][string]$PlayerName = 'Harry',
     [ValidateSet('None','RictusempraLessonComplete')][string]$TestStage = 'None',
+    [ValidateSet('None','Health','Lumos')][string]$RuntimeProbe = 'None',
     [switch]$PrepareOnly,
     [switch]$Unattended
 )
@@ -92,6 +93,9 @@ if (!$Map) { $Map = if ($Mode -eq 'Coop') { 'Ch1Rictusempra' } else { 'HPV_Entry
 $mapName = $Map -replace '(?i)\.unr$', ''
 if ($TestStage -ne 'None' -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or $mapName -ine 'Ch1Rictusempra')) {
     throw 'RictusempraLessonComplete is an explicit test fixture for Coop Host on Ch1Rictusempra only.'
+}
+if ($RuntimeProbe -ne 'None' -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or $TestStage -ne 'RictusempraLessonComplete')) {
+    throw 'RuntimeProbe is an explicit disposable Coop Host Ch1 fixture; ordinary play keeps it off.'
 }
 if ($Role -eq 'Host' -and !(Test-Path -LiteralPath (Join-Path $WorkRoot "Maps\$mapName.unr") -PathType Leaf)) {
     throw "Map is not installed: $mapName.unr"
@@ -270,6 +274,7 @@ if ($Role -eq 'Host') {
     $url = '{0}.unr?game={1}?MaxPlayers=2' -f $mapName,$gameClass
     if ($Mode -eq 'Versus') { $url += '?ScoreLimit=3' }
     if ($TestStage -ne 'None') { $url += "?CoopTestStage=$TestStage" }
+    if ($RuntimeProbe -ne 'None') { $url += "?CoopProbe=$RuntimeProbe" }
     $launchArgs = @('server', $url, "port=$Port")
 } else {
     # The temporary standalone map must not run the multiplayer GameInfo or
@@ -293,7 +298,7 @@ $manifest = [ordered]@{
     workRoot=$WorkRoot; executable=$executable; arguments=$launchArgs; map=$mapName; server=$Server; port=$Port;
     connectUrl=$(if ($Role -eq 'Join') { $url } else { $null });
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
-    playerName=$PlayerName; testStage=$TestStage; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
+    playerName=$PlayerName; testStage=$TestStage; runtimeProbe=$RuntimeProbe; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;
     runRoot=$runRoot; profileRoot=$profileRoot; userFolder="HP2-MP-$session"; processId=$null;
     profileIsolation='UNVERIFIED: M212 bootstrap may select UserFolder/SavePath from Default.ini before the custom INI.';

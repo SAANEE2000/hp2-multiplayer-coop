@@ -63,7 +63,9 @@ Host — скрытый dedicated server; у игрока A отдельный J
 
 ## 4. Вернуть логи
 
-Закройте оба клиентских окна обычным способом. На каждом ПК, пока сохранена переменная `$joinRun`, соберите журнал; на A дополнительно серверный:
+Сначала закройте оба клиентских окна обычным способом. Затем на A остановите **только свой dedicated server**: возьмите processId из `$hostRun`/его `launch.json` и сверьте Path и StartTime через `Get-Process -Id <PID> | Select Id,Path,StartTime`; после сверки выполните `Stop-Process -Id <PID>` для этого сервера. Не используйте остановку всех UCC по имени.
+
+**Collection выполнять после остановки клиентов и сервера**: M212 держит активный engine log с эксклюзивным доступом, поэтому копирование во время работы может завершиться ошибкой. На каждом ПК, пока сохранена переменная `$joinRun`, соберите журнал; на A дополнительно серверный:
 
 ```powershell
 .\scripts\Launch-Multiplayer.ps1 -CollectSession $joinRun.session
@@ -72,8 +74,6 @@ Host — скрытый dedicated server; у игрока A отдельный J
 ```
 
 Если PowerShell уже закрыт, session ID — имя соответствующего каталога `.local\runs\coop-join-...` / `coop-host-...`; подставьте его строкой в `-CollectSession`. Collection находит engine logs в реальном M212 profile, который может находиться в Documents, и копирует их в каталог session.
-
-На A остановите **только свой dedicated server** по processId из `$hostRun`/его `launch.json`, сверив Path и StartTime через `Get-Process -Id <PID> | Select Id,Path,StartTime`; после остановки повторите collection. Не используйте остановку всех UCC по имени.
 
 С каждого ПК отправьте приватно ZIP выбранных **тестовых session-каталогов** из `.local/runs` с `launch.json`, `engine-*.log`, stdout/stderr и INI, а также `.local/last-build.json`, эталон runtime JSON и краткий текст результатов по пунктам выше. Назовите архивы `PC-A-logs.zip` и `PC-B-logs.zip`. При визуальном дефекте приложите кадр/короткую запись обоих экранов, если удобно. Не добавляйте папку игры, сохранения, игровые packages или весь `.local` в архив логов. Логи могут содержать локальные пути и LAN IP; пересылайте их приватно.
 

@@ -18,14 +18,21 @@ var float PreCutFOV;
 var int LastPresentedScene;
 var HPCoopCampaignState CoopCampaignState;
 var bool bCoopProgressApplied;
+var bool bCoopDead, bCoopPotionPending, bCoopAwaitResume, bCoopInDamage;
+var bool bCoopDeathAnimFinished;
+var int CoopStatusRevision, CoopHealth, CoopHealthPotential, CoopHealthLimit, CoopPotionCount;
+var int CoopLifeSerial, LastCoopLifeSerial;
+var float CoopRespawnAfter, NextCoopStatusTime, NextCoopPotionRequest;
+var float CoopDeathAnimationEndedAt;
 
 replication
 {
     reliable if (Role == ROLE_Authority)
         CoopSlot, ClientCoopReady, bCoopStoryCaptured, ClientCoopCapture, ClientCoopSubtitle,
-        CoopCampaignState;
+        CoopCampaignState, ClientCoopStatus, ClientCoopLife,
+        ClientCoopDrinkPotion, ClientCoopKnockBack;
     reliable if (Role < ROLE_Authority)
-        ServerCoopReady, ServerCastCoopSpell;
+        ServerCoopReady, ServerCastCoopSpell, ServerCoopDrinkPotion, ServerCoopResume;
 }
 
 simulated function bool IsLocalCoopPlayer()
@@ -89,7 +96,7 @@ event Possess()
     if (Role == ROLE_Authority && (IsInState('InvalidState') || IsInState('CoopJoining')))
         GotoState('PlayerWalking');
     Log("[MP_LOGIN] possess pawn=" $ self $ " slot=" $ CoopSlot $ " local=" $ IsLocalCoopPlayer()
-        $ " state=" $ GetStateName() $ " weapon=" $ Weapon);
+        $ " state=" $ GetStateName() $ " weapon=" $ Weapon $ " location=" $ Location);
 }
 
 event TravelPostAccept()
@@ -115,6 +122,7 @@ function ServerCoopReady()
     if (Role != ROLE_Authority || G == None || !G.IsAliveCoopPlayer(self)) return;
     if (IsInState('InvalidState') || IsInState('CoopJoining'))
         GotoState('PlayerWalking');
+    PublishCoopStatus(True);
     G.PlayerContextReady(self);
 }
 
@@ -166,7 +174,7 @@ function EnsureCoopAnimation()
 {
     if (Role == ROLE_SimulatedProxy || HarryAnimChannel != None || Mesh == None)
         return;
-    HarryAnimChannel = cHarryAnimChannel(CreateAnimChannel(Class'cHarryAnimChannel', AT_Replace, 'bip01 spine1'));
+    HarryAnimChannel = cHarryAnimChannel(CreateAnimChannel(Class'HPCoopHarryAnimChannel', AT_Replace, 'bip01 spine1'));
     if (HarryAnimChannel != None)
         HarryAnimChannel.SetOwner(self);
 }
@@ -237,9 +245,10 @@ function EnsureLocalCoopContext()
     {
         bCoopReadySent = True;
         ServerCoopReady();
-        Log("[MP_LOGIN] local-context-ready pawn=" $ self $ " slot=" $ CoopSlot);
+        Log("[MP_LOGIN] local-context-ready pawn=" $ self $ " slot=" $ CoopSlot $ " location=" $ Location);
     }
     ApplyCoopCapturePresentation();
+    ApplyCoopStatus();
 }
 
 function ClearCoopPrediction()
@@ -350,7 +359,7 @@ function ServerMove(float TimeStamp, vector InAccel, vector ClientLoc,
 {
     // Protect both the new move and the redundant old move before native
     // MoveAutonomous is reached. Scripted CutCommand movement is independent.
-    if (Role == ROLE_Authority && bCoopStoryCaptured)
+    if (Role == ROLE_Authority && (bCoopStoryCaptured || bCoopDead || bCoopAwaitResume))
     {
         CurrentTimeStamp = FMax(CurrentTimeStamp, TimeStamp);
         return;
@@ -360,6 +369,18 @@ function ServerMove(float TimeStamp, vector InAccel, vector ClientLoc,
     Super.ServerMove(TimeStamp, InAccel, ClientLoc, NewbRun, NewbDuck,
         NewbJumpStatus, False, False, False, False,
         DodgeMove, ClientRoll, View, OldTimeDelta, OldAccel);
+}
+
+function ClientAdjustPosition(float TimeStamp, name NewState, EPhysics NewPhysics,
+    float NewLocX, float NewLocY, float NewLocZ,
+    float NewVelX, float NewVelY, float NewVelZ, Actor NewBase)
+{
+    // A correction queued before death must not re-enter walking or replay
+    // prediction. Only the reliable lifecycle message can revive this owner.
+    if (bCoopDead || bCoopStoryCaptured || NewState == 'CoopDead' || NewState == 'stateDead')
+        return;
+    Super.ClientAdjustPosition(TimeStamp, NewState, NewPhysics,
+        NewLocX, NewLocY, NewLocZ, NewVelX, NewVelY, NewVelZ, NewBase);
 }
 
 exec function AltFire(optional float F)
@@ -528,7 +549,7 @@ event PlayerInput(float DeltaTime)
     // reads HUD/Console here, which only exist in the owning viewport.
     if (!IsLocalCoopPlayer()) return;
     EnsureLocalCoopContext();
-    if (bCoopStoryCaptured)
+    if (bCoopStoryCaptured || bCoopDead)
     {
         bPressedJump = False;
         bAltFire = 0;
@@ -555,12 +576,50 @@ auto state CoopJoining
 
 simulated event Tick(float DeltaTime)
 {
-    // Do not inherit v18 harry.Tick's unconditional standard-camera override.
-    // No movement, input unlock or forced state transition belongs here.
+    // Native real player pawns dispatch PlayerTick instead of this event.
+    // Authority maintenance is called once from HPCoopGame.Tick.
 }
+
+function CoopAuthorityTick(float DeltaTime)
+{
+    if (Role == ROLE_Authority)
+    {
+        if (!IsLocalCoopPlayer()) fTimeSinceLastAcidHit += DeltaTime;
+        if (Level.TimeSeconds >= NextCoopStatusTime)
+        {
+            NextCoopStatusTime = Level.TimeSeconds + 0.1;
+            PublishCoopStatus();
+        }
+        CoopAuthorityMovementTick(DeltaTime);
+    }
+}
+
+function CoopAuthorityMovementTick(float DeltaTime) {}
 
 state PlayerWalking
 {
+    function CoopAuthorityMovementTick(float DeltaTime)
+    {
+        if (IsLocalCoopPlayer() || bCoopDead || bCoopStoryCaptured) return;
+        if (GetHealthCount() <= 0)
+        {
+            KillHarry(True);
+            return;
+        }
+        NoFallingDamageTimer = FMax(0, NoFallingDamageTimer - DeltaTime);
+        // Original falling height/time bookkeeping without viewport input,
+        // camera access or a second call to PlayerMove/AutonomousPhysics.
+        ProcessFalling(DeltaTime);
+    }
+
+    event TakeDamage(int Damage, Pawn InstigatedBy, vector HitLocation,
+        vector Momentum, name DamageType)
+    {
+        if (Role != ROLE_Authority || bCoopDead) return;
+        // Keep the original authority Director callback before global damage.
+        Super.TakeDamage(Damage, InstigatedBy, HitLocation, Momentum, DamageType);
+    }
+
     function StartAiming(bool bUsingSword)
     {
         if (!IsLocalCoopPlayer() || bCoopStoryCaptured || Level.Pauser != "") return;
@@ -594,6 +653,386 @@ state PlayerWalking
         if (IsLocalCoopPlayer())
             EnsureLocalCoopContext();
     }
+}
+
+
+// Original StatusItemHealth remains the authority data model.
+function TakeDamage(int Damage, Pawn InstigatedBy, vector HitLocation,
+    vector Momentum, name DamageType)
+{
+    local HPCoopGame G;
+    G = HPCoopGame(Level.Game);
+    if (Role != ROLE_Authority || G == None || !G.IsCoopPlayer(self)
+        || bCoopDead || Damage <= 0) return;
+    EnsureCoopStatus();
+    EnsureCoopAnimation();
+    if (managerStatus == None || HarryAnimChannel == None) return;
+    // The restored original retains difficulty, acid throttle, lethal damage
+    // types, hurt audio, knockback, carried-object rules and automatic potion.
+    bCoopInDamage = True;
+    Super.TakeDamage(Damage, InstigatedBy, HitLocation, Momentum, DamageType);
+    bCoopInDamage = False;
+    PublishCoopStatus();
+}
+
+function SetHealth(int NewHealth)
+{
+    if (Role != ROLE_Authority) return;
+    Super.SetHealth(NewHealth);
+}
+
+function AddHealth(int Amount)
+{
+    if (Role != ROLE_Authority || bCoopDead) return;
+    Super.AddHealth(Amount);
+}
+
+function bool HarryIsDead()
+{
+    return bCoopDead || Super.HarryIsDead();
+}
+
+function PublishCoopStatus(optional bool bForce)
+{
+    local StatusItem HP, Potion;
+    local int Current, Potential, Limit, Potions;
+    if (Role != ROLE_Authority || Player == None || managerStatus == None) return;
+    HP = GetHealthStatusItem();
+    Potion = managerStatus.GetStatusItem(Class'StatusGroupPotions', Class'StatusItemWiggenwell');
+    if (HP == None || Potion == None) return;
+    Current = HP.nCount;
+    Potential = HP.nCurrCountPotential;
+    Limit = HP.nMaxCount;
+    Potions = Potion.nCount;
+    // Pawn.Health is only a compatibility mirror, never an alternative pool.
+    Health = Current;
+    if (!bForce && CoopStatusRevision != 0 && Current == CoopHealth
+        && Potential == CoopHealthPotential && Limit == CoopHealthLimit
+        && Potions == CoopPotionCount) return;
+    CoopHealth = Current;
+    CoopHealthPotential = Potential;
+    CoopHealthLimit = Limit;
+    CoopPotionCount = Potions;
+    CoopStatusRevision++;
+    ClientCoopStatus(CoopStatusRevision, Current, Potential, Limit, Potions);
+    Log("[MP_HEALTH] pawn=" $ self $ " revision=" $ CoopStatusRevision
+        $ " health=" $ Current $ "/" $ Potential $ " potions=" $ Potions);
+}
+
+function ClientCoopStatus(int Revision, int Current, int Potential, int Limit, int Potions)
+{
+    if (!IsLocalCoopPlayer() || Revision < CoopStatusRevision) return;
+    if (Limit < 1 || Potential < 1 || Potential > Limit
+        || Current < 0 || Current > Potential || Potions < 0) return;
+    CoopStatusRevision = Revision;
+    CoopHealth = Current;
+    CoopHealthPotential = Potential;
+    CoopHealthLimit = Limit;
+    CoopPotionCount = Potions;
+    ApplyCoopStatus();
+    Log("[MP_HEALTH] local-status pawn=" $ self $ " revision=" $ Revision
+        $ " health=" $ Current $ "/" $ Potential $ " potions=" $ Potions
+        $ " applied-health=" $ GetHealthCount());
+}
+
+function ApplyCoopStatus()
+{
+    local StatusItem HP, Potion;
+    local int Delta;
+    if (!IsLocalCoopPlayer() || Role == ROLE_Authority
+        || CoopStatusRevision == 0 || managerStatus == None) return;
+    HP = GetHealthStatusItem();
+    Potion = managerStatus.GetStatusItem(Class'StatusGroupPotions', Class'StatusItemWiggenwell');
+    if (HP == None || Potion == None) return;
+    HP.nMaxCount = CoopHealthLimit;
+    HP.nCurrCountPotential = CoopHealthPotential;
+    Delta = CoopHealth - HP.nCount;
+    if (Delta != 0) HP.IncrementCount(Delta);
+    Potion.SetCount(CoopPotionCount);
+    Health = CoopHealth;
+}
+
+function DoDrinkWiggenwell()
+{
+    if (Role < ROLE_Authority)
+    {
+        if (IsLocalCoopPlayer() && !bCoopDead && !bCoopStoryCaptured
+            && Level.TimeSeconds >= NextCoopPotionRequest)
+        {
+            NextCoopPotionRequest = Level.TimeSeconds + 0.25;
+            ServerCoopDrinkPotion();
+        }
+        return;
+    }
+    ServerCoopDrinkPotion();
+}
+
+function ServerCoopDrinkPotion()
+{
+    local HPCoopGame G;
+    local StatusItem Potion;
+    G = HPCoopGame(Level.Game);
+    if (Role != ROLE_Authority || G == None || !G.IsAliveCoopPlayer(self)
+        || G.bWaitingForPlayers || bCoopDead || bCoopStoryCaptured
+        || bCoopPotionPending || bInDuelingMode || bHarryUsingSword
+        || (!bCoopInDamage && (!IsInState('PlayerWalking') || Physics != PHYS_Walking))) return;
+    EnsureCoopAnimation();
+    if (HarryAnimChannel == None || myHUD == None) return;
+    Potion = managerStatus.GetStatusItem(Class'StatusGroupPotions', Class'StatusItemWiggenwell');
+    if (Potion == None || Potion.nCount < 1
+        || GetHealthCount() >= GetHealthStatusItem().nCurrCountPotential) return;
+    bCoopPotionPending = True;
+    Super.DoDrinkWiggenwell();
+    if (!HarryAnimChannel.IsInState('stateDrinkWiggenwell'))
+    {
+        bCoopPotionPending = False;
+        return;
+    }
+    // No client-provided health/count or completion time is accepted.
+    ClientCoopDrinkPotion();
+}
+
+function ClientCoopDrinkPotion()
+{
+    if (!IsLocalCoopPlayer() || Role == ROLE_Authority || bCoopDead) return;
+    EnsureCoopAnimation();
+    StopAiming();
+    DropCarryingActor(False);
+    if (HarryAnimChannel != None) HarryAnimChannel.DoDrinkWiggenwell();
+}
+
+function CompleteCoopPotion()
+{
+    local StatusItem Potion;
+    if (Role != ROLE_Authority || !bCoopPotionPending) return;
+    bCoopPotionPending = False;
+    if (bCoopDead || managerStatus == None) return;
+    Potion = managerStatus.GetStatusItem(Class'StatusGroupPotions', Class'StatusItemWiggenwell');
+    if (Potion == None || Potion.nCount < 1) return;
+    Potion.IncrementCount(-1);
+    AddHealth(100);
+    PlaySound(Sound'health_boost1', SLOT_None);
+    PublishCoopStatus();
+}
+
+function CoopNotifyKnockBack()
+{
+    if (Role == ROLE_Authority && !bCoopDead) ClientCoopKnockBack();
+}
+
+function ClientCoopKnockBack()
+{
+    if (!IsLocalCoopPlayer() || Role == ROLE_Authority || bCoopDead) return;
+    EnsureCoopAnimation();
+    if (HarryAnimChannel != None) HarryAnimChannel.DoKnockBack();
+}
+
+function KillHarry(bool bImmediateDeath)
+{
+    local HPCoopGame G;
+    G = HPCoopGame(Level.Game);
+    if (Role != ROLE_Authority || G == None || !G.IsCoopPlayer(self) || bCoopDead) return;
+    bCoopDead = True;
+    bCoopDeathAnimFinished = False;
+    CoopDeathAnimationEndedAt = -1;
+    bHarryKilled = True;
+    bCoopPotionPending = False;
+    bCoopAwaitResume = False;
+    SetHealth(0);
+    TurnOffSpellCursor();
+    if (HPCoopWand(Weapon) != None) HPCoopWand(Weapon).DeactivateCoopLumos();
+    if (HarryAnimChannel != None) HarryAnimChannel.GotoState('stateIdle');
+    CoopLifeSerial++;
+    CoopRespawnAfter = Level.TimeSeconds + 4.0;
+    GotoState('CoopDead');
+    PublishCoopStatus(True);
+    ClientCoopLife(CoopLifeSerial, True, Location, Rotation, bInstantDeath, bClubDeath, CurrentTimeStamp);
+    Log("[MP_DEATH] pawn=" $ self $ " serial=" $ CoopLifeSerial
+        $ " instant=" $ bInstantDeath $ " club=" $ bClubDeath);
+    G.CoopPlayerDied(self);
+}
+
+function KillHarryWithClub(bool bImmediateDeath, Actor A)
+{
+    local rotator Facing;
+    if (Role != ROLE_Authority || A == None) return;
+    // Original final facing, prepared before the owner death RPC is sent.
+    bClubDeath = True;
+    Facing = Rotation;
+    Facing.Yaw = A.Rotation.Yaw + 16384;
+    SetRotation(Facing);
+    DesiredRotation = Facing;
+    KillHarry(bImmediateDeath);
+}
+
+function ClientCoopLife(int Serial, bool bDead, vector Position, rotator Facing,
+    bool bInstant, bool bClub, float AuthorityTimeStamp)
+{
+    if (!IsLocalCoopPlayer() || Serial <= LastCoopLifeSerial) return;
+    LastCoopLifeSerial = Serial;
+    if (Role == ROLE_Authority) return;
+    bCoopDead = bDead;
+    bHarryKilled = bDead;
+    bInstantDeath = bInstant;
+    bClubDeath = bClub;
+    ClearCoopPrediction();
+    CurrentTimeStamp = FMax(CurrentTimeStamp, AuthorityTimeStamp);
+    Velocity = vect(0,0,0);
+    Acceleration = vect(0,0,0);
+    bPressedJump = False;
+    bFire = 0;
+    bAltFire = 0;
+    if (bDead)
+    {
+        // Close the local upper-body operation before faint starts. In
+        // particular, a potion EndState must not later replace faint with idle.
+        bCoopPotionPending = False;
+        if (HarryAnimChannel != None) HarryAnimChannel.GotoState('stateIdle');
+        TurnOffSpellCursor();
+        SetRotation(Facing);
+        ViewRotation = Facing;
+        GotoState('CoopDead');
+        if (!SetLocation(Position))
+            Log("[MP_DEATH] owner-position-refused pawn=" $ self $ " serial=" $ Serial);
+    }
+    else
+    {
+        SetLocation(Position);
+        SetRotation(Facing);
+        ViewRotation = Facing;
+        bHidden = False;
+        SetCollision(True, True, True);
+        bCollideWorld = True;
+        ResetCoopDeathFlags();
+        GotoState('PlayerWalking');
+        SetPhysics(PHYS_Walking);
+        if (LocalCoopCamera != None) LocalCoopCamera.InitPositionAndRotation(True);
+        ServerCoopResume(Serial);
+    }
+    Log("[MP_DEATH] local-life pawn=" $ self $ " serial=" $ Serial
+        $ " dead=" $ bDead $ " state=" $ GetStateName() $ " location=" $ Location);
+}
+
+function ServerCoopResume(int Serial)
+{
+    if (Role == ROLE_Authority && !bCoopDead && bCoopAwaitResume && Serial == CoopLifeSerial)
+    {
+        bCoopAwaitResume = False;
+        Log("[MP_RESPAWN] owner-resumed pawn=" $ self $ " serial=" $ Serial);
+    }
+}
+
+function ResetCoopDeathFlags()
+{
+    bInstantDeath = False;
+    bClubDeath = False;
+    bSlowDeath = False;
+    bHarryKilled = False;
+    bThrow = False;
+    bEctoFlashed = False;
+    bPlayedEctoKnockBack = False;
+    iEctoRefCount = 0;
+    iWebAnimRefCount = 0;
+    iEctoHurtSoundCount = 0;
+    fTimeSinceLastAcidHit = 0.333;
+    RotationRate = Default.RotationRate;
+    AccelRate = Default.AccelRate;
+    GroundSpeed = GroundRunSpeed;
+}
+
+function FinishCoopRevive(rotator Facing)
+{
+    if (Role != ROLE_Authority || !bCoopDead) return;
+    bCoopDead = False;
+    ResetCoopDeathFlags();
+    // Original death recovery minimum, bounded by this player's own capacity.
+    SetHealth(Min(iMinHealthAfterDeath, GetHealthStatusItem().nCurrCountPotential));
+    Velocity = vect(0,0,0);
+    Acceleration = vect(0,0,0);
+    bHidden = False;
+    SetRotation(Facing);
+    ViewRotation = Facing;
+    GotoState('PlayerWalking');
+    SetPhysics(PHYS_Walking);
+    SetCollision(True, True, True);
+    CoopLifeSerial++;
+    bCoopAwaitResume = !IsLocalCoopPlayer();
+    PublishCoopStatus(True);
+    ClientCoopLife(CoopLifeSerial, False, Location, Rotation, False, False, CurrentTimeStamp);
+}
+
+// This prevents native queued save on the co-op pawn. The separate original
+// SavePoint touch adapter is still required before checkpoint books are ready.
+function SaveGame()
+{
+    bQueuedToSaveGame = False;
+    Log("[MP_CHECKPOINT] blocked reason=native-save-contract-unverified pawn=" $ self);
+}
+
+state CoopDead
+{
+    ignores TakeDamage, Fire, AltFire, DoJump, ZoneChange, HeadZoneChange,
+        FootZoneChange, Landed, PainTimer;
+
+    function PlayerMove(float DeltaTime) {}
+    function ServerReStartPlayer() {}
+    function PlayerTick(float DeltaTime)
+    {
+        if (IsLocalCoopPlayer()) EnsureLocalCoopContext();
+    }
+    function CoopAuthorityMovementTick(float DeltaTime)
+    {
+        local float PresentationDelay;
+        if (Role != ROLE_Authority || bCoopDeathAnimFinished) return;
+        // M212 skips latent ProcessState on authority pawns whose RemoteRole
+        // is AutonomousProxy. Observe the real animation from the Game pass;
+        // never advance AnimFrame or synthesize FinishAnim.
+        if (CoopDeathAnimationEndedAt < 0)
+        {
+            if (!bInstantDeath && (AnimSequence != 'faint' || IsAnimating())) return;
+            CoopDeathAnimationEndedAt = Level.TimeSeconds;
+            Log("[MP_DEATH] presentation-ended pawn=" $ self $ " instant=" $ bInstantDeath
+                $ " anim=" $ AnimSequence $ " frame=" $ AnimFrame);
+        }
+        PresentationDelay = 0.5;
+        if (bSlowDeath) PresentationDelay += 1.5;
+        if (Level.TimeSeconds - CoopDeathAnimationEndedAt >= PresentationDelay)
+            bCoopDeathAnimFinished = True;
+    }
+    function BeginState()
+    {
+        local float FaintRate;
+        SetPhysics(PHYS_None);
+        SetBase(None);
+        SetCollision(False, False, False);
+        HarryAnimType = AT_Replace;
+        Velocity = vect(0,0,0);
+        Acceleration = vect(0,0,0);
+        if (bInstantDeath) bHidden = True;
+        else
+        {
+            FaintRate = 1.0;
+            if (bClubDeath) FaintRate = 1.5;
+            PlayAnim('faint', FaintRate, 0.2);
+            if (bClubDeath) AnimFrame = 36.0 / 151.0;
+            if (Role == ROLE_Authority) PlayDeathEmoteSound();
+        }
+    }
+begin:
+    Stop;
+}
+
+// Hard-coded legacy state transitions must not reach its latent LoadGame loop.
+state stateDead
+{
+    function BeginState()
+    {
+        if (Role == ROLE_Authority) Global.KillHarry(True);
+        if (bCoopDead) GotoState('CoopDead');
+        else GotoState('PlayerWalking');
+    }
+begin:
+    Stop;
 }
 
 exec function CoopNetState()

@@ -15,12 +15,21 @@ var bool bStoryCaptured;
 var HPCoopCutsceneView StoryView;
 var HPCoopCampaignState CampaignState;
 var string TestStage;
+var string RuntimeProbe;
+var bool bCoopRecoveryBlocked;
 
 event InitGame(string Options, out string Error)
 {
     local harry MapHarry;
     Super.InitGame(Options, Error);
     TestStage = ParseOption(Options, "CoopTestStage");
+    RuntimeProbe = ParseOption(Options, "CoopProbe");
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos")
+        || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
+    {
+        Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
+        return;
+    }
     foreach AllActors(Class'harry', MapHarry)
         if (HPCoopHarry(MapHarry) == None && MapHarry.bIsPlayer)
         {
@@ -46,6 +55,7 @@ event InitGame(string Options, out string Error)
 event PostBeginPlay()
 {
     local CutScene Scene;
+    local HPCoopLumosProbe LumosProbe;
     Super.PostBeginPlay();
     // The two entry scenes observed on the selected milestone map. Only their
     // logging is adapted; the original command/cue interpreter runs on server.
@@ -55,6 +65,17 @@ event PostBeginPlay()
             Scene.CutscriptDiskClass = Class'HPCoopCutScriptDisk';
         }
     StoryView = Spawn(Class'HPCoopCutsceneView', self);
+    if (RuntimeProbe ~= "Health") Spawn(Class'HPCoopHealthProbe', self);
+    if (RuntimeProbe ~= "Lumos")
+    {
+        LumosProbe = Spawn(Class'HPCoopLumosProbe', self);
+        if (LumosProbe != None)
+        {
+            LumosProbe.bOptIn = True;
+            if (!LumosProbe.Arm(self))
+                Log("[MP_PROBE] probe=lumos status=BLOCKED reason=arm-failed");
+        }
+    }
     if (LegacyStoryHarry == None)
         LegacyStoryHarry = harry(Level.PlayerHarryActor);
     CampaignState = Spawn(Class'HPCoopCampaignState', self);
@@ -297,6 +318,7 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
         }
         return None;
     }
+    H.bFraserMode = False;
     H.CoopSlot = PendingLoginSlot;
     H.CoopCampaignState = CampaignState;
     H.bCoopProgressApplied = CampaignState.ApplyTo(H);
@@ -358,12 +380,188 @@ function NavigationPoint FindPlayerStart(Pawn Player, optional byte InTeam, opti
         Candidate = Start.Location + Offset;
         if (Trace(HitLocation, HitNormal, Candidate, Start.Location, True, vect(24,24,42)) == None)
         {
-            CompanionStart = Spawn(Class'PlayerStart',,,Candidate,Start.Rotation);
+            CompanionStart = Spawn(Class'HPCoopStart', self,,Candidate,Start.Rotation);
             if (CompanionStart != None)
+            {
+                Log("[MP_LOGIN] companion-start=" $ CompanionStart $ " location=" $ Candidate);
                 return CompanionStart;
+            }
         }
     }
-    return Start;
+    Log("[MP_LOGIN] rejected reason=no-companion-start");
+    return None;
+}
+
+
+function CoopPlayerDied(HPCoopHarry Victim)
+{
+    local HPCoopHarry A, B;
+    if (Role != ROLE_Authority || !IsCoopPlayer(Victim)) return;
+    if (GetAliveCoopPlayers(A, B) == 0 && !bCoopRecoveryBlocked)
+    {
+        bCoopRecoveryBlocked = True;
+        // Do not pause net ticking: owner RPCs must still be delivered.
+        Log("[MP_CHECKPOINT] blocked reason=all-dead-no-verified-shared-checkpoint");
+        BroadcastCoopSubtitle("Both players have fallen. Shared checkpoint recovery is not implemented.", 30);
+    }
+}
+
+function bool IsSpentCoopScene(Actor A)
+{
+    local CutScene S;
+    // Exact original class only: its Finished state has no touch handler and
+    // Play rejects an already played one-shot. Keep every other trigger unsafe.
+    if (A == None || A.Class != Class'CutScene' || A.Level != Level
+        || A.bBlockActors || A.bBlockPlayers) return False;
+    S = CutScene(A);
+    return S.bPlayOnce && S.nPlayedCount > 0 && S.IsInState('Finished')
+        && !S.bPlaying && !S.bFastForwarding;
+}
+
+function bool IsPassiveCoopOverlap(Actor A)
+{
+    local MusicTrigger M;
+    if (IsSpentCoopScene(A)) return True;
+    // These exact classes only change music in Activate. Inherited UnTouch
+    // and MusicTrackLooped can dispatch Event, so require an empty event and
+    // no loop callback. A respawn may refresh ambient music, never story state.
+    if (A == None || A.Level != Level || A.bBlockActors || A.bBlockPlayers
+        || (A.Class != Class'NewMusicTrigger' && A.Class != Class'MusicTrigger'))
+        return False;
+    M = MusicTrigger(A);
+    return M.Event == '' && !M.bEventOnMusicLoop;
+}
+
+function bool TryCoopReviveNear(HPCoopHarry Fallen, HPCoopHarry Alive)
+{
+    local int I;
+    local vector Candidate, Top, Bottom, HitLocation, HitNormal, Extent, OldLocation;
+    local rotator Direction;
+    local Actor FloorActor, Obstacle;
+    local Actor FirstOverlap;
+    local int BadFloor, BadHeight, BadLine, BadClearance, BadOverlap, BadPlacement;
+    local string FloorExample;
+    if (!IsCoopPlayer(Fallen) || !Fallen.bCoopDead || !IsAliveCoopPlayer(Alive)
+        || Alive.Physics != PHYS_Walking
+        || Alive.bCoopStoryCaptured || bStoryCaptured)
+    {
+        if (RuntimeProbe ~= "Health")
+            Log("[MP_RESPAWN] candidate-refused reason=precondition fallen=" $ Fallen
+                $ " partner=" $ Alive);
+        return False;
+    }
+    // A conservative first implementation uses static BSP floors only.
+    // A moving platform requires an audited base-relative recovery contract.
+    if (Alive.Base != None && Alive.Base != Level)
+    {
+        if (RuntimeProbe ~= "Health")
+            Log("[MP_RESPAWN] candidate-refused reason=non-bsp-base base=" $ Alive.Base);
+        return False;
+    }
+    Extent.X = Fallen.CollisionRadius;
+    Extent.Y = Fallen.CollisionRadius;
+    Extent.Z = Fallen.CollisionHeight;
+    OldLocation = Fallen.Location;
+    for (I = 0; I < 8; I++)
+    {
+        Direction = Alive.Rotation;
+        Direction.Pitch = 0;
+        Direction.Roll = 0;
+        Direction.Yaw += I * 8192;
+        Candidate = Alive.Location + vector(Direction) * (Alive.CollisionRadius + Fallen.CollisionRadius + 48);
+        Top = Candidate + vect(0,0,64);
+        Bottom = Candidate - vect(0,0,160);
+        FloorActor = Trace(HitLocation, HitNormal, Bottom, Top, True,
+            Extent * vect(1,1,0));
+        if (FloorActor != Level || HitNormal.Z < 0.7)
+        {
+            BadFloor++;
+            FloorExample = string(FloorActor) $ " normal=" $ HitNormal;
+            continue;
+        }
+        Candidate = HitLocation + vect(0,0,1) * (Fallen.CollisionHeight + 2);
+        if (Abs(Candidate.Z - Alive.Location.Z) > 48) { BadHeight++; continue; }
+        // Reachability from the living player's side of a wall is required.
+        if (!FastTrace(Candidate, Alive.Location)) { BadLine++; continue; }
+        if (Trace(HitLocation, HitNormal, Candidate + vect(0,0,1), Candidate, True, Extent) != None)
+        { BadClearance++; continue; }
+        // Avoid every overlapping colliding actor, including triggers/hazards.
+        // This deliberately rejects more positions than ordinary pawn blocking.
+        Obstacle = None;
+        // M212 has no CollidingActors iterator. Test the collision flags and
+        // cylinders explicitly, including large actors whose origin is far away.
+        foreach AllActors(Class'Actor', FloorActor)
+            if (FloorActor != Fallen && FloorActor != Level && FloorActor.bCollideActors
+                && !IsPassiveCoopOverlap(FloorActor)
+                && Abs(FloorActor.Location.Z - Candidate.Z) < FloorActor.CollisionHeight + Extent.Z + 2
+                && VSize((FloorActor.Location - Candidate) * vect(1,1,0)) < FloorActor.CollisionRadius + Extent.X + 2)
+            {
+                Obstacle = FloorActor;
+                break;
+            }
+        if (Obstacle != None)
+        {
+            BadOverlap++;
+            if (FirstOverlap == None) FirstOverlap = Obstacle;
+            continue;
+        }
+        if (!Fallen.CanFit(Fallen.CollisionRadius, Fallen.CollisionHeight,
+            Fallen.CollisionWidth, Candidate, Alive.Rotation))
+        { BadClearance++; continue; }
+        Fallen.bCollideWorld = True;
+        if (!Fallen.SetLocation(Candidate)) { BadPlacement++; continue; }
+        if (VSize(Fallen.Location - Candidate) > 1 || Fallen.Region.Zone == None
+            || Fallen.Region.Zone.bKillZone || Fallen.Region.Zone.bPainZone
+            || Fallen.Region.Zone.bWaterZone)
+        {
+            BadPlacement++;
+            Fallen.SetLocation(OldLocation);
+            continue;
+        }
+        Fallen.FinishCoopRevive(Alive.Rotation);
+        Log("[MP_RESPAWN] victim=" $ Fallen $ " partner=" $ Alive
+            $ " location=" $ Fallen.Location $ " health=" $ Fallen.GetHealthCount());
+        return True;
+    }
+    if (RuntimeProbe ~= "Health")
+        Log("[MP_RESPAWN] candidate-refused partner-location=" $ Alive.Location
+            $ " radius=" $ Extent.X $ " height=" $ Extent.Z
+            $ " floor=" $ BadFloor $ " height-delta=" $ BadHeight
+            $ " line=" $ BadLine $ " clearance=" $ BadClearance
+            $ " overlap=" $ BadOverlap $ " placement=" $ BadPlacement
+            $ " first-overlap=" $ FirstOverlap $ " floor-example=" $ FloorExample);
+    return False;
+}
+
+event Tick(float DeltaTime)
+{
+    local HPCoopHarry A, B, H;
+    local byte I;
+    Super.Tick(DeltaTime);
+    if (Role == ROLE_Authority)
+        for (I = 0; I < 2; I++)
+            if (CoopPlayers[I] != None && !CoopPlayers[I].bDeleteMe)
+                CoopPlayers[I].CoopAuthorityTick(DeltaTime);
+    if (Role != ROLE_Authority || bWaitingForPlayers || bStoryCaptured
+        || bCoopRecoveryBlocked) return;
+    GetAliveCoopPlayers(A, B);
+    if (A == None) return;
+    for (I = 0; I < 2; I++)
+    {
+        H = CoopPlayers[I];
+        if (H == None || !H.bCoopDead || !H.bCoopDeathAnimFinished
+            || Level.TimeSeconds < H.CoopRespawnAfter) continue;
+        H.CoopRespawnAfter = Level.TimeSeconds + 1;
+        TryCoopReviveNear(H, A);
+    }
+}
+
+// Generic engine restart sets Pawn.Health and PlayerStart, not original
+// StatusItemHealth or campaign checkpoints. It is not a valid fallback.
+function bool RestartPlayer(Pawn P)
+{
+    if (HPCoopHarry(P) != None) return False;
+    return Super.RestartPlayer(P);
 }
 
 function Logout(Pawn Exiting)

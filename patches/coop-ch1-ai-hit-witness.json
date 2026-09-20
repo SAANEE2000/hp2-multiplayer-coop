@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "name": "coop-ch1-ai-hit-witness",
+  "description": "Explicit AICombat-only witness after original spellFireSmall native contact damage, without granting damage.",
+  "files": [
+    {
+      "path": "HGame/Classes/Spells/spellFireSmall.uc",
+      "source_sha256": "a2ed9dc6933446f83cfb7cf1570090165f35b5273c8c10a4adbb6aab1901cdeb",
+      "result_sha256": "3efa72cf1070ceebccadf93297d52113f40518227b534ad5c7cd941d9473b81f",
+      "replacements": [
+        {
+          "old": "    local HPCoopHarry Victim;\n    if (Role != ROLE_Authority",
+          "new": "    local HPCoopHarry Victim;\n    local HPCoopAICombatProbe Probe;\n    local int BeforeHealth;\n    if (Role != ROLE_Authority",
+          "old_sha256": "c4d9d9b7e9e9d3c3e8ea6a25d490c7ec3548db820c51961abb1e877cc76fe0f1",
+          "new_sha256": "95c9e1312ebf0d230c92e18a44d2116c4d4456ba58535cf806e957f424519a54"
+        },
+        {
+          "old": "        Victim.TakeDamage(iDamage, CoopFireCaster, HitLocation,\n            vect(0,0,0), 'None');\n        return True;",
+          "new": "        BeforeHealth = Victim.GetHealthCount();\n        Victim.TakeDamage(iDamage, CoopFireCaster, HitLocation,\n            vect(0,0,0), 'None');\n        if (G.RuntimeProbe ~= \"AICombat\")\n            foreach AllActors(Class'HPCoopAICombatProbe', Probe)\n                Probe.ActualHit(self, Victim, BeforeHealth, Victim.GetHealthCount());\n        return True;",
+          "old_sha256": "84327e94a5a1314709c68569616bcaba29da8c4cf337c558db30c6e32468a6e6",
+          "new_sha256": "3dc9d67b7fdacd10a587d0fdadc6f879cf60da430a0c0caf490124706f4ef432"
+        }
+      ]
+    }
+  ]
+}

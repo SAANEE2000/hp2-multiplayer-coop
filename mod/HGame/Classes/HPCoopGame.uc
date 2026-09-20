@@ -38,12 +38,14 @@ event InitGame(string Options, out string Error)
     }
     bCoopCapturedAuthorityDiagnostic = CaptureMode == "1";
     if (bCoopCapturedAuthorityDiagnostic && (Level.NetMode != NM_DedicatedServer
-        || !(TestStage ~= "RictusempraLessonComplete") || RuntimeProbe != ""))
+        || !(TestStage ~= "RictusempraLessonComplete")
+        || (RuntimeProbe != "" && !(RuntimeProbe ~= "AIInspect")
+            && !(RuntimeProbe ~= "AICombat"))))
     {
-        Error = "CoopCapturedAuthority requires the dedicated Ch1 test stage with no other probe.";
+        Error = "CoopCapturedAuthority requires dedicated Ch1 with no active probe.";
         return;
     }
-    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet")
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
@@ -140,6 +142,8 @@ event PostBeginPlay()
                 Log("[MP_PROBE] probe=pickup status=BLOCKED reason=arm-failed");
         }
     }
+    if (RuntimeProbe ~= "AIInspect") Spawn(Class'HPCoopAIInspectProbe', self);
+    if (RuntimeProbe ~= "AICombat") Spawn(Class'HPCoopAICombatProbe', self);
     if (LegacyStoryHarry == None)
         LegacyStoryHarry = harry(Level.PlayerHarryActor);
     CampaignState = Spawn(Class'HPCoopCampaignState', self);
@@ -260,17 +264,90 @@ function int GetAliveCoopPlayers(out HPCoopHarry First, out HPCoopHarry Second)
     return Count;
 }
 
-function HPCoopHarry ResolveAITarget(Pawn Seeker, optional Pawn Attacker)
+function bool IsCh1CombatSeeker(Pawn Seeker)
 {
-    local HPCoopHarry A, B;
-    GetAliveCoopPlayers(A, B);
-    if (IsAliveCoopPlayer(HPCoopHarry(Attacker)))
-        return HPCoopHarry(Attacker);
-    if (A == None || Seeker == None)
-        return A;
-    if (B != None && VSize(B.Location - Seeker.Location) < VSize(A.Location - Seeker.Location))
-        return B;
-    return A;
+    return Seeker != None && Seeker.Level == Level
+        && (string(Level.Outer.Name) ~= "Ch1Rictusempra")
+        && (Seeker.Class == Class'orangesnail'
+            || Seeker.Class == Class'firecrabSmall');
+}
+
+function bool IsCh1CombatOpen(Pawn Seeker)
+{
+    if (Role != ROLE_Authority || Level.NetMode == NM_Client
+        || !IsCh1CombatSeeker(Seeker) || Seeker.Role != ROLE_Authority
+        || Seeker.bDeleteMe || Seeker.bHidden || !Seeker.bInCurrentGameState
+        || Seeker.CutNotifyActor != None || Seeker.IsInState('stateCutCapture')
+        || Seeker.IsInState('CutIdle') || bWaitingForPlayers || bStoryCaptured
+        || bCoopRecoveryBlocked || Level.Pauser != ""
+        || (IntroCoordinator != None
+            && (IntroCoordinator.IsActive() || IntroCoordinator.Phase == 6))) return False;
+    // Keep the original three-second post-cut delay, including contact damage.
+    if (orangesnail(Seeker) != None && orangesnail(Seeker).bCutInProgress)
+        return False;
+    return True;
+}
+
+function bool IsAIPlayerAvailable(HPCoopHarry H)
+{
+    local byte I;
+    if (Role != ROLE_Authority || Level.NetMode == NM_Client
+        || bWaitingForPlayers || bStoryCaptured || bCoopRecoveryBlocked
+        || Level.Pauser != "" || !IsAliveCoopPlayer(H) || H.Level != Level
+        || H.Role != ROLE_Authority || H.bCoopStoryCaptured || H.bCoopAwaitResume
+        || H.bIsCaptured || H.CutNotifyActor != None
+        || H.bCoopSceneMode || H.bCoopSceneAwaitRelease || H.bCoopIntroInputHold
+        || (IntroCoordinator != None
+            && (IntroCoordinator.IsActive() || IntroCoordinator.Phase == 6))) return False;
+    for (I = 0; I < 2; I++)
+        if (CoopPlayers[I] == H && ReadyPlayers[I] != 0) return True;
+    return False;
+}
+
+function bool CanAITarget(Pawn Seeker, HPCoopHarry H, float MaxRange,
+    optional bool bUsePeripheralVision)
+{
+    if (!IsCh1CombatOpen(Seeker) || !IsAIPlayerAvailable(H)
+        || MaxRange <= 0 || VSize(H.Location - Seeker.Location) >= MaxRange)
+        return False;
+    if (bUsePeripheralVision) return Seeker.CanSee(H);
+    return Seeker.LineOfSightTo(H);
+}
+
+function HPCoopHarry ResolveAITarget(Pawn Seeker, optional Pawn Attacker,
+    optional float MaxRange, optional bool bUsePeripheralVision)
+{
+    local byte I;
+    local HPCoopHarry Candidate, Best;
+    local float Distance, BestDistance;
+    if (!IsCh1CombatOpen(Seeker)) return None;
+    // Retain the existing two-argument call shape. Crab map instances include
+    // attack range 700 with SightRadius 500; do not clamp that to SightRadius.
+    if (MaxRange <= 0)
+    {
+        if (firecrabSmall(Seeker) != None)
+            MaxRange = firecrabSmall(Seeker).fAttackRange;
+        else MaxRange = Seeker.SightRadius;
+    }
+    // A proven spell attacker may be behind the snail, but cannot be attacked
+    // through a wall, out of range, while dead/unready, or during capture.
+    Candidate = HPCoopHarry(Attacker);
+    if (CanAITarget(Seeker, Candidate, MaxRange, False)) return Candidate;
+    for (I = 0; I < 2; I++)
+    {
+        Candidate = CoopPlayers[I];
+        if (CanAITarget(Seeker, Candidate, MaxRange, bUsePeripheralVision))
+        {
+            Distance = VSize(Candidate.Location - Seeker.Location);
+            if (Best == None || Distance < BestDistance)
+            {
+                Best = Candidate;
+                BestDistance = Distance;
+            }
+        }
+    }
+    // Stable ties use registry order. No story alias assignment is performed.
+    return Best;
 }
 
 function RefreshSession()

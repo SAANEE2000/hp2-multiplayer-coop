@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-204845-541`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-211431-100`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -66,8 +66,13 @@
    `docs/iterations/20260920_COOP_PICKUPS.md`. Отдельный PickupNet fixture доказал
    существование и native удаление original frog/bottle на обоих клиентах;
    `docs/iterations/20260920_COOP_PICKUP_REPLICATION.md`. Естественный подбор
-   размещённых предметов, native frontend, AI для обоих, trigger visibility и travel ещё
-   не подтверждены. Save/load пока явно недоступен через проверенные script routes.
+   размещённых предметов, native frontend, trigger visibility и travel ещё
+   не подтверждены. Оба игрока прошли отдельный fixture с оригинальными
+   Ch1 `firecrabSmall`: каждый краб выбрал своего владельца, вошёл в исходное
+   состояние атаки и его `spellFireSmall` уменьшил здоровье именно этого
+   владельца со 100 до 94. Это не проверка естественной навигации, остальных
+   врагов или двух ПК; см. `docs/iterations/20260920_COOP_CH1_AI.md`.
+   Save/load пока явно недоступен через проверенные script routes.
 4. Mounting/MountFinish/root motion исследованы, но сетевое подтягивание не доказано.
 5. Автоматизация UI не смогла захватить игровые окна из-за ошибки идентификации
    владельца окна. Визуальные и ручные игровые проверки не отмечаются PASS.

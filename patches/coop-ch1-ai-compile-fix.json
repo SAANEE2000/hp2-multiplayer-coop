@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "coop-ch1-ai-compile-fix",
+  "description": "Remove UCC-rejected redundant cast from the narrow Ch1 crab projectile spawn helper.",
+  "files": [
+    {
+      "path": "HGame/Classes/Enemies/firecrabSmall.uc",
+      "source_sha256": "ace8d448bc406cb6c662f4a67c947e238497b376cc5beae32059e4a01b05c875",
+      "result_sha256": "2df2c53eb6824043b58e8a7a799121bf454a24439d90754aede65bdeded3cabc",
+      "replacements": [
+        {
+          "old": "Shot = spellFireSmall(Spawn(Class'spellFireSmall'));",
+          "new": "Shot = Spawn(Class'spellFireSmall');",
+          "old_sha256": "00d0c9d2342bc40eb1a894da5abc65b945548f1705d1c1af97004edab8b03867",
+          "new_sha256": "345a9934858898f89535b80965b9ea1ce93dfcbe6e0313f0b92bdab030d5a293"
+        }
+      ]
+    }
+  ]
+}

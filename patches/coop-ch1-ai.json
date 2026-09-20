@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "name": "coop-ch1-ai",
+  "description": "REVIEW ONLY: complete Ch1 original enemy authority target/contact/projectile callsites",
+  "files": [
+    {
+      "path": "HGame/Classes/HPawn.uc",
+      "source_sha256": "aa714a14c47f026c29574f285d06bb58c8690c8b1e62af3a9d9e70898c647422",
+      "result_sha256": "e913d87a1882d761b5120fc221374534ef96296428f48e98fce1147b23fbe946",
+      "replacements": [
+        {
+          "description": "transient personal combat references; story cache unchanged",
+          "old": "var harry PlayerHarry;",
+          "new": "var harry PlayerHarry;\nvar harry CoopCombatTarget;\nvar Pawn CoopRecentAttacker;",
+          "old_sha256": "182a62dba4bac9f5b340a8e879aa69bf4b17bfc98e0321d08232f214feefb4d9",
+          "new_sha256": "20d5fd9fb86c5c37da52b1f3d08bc646b648dfb8149ffd49edaa202c11ba409e"
+        },
+        {
+          "description": "authority registry and target acquisition helpers, no shared Tick changes",
+          "old": "function PreBeginPlay()",
+          "new": "// Exact Ch1 combat only. Never changes the canonical PlayerHarry alias.\nfunction bool IsCh1CoopCombat()\n{\n    local HPCoopGame G;\n    G = HPCoopGame(Level.Game);\n    return G != None && G.IsCh1CombatSeeker(self);\n}\n\nfunction bool CoopCombatMayAct()\n{\n    local HPCoopGame G;\n    G = HPCoopGame(Level.Game);\n    if (G == None || !G.IsCh1CombatSeeker(self)) return True;\n    return G.IsCh1CombatOpen(self);\n}\n\nfunction harry GetCh1CombatTarget()\n{\n    if (IsCh1CoopCombat()) return CoopCombatTarget;\n    return PlayerHarry;\n}\n\nfunction bool StopInvalidCh1Combat()\n{\n    // Ordinary death/disconnect abort is allowed only when story has released\n    // this enemy. Never override a CutNotifyActor or capture-owned movement.\n    if (!IsCh1CoopCombat() || !CoopCombatMayAct()\n        || HasCoopCombatTarget(0,False)) return False;\n    Velocity = vect(0,0,0);\n    Acceleration = vect(0,0,0);\n    ClearCoopCombatTarget();\n    GotoState('patrol');\n    return True;\n}\n\nfunction RecordCoopSpellAttacker(baseSpell Spell)\n{\n    local HPCoopGame G;\n    local HPCoopHarry H;\n    G = HPCoopGame(Level.Game);\n    if (Role != ROLE_Authority || Level.NetMode == NM_Client\n        || G == None || !G.IsCh1CombatOpen(self) || Spell == None\n        || Spell.bDeleteMe || Spell.Role != ROLE_Authority || Spell.Level != Level)\n        return;\n    H = HPCoopHarry(Spell.Instigator);\n    // The authoritative co-op wand sets both to the same registered caster.\n    // Do not invent an attacker for scripted HandleSpell*(None) calls.\n    if (H == None || Spell.Owner != H || !G.IsAIPlayerAvailable(H)) return;\n    CoopRecentAttacker = H;\n}\n\nfunction bool AcquireCoopCombatTarget(float MaxRange, bool bUsePeripheralVision)\n{\n    local HPCoopGame G;\n    G = HPCoopGame(Level.Game);\n    if (Role != ROLE_Authority || Level.NetMode == NM_Client || G == None\n        || !G.IsCh1CombatOpen(self)) return False;\n    CoopCombatTarget = G.ResolveAITarget(self, CoopRecentAttacker,\n        MaxRange, bUsePeripheralVision);\n    // The hint is consumed by an actual attack-acquisition attempt, not by Tick\n    // during stun. Do not call this before the attack's existing timer/state gate.\n    CoopRecentAttacker = None;\n    return CoopCombatTarget != None;\n}\n\nfunction bool HasCoopCombatTarget(float MaxRange, optional bool bRequireVisible)\n{\n    local HPCoopGame G;\n    G = HPCoopGame(Level.Game);\n    if (Role != ROLE_Authority || Level.NetMode == NM_Client || G == None\n        || !G.IsCh1CombatOpen(self)\n        || !G.IsAIPlayerAvailable(HPCoopHarry(CoopCombatTarget))) return False;\n    if (MaxRange > 0 && VSize(CoopCombatTarget.Location - Location) >= MaxRange)\n        return False;\n    // During movement/strafe, keep one living target through temporary occlusion.\n    // A shot additionally requires LOS. FOV is only an idle-acquisition check.\n    return !bRequireVisible || LineOfSightTo(CoopCombatTarget);\n}\n\nfunction ClearCoopCombatTarget()\n{\n    CoopCombatTarget = None;\n    CoopRecentAttacker = None;\n}\n\nfunction PreBeginPlay()",
+          "old_sha256": "e1a054972b1816f37df20dc68218c44d0cb1b1098de26b0ef0ff2b1585fa621d",
+          "new_sha256": "0560afc9e010bca2a86ff1a5900b3ca12516294d639e4671f0fbc6c0cd18c818"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Enemies/orangesnail.uc",
+      "source_sha256": "f45a3ab1381ec27047df7f12876c41d657a2a122b50a01e3fa11dcf569a90c08",
+      "result_sha256": "4fb4a3f12dc47272db049eb5695f89f0cc996c2ae980bc2fff25ce0118ca2327",
+      "replacements": [
+        {
+          "description": "carry actual trail contact pawn",
+          "old": "function HarrySteppedOnTrail (Vector vTrailLocation)\n{\n  DoSnailDamage('SnailTrail',vTrailLocation,IsInState('RamHarry'));\n}",
+          "new": "function HarrySteppedOnTrail (Vector vTrailLocation, optional harry ActualTouched)\n{\n  DoSnailDamage('SnailTrail',vTrailLocation,IsInState('RamHarry'),ActualTouched);\n}",
+          "old_sha256": "2b1cd25ebbfe1b8812df699b162cb015b08be057dc579bfb1bd1a4ea48e91c7c",
+          "new_sha256": "8e520c703d15097f3e9de3b4b45a59c9a68e23c4a2b5722e105ad84ff35526db"
+        },
+        {
+          "description": "validate actual body/trail recipient before sound/cooldown/status mutation",
+          "old": "function DoSnailDamage (name nameDamage, Vector vDamageLoc, bool bCuttingHarryOff)\n{\n  local int nDamage;\n",
+          "new": "function DoSnailDamage (name nameDamage, Vector vDamageLoc, bool bCuttingHarryOff, optional harry ActualTouched)\n{\n  local int nDamage;\n  local harry Victim;\n  local HPCoopGame CoopGame;\n\n  if (Level.NetMode == NM_Client || Role != ROLE_Authority) return;\n  Victim = PlayerHarry;\n  if (IsCh1CoopCombat())\n  {\n    CoopGame = HPCoopGame(Level.Game);\n    if (!CoopGame.IsCh1CombatOpen(self)\n        || !CoopGame.IsAIPlayerAvailable(HPCoopHarry(ActualTouched))) return;\n    Victim = ActualTouched;\n  }\n",
+          "old_sha256": "d27a3522ecd7a94e06861a6d070c6e57b816f0ca51a291b5cce826c70538f6a5",
+          "new_sha256": "51e362628dec1c888c4e0afaaaaf9b2a03f2bdfc4ac9a45dd054387f2db6c1c3"
+        },
+        {
+          "description": "damage only actual co-op contact",
+          "old": "    PlayerHarry.TakeDamage(nDamage,self,vDamageLoc,vect(0.00,0.00,0.00),nameDamage);",
+          "new": "    Victim.TakeDamage(nDamage,self,vDamageLoc,vect(0.00,0.00,0.00),nameDamage);",
+          "old_sha256": "14e6c6a019cbe24b40b80d125e0f8975136144b34fab90ad2c19c241d622b7c8",
+          "new_sha256": "07d1e9b1414f9704418f2a78917d3a9b08afc96d6dc8f1c88b2bf92f031d68bf"
+        },
+        {
+          "description": "authority actual pawn body collision, original retreat and cooldown",
+          "old": "event Bump (Actor Other)\n{\n  if ( PlayerHarry == Other )\n  {\n    DoSnailDamage('Snail',Location,IsInState('RamHarry'));\n    GotoState('BumpedHarryPart1');\n  }\n}",
+          "new": "event Bump (Actor Other)\n{\n  local HPCoopGame CoopGame;\n  if (Level.NetMode == NM_Client || Role != ROLE_Authority) return;\n  if (IsCh1CoopCombat())\n  {\n    CoopGame = HPCoopGame(Level.Game);\n    if (!CoopGame.IsCh1CombatOpen(self)\n        || !CoopGame.IsAIPlayerAvailable(HPCoopHarry(Other))) return;\n    DoSnailDamage('Snail',Location,IsInState('RamHarry'),harry(Other));\n    GotoState('BumpedHarryPart1');\n    return;\n  }\n  if ( PlayerHarry == Other )\n  {\n    DoSnailDamage('Snail',Location,IsInState('RamHarry'));\n    GotoState('BumpedHarryPart1');\n  }\n}",
+          "old_sha256": "cb3d7e1d781e1cddec472f5442a5ff884e5cfac660b543d0cc37dba38eaec757",
+          "new_sha256": "12ba19ee54f3ccf1c712c87185d97a9d0df5b9011540fce17c9b88943987dd46"
+        },
+        {
+          "description": "record validated spell caster before Flipendo original response",
+          "old": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n  local bool bReturn;\n\n  PlaySnailHitSound();\n  Super.HandleSpellFlipendo(spell,vHitLocation);\n  GotoState('Pushed');\n  return True;\n}",
+          "new": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n  local bool bReturn;\n\n  if (Level.NetMode == NM_Client || Role != ROLE_Authority) return False;\n  if (IsCh1CoopCombat())\n  {\n    if (!CoopCombatMayAct()) return False;\n    RecordCoopSpellAttacker(spell);\n  }\n  PlaySnailHitSound();\n  Super.HandleSpellFlipendo(spell,vHitLocation);\n  GotoState('Pushed');\n  return True;\n}",
+          "old_sha256": "c643658e628dad90c0769817eabb218d0909b599ca2a206d075a04c2c82cd8d2",
+          "new_sha256": "c9ef7c2f2a7e46db193dae53fc866e03ba66bb1d5e05876f80465d22be86a4d5"
+        },
+        {
+          "description": "record validated spell caster before Rictusempra original response",
+          "old": "function bool HandleSpellRictusempra (optional baseSpell spell, optional Vector vHitLocation)\n{\n  local bool bReturn;\n\n  PlaySnailHitSound();\n  EndTrail();\n  Super.HandleSpellRictusempra(spell,vHitLocation);\n  GotoState('Stunned');\n  return True;\n}",
+          "new": "function bool HandleSpellRictusempra (optional baseSpell spell, optional Vector vHitLocation)\n{\n  local bool bReturn;\n\n  if (Level.NetMode == NM_Client || Role != ROLE_Authority) return False;\n  if (IsCh1CoopCombat())\n  {\n    if (!CoopCombatMayAct()) return False;\n    RecordCoopSpellAttacker(spell);\n  }\n  PlaySnailHitSound();\n  EndTrail();\n  Super.HandleSpellRictusempra(spell,vHitLocation);\n  GotoState('Stunned');\n  return True;\n}",
+          "old_sha256": "a3ca4b11f33e6c0086ff070b5ba1a816a2f6024bf7cfb047b80b680ff1ce0260",
+          "new_sha256": "3db43b9e89409924e7c0a06acbae3c56028b9b2c03ac096db44b8af74ebdf226"
+        },
+        {
+          "description": "clear combat references on original capture notification",
+          "old": "function PlayerCutCapture()\n{",
+          "new": "function PlayerCutCapture()\n{\n  if (IsCh1CoopCombat()) ClearCoopCombatTarget();",
+          "old_sha256": "4a333d90835b0c8af37f821547b2db6cf77bea34b2e99c9964656113e9499042",
+          "new_sha256": "f924b12bc7a48a79b63aba70a7b1aece3fe50c1bb3d14e5ef6cbeb99099af922"
+        },
+        {
+          "description": "wire original patrol ram boundary to nearest visible or proven attacker",
+          "old": "\t  if ( bAllowRam && !bCutInProgress && CanSee(playerHarry) && (fPatrolTime >= PATROL_BEFORE_RAM_TIME) )\n\t  {\n\t\t  GoToState('RamHarry');\n\t  }",
+          "new": "      if (IsCh1CoopCombat())\n      {\n          if (CoopCombatMayAct() && bAllowRam && !bCutInProgress\n              && fPatrolTime >= PATROL_BEFORE_RAM_TIME\n              && AcquireCoopCombatTarget(SightRadius,True))\n              GotoState('RamHarry');\n      }\n      else\n\t  if ( bAllowRam && !bCutInProgress && CanSee(playerHarry) && (fPatrolTime >= PATROL_BEFORE_RAM_TIME) )\n\t  {\n\t\t  GoToState('RamHarry');\n\t  }",
+          "old_sha256": "77859429395f3ab6922beca8835df82399188f157193a7b8cecfd09bc9ed604e",
+          "new_sha256": "5c28c706b48305a2e364668d93da5b56026930d2d47b0f62029acc69e597dde7"
+        },
+        {
+          "description": "hold combat trail mutation while captured; release countdown still ticks",
+          "old": "  DoTrailUpdates(fDeltaTime);",
+          "new": "  if (CoopCombatMayAct()) DoTrailUpdates(fDeltaTime);",
+          "old_sha256": "99ee7a567a069bc920e84f2f941e36b54243a710dc7d7231b03ea4ef18cb1342",
+          "new_sha256": "fa92b1bc695bdc2f78ec2f82684f667876890100330f64ec5c0dea094f6d6e59"
+        },
+        {
+          "description": "small SP-compatible bug fix: an unallocated trail segment has nothing to stop",
+          "old": "    arrayTrail[I].StopUsing();",
+          "new": "    if (arrayTrail[I] != None) arrayTrail[I].StopUsing();",
+          "old_sha256": "2dccd39399d1bbeba8da6c9fd969142316a8c0e1ceabe1a6beaae1c8e509a9ac",
+          "new_sha256": "004f9d61b3ac66c21518c5b8eca4bdc59c34f3a63901184f3e5efd1913b5a421"
+        },
+        {
+          "description": "complete state RamHarry target and post-latent ownership callsites",
+          "old": "state RamHarry\n{\n  function SetGroundSpeed()\n  {\n    if ( nEctoplasmTouchCount >= 1 )\n    {\n      GroundSpeed = fGroundspeedEctoRam;\n    } else {\n      GroundSpeed = fGroundspeedRam;\n    }\n  }\n  \n  event BeginState()\n  {\n    Super.BeginState();\n    StartTrail();\n  }\n  \n  event HitWall (Vector HitNormal, Actor HitWall)\n  {\n    GotoState('patrol');\n  }\n  \n  event EndState()\n  {\n    StopSound(soundAttackCry,SLOT_None);\n    StopSound(soundWarningCry,SLOT_None);\n  }\n  \n begin:\n  TurnToward(PlayerHarry);\n  SetGroundSpeed();\n  if ( Rand(2) == 0 )\n  {\n    PlaySound(soundAttackCry,SLOT_None,RandRange(0.8,1.0),,,RandRange(0.80,1.10));\n  } else {\n    PlaySound(soundWarningCry,SLOT_None,RandRange(0.8,1.0),,,RandRange(0.80,1.10));\n  }\n  MoveTo(PlayerHarry.Location);\n  PlayAnim('Idle');\n  Sleep(0.5);\n  GotoState('patrol');\n}",
+          "new": "state RamHarry\n{\n  event Tick(float DeltaTime)\n  {\n    if (StopInvalidCh1Combat()) return;\n    Global.Tick(DeltaTime);\n  }\n\n  function SetGroundSpeed()\n  {\n    if ( nEctoplasmTouchCount >= 1 )\n    {\n      GroundSpeed = fGroundspeedEctoRam;\n    } else {\n      GroundSpeed = fGroundspeedRam;\n    }\n  }\n  \n  event BeginState()\n  {\n    Super.BeginState();\n    StartTrail();\n  }\n  \n  event HitWall (Vector HitNormal, Actor HitWall)\n  {\n    if (!CoopCombatMayAct()) return;\n    GotoState('patrol');\n  }\n  \n  event EndState()\n  {\n    StopSound(soundAttackCry,SLOT_None);\n    StopSound(soundWarningCry,SLOT_None);\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  TurnToward(GetCh1CombatTarget());\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,True)) goto ('CoopAbort');\n  SetGroundSpeed();\n  if ( Rand(2) == 0 )\n  {\n    PlaySound(soundAttackCry,SLOT_None,RandRange(0.8,1.0),,,RandRange(0.80,1.10));\n  } else {\n    PlaySound(soundWarningCry,SLOT_None,RandRange(0.8,1.0),,,RandRange(0.80,1.10));\n  }\n  MoveTo(GetCh1CombatTarget().Location);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  PlayAnim('Idle');\n  Sleep(0.5);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  GotoState('patrol');\n\nCoopAbort:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  Velocity = vect(0,0,0);\n  Acceleration = vect(0,0,0);\n  ClearCoopCombatTarget();\n  GotoState('patrol');\n}",
+          "old_sha256": "d8c973eaf19de8678ba43728f1bfec56f90324e4b95e83a56bba2d3099c75ae6",
+          "new_sha256": "39fbc392b0d26fac9eb9d784000fd5cf59e3f111e2e21a297dfbfadbc7693cc1"
+        },
+        {
+          "description": "do not replace captured NPC state from push landing callback",
+          "old": "state Pushed\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n\t\n  function Landed (Vector HitNormal)\n  {\n    Super.Landed(HitNormal);\n    PlaySound(Sound'snail_land',SLOT_None);\n    GotoState('RecoverFromPush');\n  }\n  \n begin:\n  PlayAnim('Idle');\n}",
+          "new": "state Pushed\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n\t\n  function Landed (Vector HitNormal)\n  {\n    if (!CoopCombatMayAct()) return;\n    Super.Landed(HitNormal);\n    PlaySound(Sound'snail_land',SLOT_None);\n    GotoState('RecoverFromPush');\n  }\n  \n begin:\n  PlayAnim('Idle');\n}",
+          "old_sha256": "150312250a0e92d6ab7b38be402f31decce1057d27bdb51a8f1367cbd066ac0a",
+          "new_sha256": "34b8eb21c4228923652f4e5003e337699a416f787ed2101b4442b8c69fcee43b"
+        },
+        {
+          "description": "hold state RecoverFromPush post-latent combat recovery during capture",
+          "old": "state RecoverFromPush\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n\t \nbegin:\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  LoopAnim('Stunned');\n  if ( fStunTimeLeft > 0 )\n  {\n    Sleep(fStunTimeLeft);\n  }\n  // eVulnerableToSpell = 22;\n  eVulnerableToSpell = SPELL_Rictusempra;\n  GotoState('patrol');\n}",
+          "new": "state RecoverFromPush\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n\t \nbegin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  LoopAnim('Stunned');\n  if ( fStunTimeLeft > 0 )\n  {\n    Sleep(fStunTimeLeft);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  }\n  // eVulnerableToSpell = 22;\n  eVulnerableToSpell = SPELL_Rictusempra;\n  GotoState('patrol');\n}",
+          "old_sha256": "c0499a65b89df7c78336c80cba7dcbff35923b350c75aadca7c56753dbdb6ac2",
+          "new_sha256": "c09cba35bc737ea1fb32fd74aa3c2531322e8356a6b5b9af1086539383daca13"
+        },
+        {
+          "description": "hold state Stunned post-latent combat recovery during capture",
+          "old": "state Stunned\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n  \nbegin:\n  fStunTimeLeft = fStunDuration;\n  // eVulnerableToSpell = 13;\n  eVulnerableToSpell = SPELL_Flipendo;\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  PlayAnim('spin');\n  FinishAnim();\n  LoopAnim('Stunned');\n  Sleep(fStunTimeLeft);\n  // eVulnerableToSpell = 22;\n  eVulnerableToSpell = SPELL_Rictusempra;\n  GotoState('patrol');\n}",
+          "new": "state Stunned\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n  \nbegin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  fStunTimeLeft = fStunDuration;\n  // eVulnerableToSpell = 13;\n  eVulnerableToSpell = SPELL_Flipendo;\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  PlayAnim('spin');\n  FinishAnim();\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  LoopAnim('Stunned');\n  Sleep(fStunTimeLeft);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  // eVulnerableToSpell = 22;\n  eVulnerableToSpell = SPELL_Rictusempra;\n  GotoState('patrol');\n}",
+          "old_sha256": "69286e8a7168965c7369e4b8988d9d04b5a1e4279cf3ec9a7a1e08756f49ebcf",
+          "new_sha256": "a6ad95b93063adf63e95c00587cf3d9f0337989294c4f6dbb4a8b4739b47f562"
+        },
+        {
+          "description": "hold state BumpedHarryPart1 post-latent combat recovery during capture",
+          "old": "state BumpedHarryPart1\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n  \n  function Vector GetAboutFaceVector()\n  {\n    local Vector vDest;\n  \n    vDest = Velocity;\n    vDest = Normal(vDest);\n    vDest *= -15;\n    vDest = Location + vDest;\n    return vDest;\n  }\n  \n begin:\n  vTemp = GetAboutFaceVector();\n  EndTrail();\n  StartTrail();\n  MoveTo(vTemp);\n  GotoState('BumpedHarryPart2');\n}",
+          "new": "state BumpedHarryPart1\n{\n  ignores Bump; //UTPT didn't add this for some reason -AdamJD\n  \n  function Vector GetAboutFaceVector()\n  {\n    local Vector vDest;\n  \n    vDest = Velocity;\n    vDest = Normal(vDest);\n    vDest *= -15;\n    vDest = Location + vDest;\n    return vDest;\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  vTemp = GetAboutFaceVector();\n  EndTrail();\n  StartTrail();\n  MoveTo(vTemp);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  GotoState('BumpedHarryPart2');\n}",
+          "old_sha256": "fc17d5d6b45faeaab666559c262836396cc0b8aac4cf2179cf46188a9b8554c1",
+          "new_sha256": "9ee8f4cea4a00bf99f2cd7fa162a39108d71ffc0b5083953ed34ad4936cd2ba0"
+        },
+        {
+          "description": "hold state BumpedHarryPart2 post-latent combat recovery during capture",
+          "old": "state BumpedHarryPart2\n{\n  function Vector GetDestVector()\n  {\n    local Vector vDest;\n    local int nRetreatScalar;\n  \n    vDest = Normal(Velocity);\n    nRetreatScalar = RandRange(nBumpRetreatMin, nBumpRetreatMax);\n\tPlayerHarry.ClientMessage(\"Bump Retreat: \" $ string(nRetreatScalar));\n    vDest *= nRetreatScalar;\n    vDest = Location + vDest;\n    return vDest;\n  }\n  \n begin:\n  MoveTo(GetDestVector());\n  GotoState('patrol');\n}",
+          "new": "state BumpedHarryPart2\n{\n  function Vector GetDestVector()\n  {\n    local Vector vDest;\n    local int nRetreatScalar;\n  \n    vDest = Normal(Velocity);\n    nRetreatScalar = RandRange(nBumpRetreatMin, nBumpRetreatMax);\n\tPlayerHarry.ClientMessage(\"Bump Retreat: \" $ string(nRetreatScalar));\n    vDest *= nRetreatScalar;\n    vDest = Location + vDest;\n    return vDest;\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  MoveTo(GetDestVector());\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  GotoState('patrol');\n}",
+          "old_sha256": "7c6f5332f2511ef88f383e2eaf3409e6d102454556a50bb6669ccd90dd9b870e",
+          "new_sha256": "5cf5bbee38c4d29b145b50e9402f27cf85b5e5041d6be5e925311a008c0818e1"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Enemies/firecrabSmall.uc",
+      "source_sha256": "12f674077f23176d87e152c1d1986b1ab87dd80bd84462385dbeaa67a06862ee",
+      "result_sha256": "aad553a4d4d01738a2892f6b9420151b39602df10b16e06597d9fcbf7a52161b",
+      "replacements": [
+        {
+          "description": "record validated spell caster before Flipendo original response",
+          "old": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n  Super.HandleSpellFlipendo(spell,vHitLocation);\n  if (  !IsInState('stayFlipped') )\n  {\n    GotoState('stateHitBySpell');\n  } else //{\n    if ( CheckStayFlipped() == False )\n    {\n      cm(\"CheckStayFlipped is false. Restore collision radius\");\n      SetCollisionSize(Default.CollisionRadius * DrawScale / Default.DrawScale,Default.CollisionHeight * DrawScale / Default.DrawScale);\n      GotoState('stateHitBySpell');\n    }\n  //}\n  return True;\n}",
+          "new": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n  if (Level.NetMode == NM_Client || Role != ROLE_Authority) return False;\n  if (IsCh1CoopCombat())\n  {\n    if (!CoopCombatMayAct()) return False;\n    RecordCoopSpellAttacker(spell);\n  }\n  Super.HandleSpellFlipendo(spell,vHitLocation);\n  if (  !IsInState('stayFlipped') )\n  {\n    GotoState('stateHitBySpell');\n  } else //{\n    if ( CheckStayFlipped() == False )\n    {\n      cm(\"CheckStayFlipped is false. Restore collision radius\");\n      SetCollisionSize(Default.CollisionRadius * DrawScale / Default.DrawScale,Default.CollisionHeight * DrawScale / Default.DrawScale);\n      GotoState('stateHitBySpell');\n    }\n  //}\n  return True;\n}",
+          "old_sha256": "343cd0080bfa96d4922dbaa8a0c42ae7ecf0681393e283d1bdf323981d42b322",
+          "new_sha256": "5d9b33eaaa61c23e60b3dbd0a32ed0f5c0fe207b13e2077887a8a51b1821e5d8"
+        },
+        {
+          "description": "record validated spell caster before Rictusempra original response",
+          "old": "function bool HandleSpellRictusempra (optional baseSpell spell, optional Vector vHitLocation)\n{\n  local Vector V;\n\n  Super.HandleSpellRictusempra(spell,vHitLocation);\n  if (  !IsInState('stayFlipped') )\n  {\n    GotoState('stateHitBySpell');\n  } else //{\n    if ( CheckStayFlipped() == False )\n    {\n      SetCollisionSize(Default.CollisionRadius * DrawScale / Default.DrawScale,Default.CollisionHeight * DrawScale / Default.DrawScale);\n      GotoState('stateHitBySpell');\n    }\n  //}\n  return True;\n}",
+          "new": "function bool HandleSpellRictusempra (optional baseSpell spell, optional Vector vHitLocation)\n{\n  local Vector V;\n\n  if (Level.NetMode == NM_Client || Role != ROLE_Authority) return False;\n  if (IsCh1CoopCombat())\n  {\n    if (!CoopCombatMayAct()) return False;\n    RecordCoopSpellAttacker(spell);\n  }\n  Super.HandleSpellRictusempra(spell,vHitLocation);\n  if (  !IsInState('stayFlipped') )\n  {\n    GotoState('stateHitBySpell');\n  } else //{\n    if ( CheckStayFlipped() == False )\n    {\n      SetCollisionSize(Default.CollisionRadius * DrawScale / Default.DrawScale,Default.CollisionHeight * DrawScale / Default.DrawScale);\n      GotoState('stateHitBySpell');\n    }\n  //}\n  return True;\n}",
+          "old_sha256": "a136e4291545bafed0e3a8950422b27a664e87516226dfa9cbb22a8255215515",
+          "new_sha256": "424706be5411dbd525dacbef3219d4661e11b99806dc4d1aca45ce2e1113f520"
+        },
+        {
+          "description": "preserve original capture; acquire at each new shot boundary only",
+          "old": "function PlayRoarSound()",
+          "new": "function PlayerCutCapture()\n{\n  if (IsCh1CoopCombat()) ClearCoopCombatTarget();\n  Super.PlayerCutCapture();\n}\n\nfunction bool CanBeginCh1Shot()\n{\n  if (iNumShots <= 0) return False;\n  if (IsCh1CoopCombat())\n  {\n    // Keep the proven attacker selected before roar/preattack. Reacquire only\n    // at a shot boundary when the fixed target is no longer valid/visible.\n    if (HasCoopCombatTarget(fAttackRange,True)) return True;\n    return AcquireCoopCombatTarget(fAttackRange,False);\n  }\n  return LineOfSightTo(PlayerHarry);\n}\n\nfunction spellFireSmall SpawnCh1CombatFire()\n{\n  local spellFireSmall Shot;\n  if (!IsCh1CoopCombat() || !CoopCombatMayAct()\n      || !HasCoopCombatTarget(fAttackRange,True)) return None;\n  Shot = spellFireSmall(Spawn(Class'spellFireSmall'));\n  if (Shot == None) return None;\n  Shot.InitSpell(self,CoopCombatTarget);\n  Shot.Instigator = self;\n  // Retain HPawn.SpawnSpell's shared original difficulty adjustment. These\n  // are campaign settings, never a replacement for the shot's actual target.\n  if (PlayerHarry.Difficulty == DifficultyMedium)\n  {\n    Shot.Speed *= 2;\n    Shot.Velocity = vector(Shot.Rotation) * Shot.Speed;\n  }\n  else if (PlayerHarry.Difficulty == DifficultyHard)\n  {\n    Shot.Speed *= 3;\n    Shot.Velocity = vector(Shot.Rotation) * Shot.Speed;\n  }\n  return Shot;\n}\n\nfunction PlayRoarSound()",
+          "old_sha256": "1d60cbf69b5f636352a4efcfb00b7da67bef41d33bb1544c6b6dcd4401828381",
+          "new_sha256": "962505b2b9ed386360dc539f6c904e58456edc9bba3cc78e6307ea7174d5fc3f"
+        },
+        {
+          "description": "hold attack timer/acquisition while captured",
+          "old": "  Super.Tick(DeltaTime);\n  if (  !IsInState('AttackHarry')",
+          "new": "  Super.Tick(DeltaTime);\n  if (!CoopCombatMayAct()) return;\n  if (  !IsInState('AttackHarry')",
+          "old_sha256": "899630f03767b0158bbfb18e6a691de6fb9977606a52f55db021f7b56cbe37fe",
+          "new_sha256": "64d1e2f5fcdb44e49e0689b9a919b6940d21e180d25f624a0d9b21684d318c57"
+        },
+        {
+          "description": "wire original fire timer to selected pawn LOS and map attack range",
+          "old": "      if ( (VSize(PlayerHarry.Location - Location) < fAttackRange) && PlayerCanSeeMe() )",
+          "new": "      if ((IsCh1CoopCombat() && AcquireCoopCombatTarget(fAttackRange,False))\n          || (!IsCh1CoopCombat() && (VSize(PlayerHarry.Location - Location) < fAttackRange) && PlayerCanSeeMe()))",
+          "old_sha256": "9b7f64540c1a39d873d185caa4e98a3b90dd00559482f802ef74504e8b6bf91f",
+          "new_sha256": "e28b2383173b41360b8f14e8657b106bcf6e3aff8067a50a1811db7b8680476f"
+        },
+        {
+          "description": "complete state AttackHarry target and post-latent ownership callsites",
+          "old": "state AttackHarry\n{\n  function Tick (float DeltaTime)\n  {\n  }\n  \n begin:\n  if ( BOOL_DEBUG_AI )\n  {\n    PlayerHarry.ClientMessage(\"\" $ string(Name) $ \": attackHarry\");\n  }\n  LoopAnim('Idle');\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  AmbientSound = None;\n  if ( bPlayRoar == True )\n  {\n    TurnTo(PlayerHarry.Location);\n    PlayRoarSound();\n    PlayAnim('roar');\n    FinishAnim();\n  }\n  \n wait:\n  TurnTo(Location + Location - PlayerHarry.Location);\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  TurnTo(Location + Location - PlayerHarry.Location);\n  Sleep(0.05);\n  GotoState('throwing');\n  goto ('Wait');\n}",
+          "new": "state AttackHarry\n{\n  function Tick (float DeltaTime)\n  {\n    StopInvalidCh1Combat();\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  if ( BOOL_DEBUG_AI )\n  {\n    PlayerHarry.ClientMessage(\"\" $ string(Name) $ \": attackHarry\");\n  }\n  LoopAnim('Idle');\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  AmbientSound = None;\n  if ( bPlayRoar == True )\n  {\n    TurnTo(GetCh1CombatTarget().Location);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    PlayRoarSound();\n    PlayAnim('roar');\n    FinishAnim();\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  }\n  \n wait:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  TurnTo(Location + Location - GetCh1CombatTarget().Location);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  Velocity = vect(0.00,0.00,0.00);\n  Acceleration = vect(0.00,0.00,0.00);\n  TurnTo(Location + Location - GetCh1CombatTarget().Location);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  Sleep(0.05);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  GotoState('throwing');\n  goto ('Wait');\n\nCoopAbort:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  Velocity = vect(0,0,0);\n  Acceleration = vect(0,0,0);\n  ClearCoopCombatTarget();\n  GotoState('patrol');\n}",
+          "old_sha256": "83bcadba9d44cb39b921b49a27ed3bdd613e95bf5a424c61c01c2abebe7b6742",
+          "new_sha256": "8224f9f797609673d9ebd87e3a74b2f47508a1c9792ac6723f80d991a4b1f547"
+        },
+        {
+          "description": "complete state throwing target and post-latent ownership callsites",
+          "old": "state throwing\n{\n  function BeginState()\n  {\n    iNumShots = iNumShotsBetweenPreAttack;\n  }\n  \n  function Tick (float DeltaTime)\n  {\n  }\n  \n  function Touch (Actor Other)\n  {\n    if ( Other.bBlockActors )\n    {\n      HitWall(Normal(Location - Other.Location),Other);\n    }\n  }\n  \n  function HitWall (Vector HitNormal, Actor Wall)\n  {\n    SetLocation(OldLocation);\n    Velocity = MirrorVectorByNormal(Velocity,HitNormal);\n  }\n  \n begin:\n  PlaySound(Sound'firecrab_preattack',SLOT_None);\n  PlayAnim('preattack');\n  FinishAnim();\n  // if ( LineOfSightTo(PlayerHarry) && (iNumShots > 0) )\n  while ( LineOfSightTo(PlayerHarry) && (iNumShots > 0) )\n  {\n    iNumShots--;\n    TurnTo(Location + (Location - PlayerHarry.Location));\n    Target = PlayerHarry;\n    SetRotation(Rotation + rot(0,32768,0));\n    smallSpell = spellFireSmall(SpawnSpell(Class'spellFireSmall',PlayerHarry));\n    smallSpell.iDamage = SpellDamage;\n\tsmallSpell.fIncreaseHitTimeDistance = fIncreaseHitTimeDistance;\n    smallSpell.fHitTimeIncrement = fHitTimeIncrement;\n    smallSpell.iAccuracyMin = iAccuracyMin;\n    smallSpell.iAccuracyMax = iAccuracyMax;\n    SetRotation(Rotation + rot(0,32768,0));\n    PlaySound(AttackSound,SLOT_None);\n    PlayAnim('Attack');\n    FinishAnim();\n    if (  !LineOfSightTo(PlayerHarry) && (bMoveAround == True) )\n    {\n      TurnTo(Location + (Location - PlayerHarry.Location));\n      vTemp = Normal(PlayerHarry.Location - Location);\n      vTemp2 = Location Cross PlayerHarry.Location;\n      if ( BOOL_DEBUG_AI )\n      {\n        PlayerHarry.ClientMessage(\"cross = \" $ string(vTemp2));\n      }\n      if ( vTemp2.Z > 0 )\n      {\n        LoopAnim('StrafeLeft');\n        vTemp2 =  -(vTemp Cross Vec(0.0,0.0,1.0));\n        if ( BOOL_DEBUG_AI )\n        {\n          PlayerHarry.ClientMessage(\"strafing left\");\n        }\n      } else //{\n        if ( vTemp2.Z < 0 )\n        {\n          LoopAnim('StrafeRight');\n          vTemp2 = vTemp Cross Vec(0.0,0.0,1.0);\n          if ( BOOL_DEBUG_AI )\n          {\n            PlayerHarry.ClientMessage(\"strafing right\");\n          }\n        } else {\n          LoopAnim('Walk');\n          vTemp2 = Normal(Location - PlayerHarry.Location);\n          if ( BOOL_DEBUG_AI )\n          {\n            PlayerHarry.ClientMessage(\"backing up\");\n          }\n        }\n      //}\n      Acceleration = vTemp2;\n      Velocity = GroundSpeed * vTemp2;\n      Sleep(1.5);\n    }\n    Sleep(timeBetweenShots);\n    // goto JL0015;\n  }\n  if ( iNumShots <= 0 )\n  {\n    GotoState('strafeAround');\n  } else {\n    Sleep(0.8);\n    TurnTo(Location + vMoveDir);\n    vMoveDirRot = Rotation;\n    vMoveDir = vector(vMoveDirRot);\n    TurnTo(navP.Location);\n    AmbientSound = WalkingSound;\n    GotoState('patrol');\n  }\n}",
+          "new": "state throwing\n{\n  function BeginState()\n  {\n    iNumShots = iNumShotsBetweenPreAttack;\n  }\n  \n  function Tick (float DeltaTime)\n  {\n    StopInvalidCh1Combat();\n  }\n  \n  function Touch (Actor Other)\n  {\n    if (!CoopCombatMayAct()) return;\n    if ( Other.bBlockActors )\n    {\n      HitWall(Normal(Location - Other.Location),Other);\n    }\n  }\n  \n  function HitWall (Vector HitNormal, Actor Wall)\n  {\n    if (!CoopCombatMayAct()) return;\n    SetLocation(OldLocation);\n    Velocity = MirrorVectorByNormal(Velocity,HitNormal);\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  PlaySound(Sound'firecrab_preattack',SLOT_None);\n  PlayAnim('preattack');\n  FinishAnim();\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  // if ( LineOfSightTo(GetCh1CombatTarget()) && (iNumShots > 0) )\n  while ( CanBeginCh1Shot() )\n  {\n    iNumShots--;\n    TurnTo(Location + (Location - GetCh1CombatTarget().Location));\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(fAttackRange,True)) goto ('CoopAbort');\n    Target = GetCh1CombatTarget();\n    SetRotation(Rotation + rot(0,32768,0));\n    if (IsCh1CoopCombat()) smallSpell = SpawnCh1CombatFire();\n    else smallSpell = spellFireSmall(SpawnSpell(Class'spellFireSmall',GetCh1CombatTarget()));\n    if (!IsCh1CoopCombat() || smallSpell != None)\n    {\n      if (IsCh1CoopCombat()) smallSpell.Instigator = self;\n    smallSpell.iDamage = SpellDamage;\n\tsmallSpell.fIncreaseHitTimeDistance = fIncreaseHitTimeDistance;\n    smallSpell.fHitTimeIncrement = fHitTimeIncrement;\n    smallSpell.iAccuracyMin = iAccuracyMin;\n    smallSpell.iAccuracyMax = iAccuracyMax;\n    }\n    SetRotation(Rotation + rot(0,32768,0));\n    if (IsCh1CoopCombat() && smallSpell == None) goto ('CoopAbort');\n    PlaySound(AttackSound,SLOT_None);\n    PlayAnim('Attack');\n    FinishAnim();\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    if (  !LineOfSightTo(GetCh1CombatTarget()) && (bMoveAround == True) )\n    {\n      TurnTo(Location + (Location - GetCh1CombatTarget().Location));\n      while (!CoopCombatMayAct()) Sleep(0.1);\n      if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n      vTemp = Normal(GetCh1CombatTarget().Location - Location);\n      vTemp2 = Location Cross GetCh1CombatTarget().Location;\n      if ( BOOL_DEBUG_AI )\n      {\n        PlayerHarry.ClientMessage(\"cross = \" $ string(vTemp2));\n      }\n      if ( vTemp2.Z > 0 )\n      {\n        LoopAnim('StrafeLeft');\n        vTemp2 =  -(vTemp Cross Vec(0.0,0.0,1.0));\n        if ( BOOL_DEBUG_AI )\n        {\n          PlayerHarry.ClientMessage(\"strafing left\");\n        }\n      } else //{\n        if ( vTemp2.Z < 0 )\n        {\n          LoopAnim('StrafeRight');\n          vTemp2 = vTemp Cross Vec(0.0,0.0,1.0);\n          if ( BOOL_DEBUG_AI )\n          {\n            PlayerHarry.ClientMessage(\"strafing right\");\n          }\n        } else {\n          LoopAnim('Walk');\n          vTemp2 = Normal(Location - GetCh1CombatTarget().Location);\n          if ( BOOL_DEBUG_AI )\n          {\n            PlayerHarry.ClientMessage(\"backing up\");\n          }\n        }\n      //}\n      Acceleration = vTemp2;\n      Velocity = GroundSpeed * vTemp2;\n      Sleep(1.5);\n      while (!CoopCombatMayAct()) Sleep(0.1);\n      if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    }\n    Sleep(timeBetweenShots);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    // goto JL0015;\n  }\n  if ( iNumShots <= 0 )\n  {\n    GotoState('strafeAround');\n  } else {\n    Sleep(0.8);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    TurnTo(Location + vMoveDir);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    vMoveDirRot = Rotation;\n    vMoveDir = vector(vMoveDirRot);\n    if (IsCh1CoopCombat() && navP == None) goto ('CoopAbort');\n    TurnTo(navP.Location);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    AmbientSound = WalkingSound;\n    GotoState('patrol');\n  }\n\nCoopAbort:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  Velocity = vect(0,0,0);\n  Acceleration = vect(0,0,0);\n  ClearCoopCombatTarget();\n  GotoState('patrol');\n}",
+          "old_sha256": "c2afa4211786226e1fcfad3beddca435fb8ff886cd59ce0ddb3224258c348f04",
+          "new_sha256": "58ac70f26aca7d9f482da8c739eb9e690c635dbdfb05894fb9e6cbeecdcb4573"
+        },
+        {
+          "description": "complete state strafeAround target and post-latent ownership callsites",
+          "old": "state strafeAround\n{\n  function BeginState()\n  {\n    NormalSpeed = GroundSpeed;\n    GroundSpeed = strafeSpeed;\n  }\n  \n  function EndState()\n  {\n    GroundSpeed = NormalSpeed;\n  }\n  \n begin:\n  if ( bCanStrafe == True )\n  {\n    TurnTo(Location + Location - PlayerHarry.Location);\n    vTemp = Normal(PlayerHarry.Location - Location);\n    vTemp2 = Location Cross PlayerHarry.Location;\n    if ( BOOL_DEBUG_AI )\n    {\n      PlayerHarry.ClientMessage(\"cross = \" $ string(vTemp2));\n    }\n    if ( StrafeLeft == True )\n    {\n      if ( BOOL_DEBUG_AI )\n      {\n        PlayerHarry.ClientMessage(\"strafing left\");\n      }\n      StrafeLeft = False;\n      vTemp2 =  -(vTemp Cross Vec(0.0,0.0,1.0));\n      rotationChange = rotator(vTemp2);\n      rotationChange.Yaw -= 4000;\n      vTemp2 = vector(rotationChange);\n      LoopAnim('StrafeLeft',2.0);\n    } else //{\n      if ( StrafeLeft == False )\n      {\n        if ( BOOL_DEBUG_AI )\n        {\n          PlayerHarry.ClientMessage(\"strafing right\");\n        }\n        StrafeLeft = True;\n        vTemp2 = vTemp Cross Vec(0.0,0.0,1.0);\n        rotationChange = rotator(vTemp2);\n        rotationChange.Yaw += 4000;\n        vTemp2 = vector(rotationChange);\n        LoopAnim('StrafeRight',2.0);\n      } else {\n        GotoState('throwing');\n      }\n    //}\n    Acceleration = vTemp2;\n    Velocity = GroundSpeed * vTemp2;\n    Sleep(0.64999998);\n    Velocity = vect(0.00,0.00,0.00);\n    Acceleration = vect(0.00,0.00,0.00);\n    TurnTo(Location + Location - PlayerHarry.Location);\n  }\n  if ( VSize(PlayerHarry.Location - Location) < fAttackRange )\n  {\n    TurnTo(Location + Location - PlayerHarry.Location);\n    GotoState('throwing');\n  } else {\n    Sleep(0.3);\n    TurnTo(Location + vMoveDir);\n    vMoveDirRot = Rotation;\n    vMoveDir = vector(vMoveDirRot);\n    TurnTo(navP.Location);\n    AmbientSound = WalkingSound;\n    GotoState('patrol');\n  }\n}",
+          "new": "state strafeAround\n{\n  function Tick(float DeltaTime)\n  {\n    if (StopInvalidCh1Combat()) return;\n    Global.Tick(DeltaTime);\n  }\n\n  function BeginState()\n  {\n    NormalSpeed = GroundSpeed;\n    GroundSpeed = strafeSpeed;\n  }\n  \n  function EndState()\n  {\n    GroundSpeed = NormalSpeed;\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  if ( bCanStrafe == True )\n  {\n    TurnTo(Location + Location - GetCh1CombatTarget().Location);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    vTemp = Normal(GetCh1CombatTarget().Location - Location);\n    vTemp2 = Location Cross GetCh1CombatTarget().Location;\n    if ( BOOL_DEBUG_AI )\n    {\n      PlayerHarry.ClientMessage(\"cross = \" $ string(vTemp2));\n    }\n    if ( StrafeLeft == True )\n    {\n      if ( BOOL_DEBUG_AI )\n      {\n        PlayerHarry.ClientMessage(\"strafing left\");\n      }\n      StrafeLeft = False;\n      vTemp2 =  -(vTemp Cross Vec(0.0,0.0,1.0));\n      rotationChange = rotator(vTemp2);\n      rotationChange.Yaw -= 4000;\n      vTemp2 = vector(rotationChange);\n      LoopAnim('StrafeLeft',2.0);\n    } else //{\n      if ( StrafeLeft == False )\n      {\n        if ( BOOL_DEBUG_AI )\n        {\n          PlayerHarry.ClientMessage(\"strafing right\");\n        }\n        StrafeLeft = True;\n        vTemp2 = vTemp Cross Vec(0.0,0.0,1.0);\n        rotationChange = rotator(vTemp2);\n        rotationChange.Yaw += 4000;\n        vTemp2 = vector(rotationChange);\n        LoopAnim('StrafeRight',2.0);\n      } else {\n        GotoState('throwing');\n      }\n    //}\n    Acceleration = vTemp2;\n    Velocity = GroundSpeed * vTemp2;\n    Sleep(0.64999998);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    Velocity = vect(0.00,0.00,0.00);\n    Acceleration = vect(0.00,0.00,0.00);\n    TurnTo(Location + Location - GetCh1CombatTarget().Location);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n  }\n  if ( VSize(GetCh1CombatTarget().Location - Location) < fAttackRange )\n  {\n    TurnTo(Location + Location - GetCh1CombatTarget().Location);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    GotoState('throwing');\n  } else {\n    Sleep(0.3);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    TurnTo(Location + vMoveDir);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    vMoveDirRot = Rotation;\n    vMoveDir = vector(vMoveDirRot);\n    if (IsCh1CoopCombat() && navP == None) goto ('CoopAbort');\n    TurnTo(navP.Location);\n    while (!CoopCombatMayAct()) Sleep(0.1);\n    if (IsCh1CoopCombat() && !HasCoopCombatTarget(0,False)) goto ('CoopAbort');\n    AmbientSound = WalkingSound;\n    GotoState('patrol');\n  }\n\nCoopAbort:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  Velocity = vect(0,0,0);\n  Acceleration = vect(0,0,0);\n  ClearCoopCombatTarget();\n  GotoState('patrol');\n}",
+          "old_sha256": "2f5a24979db1c5d14e3d24bb08916decf14e25f670f65340c783e0071b5e2dd4",
+          "new_sha256": "16365edfcd1b24401e7ab0a3a35ec400adcf922c4668ef614423b23c72d286bd"
+        },
+        {
+          "description": "hold state stateHitBySpell post-latent combat recovery during capture",
+          "old": "state stateHitBySpell\n{\n  function BeginState()\n  {\n    AmbientSound = None;\n  }\n  \n begin:\n  if ( BOOL_DEBUG_AI )\n  {\n    PlayerHarry.ClientMessage(string(Name) $ \" : State stateHitBySpell \");\n  }\n  if (  --iNumSpellHitsToFlip <= 0 )\n  {\n    if ( (AnimSequence == 'flip2back') || (AnimSequence == 'onback') )\n    {\n      if ( fTimeOnBack < 5 )\n      {\n        fTimeOnBack = 5.0;\n      }\n    } else {\n      Acceleration = vect(0.00,0.00,0.00);\n      Velocity = vect(0.00,0.00,0.00);\n    }\n    GotoState('DoFlip');\n  } else {\n    Velocity = vect(0.00,0.00,0.00);\n    Acceleration = vect(0.00,0.00,0.00);\n    PlayAnim('KnockBack');\n    FinishAnim();\n    PlayAnim('Look');\n    FinishAnim();\n    TimeUntilNextFire = TimeUntilNextFire + 1.0;\n    AmbientSound = WalkingSound;\n    GotoState('patrol');\n  }\n}",
+          "new": "state stateHitBySpell\n{\n  function BeginState()\n  {\n    AmbientSound = None;\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if ( BOOL_DEBUG_AI )\n  {\n    PlayerHarry.ClientMessage(string(Name) $ \" : State stateHitBySpell \");\n  }\n  if (  --iNumSpellHitsToFlip <= 0 )\n  {\n    if ( (AnimSequence == 'flip2back') || (AnimSequence == 'onback') )\n    {\n      if ( fTimeOnBack < 5 )\n      {\n        fTimeOnBack = 5.0;\n      }\n    } else {\n      Acceleration = vect(0.00,0.00,0.00);\n      Velocity = vect(0.00,0.00,0.00);\n    }\n    GotoState('DoFlip');\n  } else {\n    Velocity = vect(0.00,0.00,0.00);\n    Acceleration = vect(0.00,0.00,0.00);\n    PlayAnim('KnockBack');\n    FinishAnim();\n  while (!CoopCombatMayAct()) Sleep(0.1);\n    PlayAnim('Look');\n    FinishAnim();\n  while (!CoopCombatMayAct()) Sleep(0.1);\n    TimeUntilNextFire = TimeUntilNextFire + 1.0;\n    AmbientSound = WalkingSound;\n    GotoState('patrol');\n  }\n}",
+          "old_sha256": "2b257f14fed78e6ea12973acf651cbbbca4f4c86e0a90615c2ce53570a2793ca",
+          "new_sha256": "d36a2c33ad3dd90360b5106d4b371aa3cb39b1f5d0c5476709bd40dfac441aa5"
+        },
+        {
+          "description": "hold state DoFlip post-latent combat recovery during capture",
+          "old": "state DoFlip\n{\n  function BeginState()\n  {\n    playHitSound();\n  }\n  \n  function Tick (float DeltaTime)\n  {\n    Super.Tick(DeltaTime);\n    if ( VSize(Velocity) <= 5 )\n    {\n      if ( OnALedge(Location) )\n      {\n        vPush = pushDirection();\n        SetCollisionSize(CollisionRadius - 10,CollisionHeight);\n        GotoState('FallOverLedge');\n      } else {\n        fFlipPushForceXY = Default.fFlipPushForceXY;\n        fFlipPushForceZ = Default.fFlipPushForceZ;\n      }\n    }\n  }\n  \n begin:\n  if ( BOOL_DEBUG_AI )\n  {\n    PlayerHarry.ClientMessage(string(Name) $ \" : State Do Flip \");\n  }\n  fHighestZ = Location.Z;\n  // eVulnerableToSpell = 13;\n  eVulnerableToSpell = SPELL_Flipendo;\n  PlayAnim('flip2back');\n  Sleep(1.0);\n  // if ( bool(Physics) != bool(2) )\n  if(Physics != PHYS_Falling)\n  {\n    PlaySound(Sound'SPI_large_LandOnBack',SLOT_None,RandRange(0.89999998,1.0),,200000.0,RandRange(0.80,1.20),,False);\n  }\n  Sleep(1.0);\n  LoopAnim('onback');\n  Sleep(fTimeOnBack);\n  LoopAnim('recover');\n  Sleep(1.0);\n  playFlipSound();\n  // eVulnerableToSpell = 22;\n  eVulnerableToSpell = SPELL_Rictusempra;\n  Sleep(1.1);\n  // if ( bool(Physics) != bool(2) )\n  if(Physics != PHYS_Falling)\n  {\n    PlaySound(Sound'SPI_large_LandOnBack',SLOT_None,RandRange(0.89999998,1.0),,200000.0,RandRange(0.80,1.20),,False);\n  }\n  Sleep(0.5);\n  LoopAnim('Look');\n  FinishAnim();\n  LoopAnim('Idle');\n  TimeUntilNextFire = TimeUntilNextFire + 1.0;\n  AmbientSound = WalkingSound;\n  fTimeOnBack = fTimeSpentOnBack;\n  GotoState('patrol');\n}",
+          "new": "state DoFlip\n{\n  function BeginState()\n  {\n    playHitSound();\n  }\n  \n  function Tick (float DeltaTime)\n  {\n    if (!CoopCombatMayAct()) return;\n    Super.Tick(DeltaTime);\n    if ( VSize(Velocity) <= 5 )\n    {\n      if ( OnALedge(Location) )\n      {\n        vPush = pushDirection();\n        SetCollisionSize(CollisionRadius - 10,CollisionHeight);\n        GotoState('FallOverLedge');\n      } else {\n        fFlipPushForceXY = Default.fFlipPushForceXY;\n        fFlipPushForceZ = Default.fFlipPushForceZ;\n      }\n    }\n  }\n  \n begin:\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  if ( BOOL_DEBUG_AI )\n  {\n    PlayerHarry.ClientMessage(string(Name) $ \" : State Do Flip \");\n  }\n  fHighestZ = Location.Z;\n  // eVulnerableToSpell = 13;\n  eVulnerableToSpell = SPELL_Flipendo;\n  PlayAnim('flip2back');\n  Sleep(1.0);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  // if ( bool(Physics) != bool(2) )\n  if(Physics != PHYS_Falling)\n  {\n    PlaySound(Sound'SPI_large_LandOnBack',SLOT_None,RandRange(0.89999998,1.0),,200000.0,RandRange(0.80,1.20),,False);\n  }\n  Sleep(1.0);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  LoopAnim('onback');\n  Sleep(fTimeOnBack);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  LoopAnim('recover');\n  Sleep(1.0);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  playFlipSound();\n  // eVulnerableToSpell = 22;\n  eVulnerableToSpell = SPELL_Rictusempra;\n  Sleep(1.1);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  // if ( bool(Physics) != bool(2) )\n  if(Physics != PHYS_Falling)\n  {\n    PlaySound(Sound'SPI_large_LandOnBack',SLOT_None,RandRange(0.89999998,1.0),,200000.0,RandRange(0.80,1.20),,False);\n  }\n  Sleep(0.5);\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  LoopAnim('Look');\n  FinishAnim();\n  while (!CoopCombatMayAct()) Sleep(0.1);\n  LoopAnim('Idle');\n  TimeUntilNextFire = TimeUntilNextFire + 1.0;\n  AmbientSound = WalkingSound;\n  fTimeOnBack = fTimeSpentOnBack;\n  GotoState('patrol');\n}",
+          "old_sha256": "3c03ca49721334e16d65a4f82568cb5e2f7dcc445e2f8277df5b38e011a6497b",
+          "new_sha256": "6922cba3452ef7a083cfce737e4f6ae7d474aad19e70fb65182b023d735b51e2"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Props/SnailTrail.uc",
+      "source_sha256": "3233f52a93e2b72b2dabe24bd9956d804aa122260ff7ff6b20c1205424dfe046",
+      "result_sha256": "44e08792435cc5ee34ccafd4ef009b7d748409f66cd63d0cffc980d9fea84fe7",
+      "replacements": [
+        {
+          "description": "forward authoritative native trail contact to actual victim",
+          "old": "  function Touch (Actor Other)\n  {\n    Super.Touch(Other);\n    if ( harry(Other) == None )\n    {\n      return;\n    }\n    parentSnail.HarrySteppedOnTrail(Location);\n  }",
+          "new": "  function Touch (Actor Other)\n  {\n    if (Role != ROLE_Authority || Level.NetMode == NM_Client) return;\n    if (HPCoopGame(Level.Game) != None && (string(Level.Outer.Name) ~= \"Ch1Rictusempra\"))\n    {\n      if (parentSnail == None || parentSnail.bDeleteMe || bHidden\n          || !parentSnail.IsCh1CoopCombat()\n          || !bCollideActors || harry(Other) == None) return;\n      parentSnail.HarrySteppedOnTrail(Location,harry(Other));\n      return;\n    }\n    Super.Touch(Other);\n    if ( harry(Other) == None ) return;\n    parentSnail.HarrySteppedOnTrail(Location);\n  }",
+          "old_sha256": "e60b09d575a0b11b700d149660f2217a40c815e36a4c9d1f3dceaa50d690c32c",
+          "new_sha256": "f353fc1eddb046a03ad5f0863c6c84c81ce16cdfe48aa8b2712786ef784f1830"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Spells/spellFireSmall.uc",
+      "source_sha256": "812ab8e537ed602de589b2399911d4ea143299db0d5ffa514d50407dd2f0b735",
+      "result_sha256": "a2ed9dc6933446f83cfb7cf1570090165f35b5273c8c10a4adbb6aab1901cdeb",
+      "replacements": [
+        {
+          "description": "immutable authority shot context",
+          "old": "var float GrenadeExplosionGravity;",
+          "new": "var float GrenadeExplosionGravity;\nvar bool bCoopCh1Fire, bCoopFireAimReady;\nvar firecrabSmall CoopFireCaster;\nvar Vector CoopFireAimPoint;\n",
+          "old_sha256": "6985c10cb0b1f9ce90b330951e7bb8ee933870e4426fd0fe08c47631020c9a94",
+          "new_sha256": "f2053c0cc19089242552f32ef97ab73fb50f50cb0508bae292c4f7e6e3dd7847"
+        },
+        {
+          "description": "bind original projectile aim to validated TargetActor once",
+          "old": "function OnSpellShutdown()",
+          "new": "function OnSpellInit()\n{\n    local HPCoopGame G;\n    G = HPCoopGame(Level.Game);\n    if (G == None || Owner == None || Owner.Class != Class'firecrabSmall'\n        || !(string(Level.Outer.Name) ~= \"Ch1Rictusempra\")) return;\n    // Mark the branch even if validation rejects it. Never fall back to story Harry.\n    bCoopCh1Fire = True;\n    CoopFireCaster = firecrabSmall(Owner);\n    if (Role != ROLE_Authority || Level.NetMode == NM_Client\n        || !G.CanAITarget(CoopFireCaster, HPCoopHarry(TargetActor),\n            CoopFireCaster.fAttackRange, False)) return;\n    Instigator = CoopFireCaster;\n    CoopFireAimPoint = TargetActor.Location;\n    bCoopFireAimReady = True;\n}\n\nfunction OnSpellShutdown()",
+          "old_sha256": "5455211fc9c9f3434b97a98ad95d1b4d47f4e3a329b36d35bcf30452f53465a1",
+          "new_sha256": "5a19c7d53089704fffe0c642ca373c6fbba006dca5595d8e7b29519c886cabe2"
+        },
+        {
+          "description": "flight time uses selected target snapshot, not story alias",
+          "old": "  Distance = VSize(Location - PlayerHarry.Location);",
+          "new": "  if (bCoopCh1Fire)\n    return FMax(0.05,(VSize(Location - CoopFireAimPoint)\n        / fIncreaseHitTimeDistance) * fHitTimeIncrement);\n  Distance = VSize(Location - PlayerHarry.Location);",
+          "old_sha256": "fe2a5ae0375c4b5754440bb0feeb6a0ff22b75075527bd6480fe0de217e0a7c8",
+          "new_sha256": "8158eee2756ace947fe7e95f8ee75597819a2a5feb538453d5eea3230949a7f3"
+        },
+        {
+          "description": "actual projectile interceptor receives authority damage with real crab instigator",
+          "old": "function bool OnSpellHitHarry (Actor aHit, Vector HitLocation)\n{\n  aHit.TakeDamage(iDamage,Instigator,vect(0.00,0.00,0.00),vect(0.00,0.00,0.00),'None');\n  return True;\n}",
+          "new": "function bool OnSpellHitHarry(Actor aHit, Vector HitLocation)\n{\n    local HPCoopGame G;\n    local HPCoopHarry Victim;\n    if (Role != ROLE_Authority || Level.NetMode == NM_Client) return False;\n    if (bCoopCh1Fire)\n    {\n        G = HPCoopGame(Level.Game);\n        Victim = HPCoopHarry(aHit);\n        if (G == None || !bCoopFireAimReady || CoopFireCaster == None\n            || CoopFireCaster.bDeleteMe || Owner != CoopFireCaster\n            || Instigator != CoopFireCaster || !G.IsCh1CombatOpen(CoopFireCaster)\n            || !G.IsAIPlayerAvailable(Victim)) return False;\n        // A different live player can intercept the shot. Never damage TargetActor\n        // merely because it was the intended aim target.\n        Victim.TakeDamage(iDamage, CoopFireCaster, HitLocation,\n            vect(0,0,0), 'None');\n        return True;\n    }\n    aHit.TakeDamage(iDamage, Instigator, vect(0,0,0), vect(0,0,0), 'None');\n    return True;\n}",
+          "old_sha256": "50e7d01c081ec936642045f23dacd7463ce7d39ee6a3ef790cb6fffb9c9e302f",
+          "new_sha256": "173eb016cacfb7d260e94b950c6c605909f56233942b8f37bbcbe10f594e39fc"
+        },
+        {
+          "description": "retain original scatter around the selected immutable point",
+          "old": "  directionFromHarry = Normal(Owner.Location - PlayerHarry.Location);",
+          "new": "  if (bCoopCh1Fire)\n  {\n    TempRot.Yaw = Rand(65536);\n    TempVector = vector(TempRot);\n    return CoopFireAimPoint + TempVector * (Rand(iAccuracyMax) + iAccuracyMin);\n  }\n  directionFromHarry = Normal(Owner.Location - PlayerHarry.Location);",
+          "old_sha256": "15ef4847ed9ec93cd6491b5263c908b51fd2f12bbfab63207aad7ffa76740ab2",
+          "new_sha256": "1b5d1963223a3012df1cfdf9226ba7bc9a6c6c7a2bc8a2c87700a70b75a88485"
+        },
+        {
+          "description": "reject invalid co-op shot initialization before trajectory division",
+          "old": "state StateFlying\n{\n  function BeginState()\n  {",
+          "new": "state StateFlying\n{\n  function BeginState()\n  {\n    if (bCoopCh1Fire && (!bCoopFireAimReady || fIncreaseHitTimeDistance <= 0\n        || fHitTimeIncrement <= 0))\n    {\n      OnSpellShutdown();\n      Destroy();\n      return;\n    }",
+          "old_sha256": "2ac6dd919283778b4e876ca2906043d8077ec87c3f63393fc0dc23607197b7a2",
+          "new_sha256": "ad04e27f63754120e782a38b00817ae6c27df047a4d1b9c398bf25945e028097"
+        }
+      ]
+    }
+  ]
+}

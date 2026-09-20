@@ -19,11 +19,13 @@ var string RuntimeProbe;
 var bool bCoopRecoveryBlocked;
 // Explicit first-intro diagnostic, not enabled by normal co-op sessions.
 var bool bCoopCapturedAuthorityDiagnostic, bCoopCapturedAuthorityUsed;
+var bool bCoopFirstIntroPreflight;
+var HPCoopIntroCoordinator IntroCoordinator;
 
 event InitGame(string Options, out string Error)
 {
     local harry MapHarry;
-    local string CaptureMode;
+    local string CaptureMode, IntroMode;
     Super.InitGame(Options, Error);
     TestStage = ParseOption(Options, "CoopTestStage");
     RuntimeProbe = ParseOption(Options, "CoopProbe");
@@ -61,6 +63,19 @@ event InitGame(string Options, out string Error)
             return;
         }
     }
+    IntroMode = ParseOption(Options, "CoopFirstIntroPreflight");
+    if (IntroMode != "" && IntroMode != "0" && IntroMode != "1")
+    {
+        Error = "CoopFirstIntroPreflight must be 0 or 1.";
+        return;
+    }
+    bCoopFirstIntroPreflight = IntroMode == "1";
+    if (bCoopFirstIntroPreflight && (!bCoopCapturedAuthorityDiagnostic
+        || GetIntOption(Options, "RequiredPlayers", 2) != 2))
+    {
+        Error = "CoopFirstIntroPreflight requires captured diagnostic and two players.";
+        return;
+    }
     MaxPlayers = 2;
     RequiredPlayers = Clamp(GetIntOption(Options, "RequiredPlayers", 2), 1, 2);
     bWaitingForPlayers = True;
@@ -82,6 +97,11 @@ event PostBeginPlay()
             Scene.CutscriptDiskClass = Class'HPCoopCutScriptDisk';
         }
     StoryView = Spawn(Class'HPCoopCutsceneView', self);
+    if (bCoopFirstIntroPreflight)
+    {
+        IntroCoordinator = Spawn(Class'HPCoopIntroCoordinator', self);
+        if (IntroCoordinator != None) IntroCoordinator.Game = self;
+    }
     if (RuntimeProbe ~= "Health") Spawn(Class'HPCoopHealthProbe', self);
     if (RuntimeProbe ~= "Lumos")
     {
@@ -124,12 +144,23 @@ event PostBeginPlay()
     }
 }
 
+function bool AllowCoopFirstIntroPlay(CutScene Scene)
+{
+    if (!bCoopFirstIntroPreflight) return True;
+    if (IntroCoordinator == None) return False;
+    return IntroCoordinator.AllowPlay(Scene);
+}
+
 function SetStoryCaptured(bool bCapture)
 {
     local byte I;
     local HPCoopHarry H;
     if (Role != ROLE_Authority || bStoryCaptured == bCapture) return;
+    if (!bCapture && IntroCoordinator != None && IntroCoordinator.IsActive()
+        && !IntroCoordinator.BeginRelease()) return;
     bStoryCaptured = bCapture;
+    if (bCapture && IntroCoordinator != None && IntroCoordinator.Phase == 1)
+        bCoopCapturedAuthorityUsed = True;
     if (HPCoopGRI(GameReplicationInfo) != None)
         HPCoopGRI(GameReplicationInfo).bStoryCaptured = bCapture;
     if (StoryView != None && StoryLeader != None)
@@ -146,7 +177,10 @@ function SetStoryCaptured(bool bCapture)
             H.Velocity = vect(0,0,0);
             H.Acceleration = vect(0,0,0);
         }
-        if (bCapture && bCoopCapturedAuthorityDiagnostic && !bCoopCapturedAuthorityUsed
+        if (bCapture && IntroCoordinator != None && IntroCoordinator.Phase == 1
+            && IntroCoordinator.IsMember(H))
+            H.BeginCoopAuthorityCapture(StoryView);
+        else if (bCapture && bCoopCapturedAuthorityDiagnostic && !bCoopCapturedAuthorityUsed
             && H == StoryLeader && ReadyPlayers[I] != 0 && IsAliveCoopPlayer(H)
             && H.RemoteRole == ROLE_AutonomousProxy)
         {
@@ -287,7 +321,8 @@ function PlayerContextReady(HPCoopHarry H)
 function bool SetPause(bool bPause, PlayerPawn P)
 {
     // The lobby owns this pause until the required clients acknowledge ready.
-    if (bWaitingForPlayers)
+    if (bWaitingForPlayers || (IntroCoordinator != None
+        && (IntroCoordinator.IsActive() || IntroCoordinator.Phase == 6)))
         return False;
     return Super.SetPause(bPause, P);
 }
@@ -331,6 +366,11 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
 {
     local PlayerPawn P;
     local HPCoopHarry H;
+    if (IntroCoordinator != None && IntroCoordinator.Phase == 6)
+    {
+        Error = "This intro session failed. A fresh host is required.";
+        return None;
+    }
     if (CampaignState == None || !CampaignState.IsSnapshotReady())
     {
         Error = "The initial co-op campaign snapshot is unavailable.";
@@ -437,6 +477,8 @@ function CoopPlayerDied(HPCoopHarry Victim)
 {
     local HPCoopHarry A, B;
     if (Role != ROLE_Authority || !IsCoopPlayer(Victim)) return;
+    if (IntroCoordinator != None && IntroCoordinator.IsActive())
+        IntroCoordinator.Fail("participant-died");
     if (GetAliveCoopPlayers(A, B) == 0 && !bCoopRecoveryBlocked)
     {
         bCoopRecoveryBlocked = True;
@@ -608,6 +650,9 @@ function Logout(Pawn Exiting)
 {
     local byte I;
     local HPCoopHarry Successor;
+    if (IntroCoordinator != None && IntroCoordinator.IsActive()
+        && IntroCoordinator.IsMember(HPCoopHarry(Exiting)))
+        IntroCoordinator.Fail("participant-disconnected");
     for (I = 0; I < 2; I++)
         if (CoopPlayers[I] == Exiting)
         {
@@ -619,7 +664,10 @@ function Logout(Pawn Exiting)
         Successor = CoopPlayers[0];
         if (Successor == None)
             Successor = CoopPlayers[1];
-        AdoptStoryLeader(Successor, harry(Exiting));
+        if (IntroCoordinator != None && IntroCoordinator.Phase == 6)
+            StoryLeader = None;
+        else
+            AdoptStoryLeader(Successor, harry(Exiting));
     }
     Super.Logout(Exiting);
     if (CoopPlayers[0] == None && CoopPlayers[1] == None)

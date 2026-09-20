@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "name": "coop-first-intro-preflight",
+  "description": "REVIEW ONLY. Gate original CutScene.Play before counter/thread mutations and check the original CutScript loop before every next command. SP cast None passes unchanged. Requires proposed coordinator overlay.",
+  "files": [
+    {
+      "path": "HGame/Classes/Cutscene/CutScene.uc",
+      "source_sha256": "03316310eb6d3c2701005256cb2037514a45b24e6b3d5303e2e116018ca5aab1",
+      "result_sha256": "0398733be7ca79b6c02869547b096e1feb4c18aef5a4719d1455dfb49c311635",
+      "replacements": [
+        {
+          "old": "function Play ()\n{\n\tif ( bPlaying || bDisabledByCmd )",
+          "new": "function Play ()\n{\n\tlocal HPCoopGame Coop;\n\tif ( bPlaying || bDisabledByCmd )",
+          "old_sha256": "a41fa34dc664a83fe830dfb6fc36967b9a7eeea5b846347471e1926430bd069c",
+          "new_sha256": "911abd463f37c4af81bfb37003bca18170df4c7e93b83a8c76c6a38123199ea4"
+        },
+        {
+          "old": "\tnPlayedCount++;\n\tCutSceneLog(\" starting for the \" $ string(nPlayedCount) $ \" time\");\n\tCreateThreads();\n\tGotoState('Running');\n}\n\n// Omega: Force play",
+          "new": "\tCoop = HPCoopGame(Level.Game);\n\tif (Coop != None && !Coop.AllowCoopFirstIntroPlay(self)) return;\n\tnPlayedCount++;\n\tCutSceneLog(\" starting for the \" $ string(nPlayedCount) $ \" time\");\n\tCreateThreads();\n\tGotoState('Running');\n}\n\n// Omega: Force play",
+          "old_sha256": "363e50bdb933dd1067e23a824e1e3aab080549e309d7533c1d5d6a648532785b",
+          "new_sha256": "effa3e1ba96b81881799dc4aa1616829389a4354fe82b3625945d03079af6f75"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Cutscene/CutScript.uc",
+      "source_sha256": "5b0bf7b796bb89fc5114879830290074898408d166ba4ccb1205cdf17971ad0e",
+      "result_sha256": "f21142c95763898c922f6c9ecd8db427dc74cc55b77207f7a69ce618ad632e4a",
+      "replacements": [
+        {
+          "old": "\tevent Tick (float DeltaTime)\n\t{\n\t\tlocal string Command;",
+          "new": "\tevent Tick (float DeltaTime)\n\t{\n\t\tlocal string Command;\n\t\tlocal HPCoopGame Coop;",
+          "old_sha256": "30c49f17a5bb1f4d4a063e9b5a23a27ef77b2aac0bd377d81165ca2201285a3e",
+          "new_sha256": "3c0a7fdf3cb9010861f5839c9bb25433c0f7132309515f7e9f0bee32182c608b"
+        },
+        {
+          "old": "\t\twhile ( nPendingCues == 0 )\n\t\t{\n\t\t\tif (!GetNextCommand(Command, True) )",
+          "new": "\t\twhile ( nPendingCues == 0 )\n\t\t{\n\t\t\tCoop = HPCoopGame(Level.Game);\n\t\t\tif (Coop != None && Coop.IntroCoordinator != None\n\t\t\t\t&& !Coop.IntroCoordinator.AllowScript(self)) return;\n\t\t\tif (!GetNextCommand(Command, True) )",
+          "old_sha256": "f2cb2111fd7a8d589f33bd02578fc5b999ab1555b5dbf735c1aa93d2f4ddf45d",
+          "new_sha256": "6d3fa41ad7706727868f30d309b695d9073b46af2435debd87d02a8883918e78"
+        }
+      ]
+    }
+  ]
+}

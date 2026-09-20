@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-184147-517`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-204845-541`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -42,7 +42,10 @@
    новый opt-in FirstIntroPreflight дождался обеих camera ACK до original Play,
    провёл original walk/cue и вернул обоих владельцев через resume barriers.
    Непрерывные owner Role2 camera dispatches подтверждены логом, см.
-   `docs/iterations/20260920_COOP_INTRO_PREFLIGHT.md`. Negative paths ещё проверяются;
+   `docs/iterations/20260920_COOP_INTRO_PREFLIGHT.md`. Пропуск ACK каждого слота,
+   повторные callbacks и смерть любого игрока во время оригинального MoveTo
+   проверены узкими opt-in fixture; сессия останавливается без дальнейших
+   сюжетных команд. Визуальный результат и checkpoint recovery не проверены;
    визуальная/физическая приёмка и непрерывность owner presentation не доказаны.
    Отключение StoryLeader посреди
    сцены, перенос captured actors/controllers и аварийная очистка ещё требуют решения.

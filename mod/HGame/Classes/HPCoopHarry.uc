@@ -62,7 +62,7 @@ replication
     reliable if (Role < ROLE_Authority)
         ServerCoopReady, ServerCastCoopSpell, ServerCoopDrinkPotion, ServerCoopResume,
         ServerCoopSceneCaptured, ServerCoopSceneResumed, ServerCoopPickupWitness,
-        ServerCoopIntroSimulated;
+        ServerCoopIntroSimulated, ServerCoopIntroFailureCleaned;
 }
 
 simulated function bool IsLocalCoopPlayer()
@@ -1079,6 +1079,14 @@ function ServerCoopIntroSimulated(int Serial)
         G.IntroCoordinator.SimulatedOwner(self, Serial);
 }
 
+function ServerCoopIntroFailureCleaned(int Serial)
+{
+    local HPCoopGame G;
+    G = HPCoopGame(Level.Game);
+    if (Role == ROLE_Authority && G != None && G.IntroCoordinator != None)
+        G.IntroCoordinator.FailureCleanupAck(self, Serial);
+}
+
 function AbortCoopIntro(string Reason)
 {
     if (Role != ROLE_Authority) return;
@@ -1103,7 +1111,8 @@ simulated function ClientCoopIntroFailed(int Serial, string Reason, bool bDead,
     int LifeSerial, bool bInstant, bool bClub, vector Position, rotator Facing,
     float AuthorityTimeStamp)
 {
-    if (!IsLocalCoopPlayer() || Serial < CoopLocalSceneSerial) return;
+    if (!IsLocalCoopPlayer() || Serial < CoopLocalSceneSerial
+        || (bCoopIntroLocalFailed && Serial == CoopLocalSceneSerial)) return;
     CoopLocalSceneSerial = Serial;
     bCoopIntroLocalActive = True;
     bCoopIntroLocalFailed = True;
@@ -1169,6 +1178,10 @@ simulated function PollCoopIntroOwner()
             $ ". Leave this session and restart the host.", 300);
         Log("[MP_INTRO] owner-failure-cleanup serial=" $ CoopLocalSceneSerial
             $ " role=" $ Role $ " dead=" $ bCoopDead);
+        // Cleanup is complete. Keep terminal input hold, but stop the local
+        // watchdog actor and acknowledge only after real local Role3 was seen.
+        bCoopIntroLocalActive = False;
+        ServerCoopIntroFailureCleaned(CoopLocalSceneSerial);
         return;
     }
     if (Role == ROLE_SimulatedProxy && !bCoopIntroRoleSent)
@@ -1259,6 +1272,7 @@ function ServerCoopSceneCaptured(int Serial, float OwnerHoldStamp)
     if (G.IntroCoordinator != None && G.IntroCoordinator.IsMember(self)
         && !G.IntroCoordinator.CanAcceptCapture(self)) return;
     if (!(OwnerHoldStamp >= 0) || !(Abs(OwnerHoldStamp) < 100000000)) return;
+    if (G.IntroCoordinator != None && G.IntroCoordinator.ShouldDropCapture(self, Serial)) return;
     CoopSceneOwnerHoldStamp = OwnerHoldStamp;
     CoopSceneServerHoldTime = Level.TimeSeconds;
     if (G.IntroCoordinator != None && G.IntroCoordinator.IsMember(self))

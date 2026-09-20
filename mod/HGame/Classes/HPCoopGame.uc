@@ -20,6 +20,7 @@ var bool bCoopRecoveryBlocked;
 // Explicit first-intro diagnostic, not enabled by normal co-op sessions.
 var bool bCoopCapturedAuthorityDiagnostic, bCoopCapturedAuthorityUsed;
 var bool bCoopFirstIntroPreflight;
+var string CoopIntroFault;
 var HPCoopIntroCoordinator IntroCoordinator;
 
 event InitGame(string Options, out string Error)
@@ -70,6 +71,19 @@ event InitGame(string Options, out string Error)
         return;
     }
     bCoopFirstIntroPreflight = IntroMode == "1";
+    CoopIntroFault = ParseOption(Options, "CoopIntroFault");
+    if (CoopIntroFault != "" && (!(CoopIntroFault ~= "MissingAck0")
+        && !(CoopIntroFault ~= "MissingAck1") && !(CoopIntroFault ~= "DuplicateCallbacks")
+        && !(CoopIntroFault ~= "DeathWalk0") && !(CoopIntroFault ~= "DeathWalk1")))
+    {
+        Error = "Unknown CoopIntroFault mode.";
+        return;
+    }
+    if (CoopIntroFault != "" && !bCoopFirstIntroPreflight)
+    {
+        Error = "CoopIntroFault requires explicit first-intro preflight.";
+        return;
+    }
     if (bCoopFirstIntroPreflight && (!bCoopCapturedAuthorityDiagnostic
         || GetIntOption(Options, "RequiredPlayers", 2) != 2))
     {
@@ -659,6 +673,10 @@ function Logout(Pawn Exiting)
             CoopPlayers[I] = None;
             ReadyPlayers[I] = 0;
         }
+    // Record cleanup unavailability after unregister, before the empty lobby
+    // can pause coordinator Tick. No ACK from this removed pawn is accepted.
+    if (IntroCoordinator != None && IntroCoordinator.Phase == 6)
+        IntroCoordinator.CheckFailureCleanup();
     if (StoryLeader == Exiting)
     {
         Successor = CoopPlayers[0];

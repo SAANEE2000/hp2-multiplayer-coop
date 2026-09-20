@@ -12,6 +12,7 @@ param(
     [ValidateSet('None','Health','Lumos','Pickup','PickupNet')][string]$RuntimeProbe = 'None',
     [switch]$CapturedAuthorityDiagnostic,
     [switch]$FirstIntroPreflight,
+    [ValidateSet('None','MissingAck0','MissingAck1','DuplicateCallbacks','DeathWalk0','DeathWalk1')][string]$IntroFault = 'None',
     [switch]$PrepareOnly,
     [switch]$Unattended
 )
@@ -104,6 +105,9 @@ if ($CapturedAuthorityDiagnostic -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or
 }
 if ($FirstIntroPreflight -and !$CapturedAuthorityDiagnostic) {
     throw 'FirstIntroPreflight requires the explicit CapturedAuthorityDiagnostic fixture.'
+}
+if ($IntroFault -ne 'None' -and !$FirstIntroPreflight) {
+    throw 'IntroFault requires explicit FirstIntroPreflight.'
 }
 if ($Role -eq 'Host' -and !(Test-Path -LiteralPath (Join-Path $WorkRoot "Maps\$mapName.unr") -PathType Leaf)) {
     throw "Map is not installed: $mapName.unr"
@@ -285,6 +289,7 @@ if ($Role -eq 'Host') {
     if ($RuntimeProbe -ne 'None') { $url += "?CoopProbe=$RuntimeProbe" }
     if ($CapturedAuthorityDiagnostic) { $url += '?CoopCapturedAuthority=1' }
     if ($FirstIntroPreflight) { $url += '?CoopFirstIntroPreflight=1' }
+    if ($IntroFault -ne 'None') { $url += "?CoopIntroFault=$IntroFault" }
     $launchArgs = @('server', $url, "port=$Port")
 } else {
     # The temporary standalone map must not run the multiplayer GameInfo or
@@ -308,7 +313,7 @@ $manifest = [ordered]@{
     workRoot=$WorkRoot; executable=$executable; arguments=$launchArgs; map=$mapName; server=$Server; port=$Port;
     connectUrl=$(if ($Role -eq 'Join') { $url } else { $null });
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
-    playerName=$PlayerName; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
+    playerName=$PlayerName; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;
     runRoot=$runRoot; profileRoot=$profileRoot; userFolder="HP2-MP-$session"; processId=$null;
     profileIsolation='UNVERIFIED: M212 bootstrap may select UserFolder/SavePath from Default.ini before the custom INI.';

@@ -80,3 +80,38 @@ Read-only разбор serialized property tags `Ch1Rictusempra.unr` выпол�
 Минимальное честное действие для текущего milestone — сохранить этот gate открытым и отдельно проверять Ch1 actors/коллизии. Для общей кампании потребуется отдельное раннее решение: native override источника story state или специально спроектированный surviving bootstrap actor в уровне до screening. Любой такой вариант требует нового lifecycle/network аудита. Глобальное `harry.bNoDelete=True`, повторный поздний OnResolve и принудительный const bInCurrentGameState не являются исправлением. Самостоятельно native/library/map изменения этим аудитом не выполнялись.
 
 Не подтверждены: seed/replication на двух физических ПК, эквивалентность client world screening, save ветки, полноценный travel/save, прохождение challenge и отсутствие регрессий NPC. Общий UCC/runtime gate выполняет root; этот аудит не запускал и не пересобирал игру. Read-only сведения URL/client cleanup внесены после первых loopback runs, а не выданы за их успешное исправление.
+
+## Дополнительная проверка раннего client script hook
+
+После чистого двухклиентского комплекта выполнены пять временных локальных
+сборки (каждая UCC 0 ошибок / 268 предупреждений) с пассивными журналами в
+`gargoyle.PreBeginPlay`, `SmartStart.PreBeginPlay` и поздним подсчётом акторов
+при `HPCoopHarry.ClientCoopReady`. На сервере Ch1 оба `PreBeginPlay` хука
+выполнились; URL содержал `CoopTestStage=RictusempraLessonComplete`, GameInfo
+существовал, до сетевых игроков был один map PlayerPawn. На клиенте, включая
+повтор с безусловным журналом, ни один из этих двух map-class хуков не
+выполнился до `Can't find a valid player`. После Login клиент насчитал **две
+SmartStart и две gargoyle** (`netmode=3`), то есть эти акторы сохранились,
+но сохранения актора недостаточно для раннего вызова script lifecycle.
+В проверенной DLL циклы PreBeginPlay/BeginPlay/PostBeginPlay (`LoadMap` RVA
+`0x9BCDF`, `0x9BD42`, `0x9BDF2`) пропускают актор при бите `0x20000` по
+offset `Actor+0x3D0`. Это согласуется с исходным `Actor.SetInitialState`,
+который выставляет `bScriptInitialized`, но соответствие native offset этому
+полю отдельно не доказано. Наблюдение runtime важнее предположения об offset:
+сохранённые клиентские map actors не дали раннего script callback.
+
+Отдельный временный вариант сделал `SmartStart` нестатическим и оставил
+`bNoDelete=True`; client `PreBeginPlay` всё равно не выполнился, а native
+screening снова не нашёл игрока. Свидетельства: host/client пары
+`224852-094-ed825f`/`224852-460-0b3959`,
+`225140-355-ef5821`/`225140-709-d3f83c`,
+`225402-080-c24838`/`225402-438-c3339e`,
+`225652-598-39334b`/`225652-968-c7373c` и
+`230005-875-62643a`/`230006-244-a32597` в `.local/runs`.
+Все пары остановлены и их engine logs собраны. Экспериментальные рецепты и
+owner-лог убраны, исходники `gargoyle` и `SmartStart` восстановлены по
+проверенным хешам, затем исходная co-op логика пересобрана UCC 0/268 в
+`20260920-230202-786`. Это **не исправление screening**. Для настоящего
+раннего состояния нужно исследовать native загрузку/карту или другой
+доказанный hook до `ScreenActorsByGameState`. Нельзя выдавать поздний owner
+snapshot за эквивалентность client world.

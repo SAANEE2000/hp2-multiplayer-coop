@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-223717-642`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-230202-786`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -67,6 +67,10 @@
    `docs/iterations/20260920_COOP_LUMOS_HITS.md`. Reveal/door/визуал ещё не приняты. Клиентский
    native screening не находит map Harry до позднего snapshot: это отдельный
    нерешённый blocker общей кампании, подробнее `docs/audits/STORY_STATE_AUDIT.md`.
+   Пять дополнительных локальных пар доказали, что сохранённые на клиенте
+   SmartStart/gargoyle не получают ранний `PreBeginPlay`; даже временный
+   нестатический `SmartStart` с `bNoDelete=True` не устранил предупреждение.
+   Временные правки убраны и пересобраны; нужен более ранний map/native hook.
 3. Authority health/status/potion и одиночное возрождение реализованы. Explicit
    loopback fixture прошла фазы 0–12: оба владельца независимо получают урон,
    умирают и возвращаются с 41 HP; owner HUD snapshots совпали с сервером.

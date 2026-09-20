@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 if (!$GameRoot) { $GameRoot = Join-Path $repo 'Гарри Поттер и Тайная комната' }
 if (!$WorkRoot) { $WorkRoot = Join-Path $repo '.local\game' }
+$marker = Join-Path ([IO.Path]::GetFullPath($WorkRoot)) '.hp2-development-copy.json'
+if (Test-Path -LiteralPath $marker) { Write-Output ([IO.Path]::GetFullPath($WorkRoot)); exit 0 }
 $source = (Resolve-Path -LiteralPath $GameRoot).Path
 $target = [IO.Path]::GetFullPath($WorkRoot)
 if ($source.TrimEnd('\') -eq $target.TrimEnd('\')) { throw 'WorkRoot must be a separate copy.' }

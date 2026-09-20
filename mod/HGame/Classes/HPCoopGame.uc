@@ -13,10 +13,29 @@ var int RequiredPlayers;
 var bool bWaitingForPlayers;
 var bool bStoryCaptured;
 var HPCoopCutsceneView StoryView;
+var HPCoopCampaignState CampaignState;
+var string TestStage;
 
 event InitGame(string Options, out string Error)
 {
+    local harry MapHarry;
     Super.InitGame(Options, Error);
+    TestStage = ParseOption(Options, "CoopTestStage");
+    foreach AllActors(Class'harry', MapHarry)
+        if (HPCoopHarry(MapHarry) == None && MapHarry.bIsPlayer)
+        {
+            LegacyStoryHarry = MapHarry;
+            break;
+        }
+    if (TestStage != "")
+    {
+        if (!(TestStage ~= "RictusempraLessonComplete")
+            || !Class'HPCoopCampaignState'.static.SeedCh1TestStage(LegacyStoryHarry))
+        {
+            Error = "CoopTestStage requires a fresh Ch1Rictusempra map with no imported campaign state.";
+            return;
+        }
+    }
     MaxPlayers = 2;
     RequiredPlayers = Clamp(GetIntOption(Options, "RequiredPlayers", 2), 1, 2);
     bWaitingForPlayers = True;
@@ -36,13 +55,18 @@ event PostBeginPlay()
             Scene.CutscriptDiskClass = Class'HPCoopCutScriptDisk';
         }
     StoryView = Spawn(Class'HPCoopCutsceneView', self);
-    LegacyStoryHarry = harry(Level.PlayerHarryActor);
+    if (LegacyStoryHarry == None)
+        LegacyStoryHarry = harry(Level.PlayerHarryActor);
+    CampaignState = Spawn(Class'HPCoopCampaignState', self);
+    if (CampaignState != None && !CampaignState.CaptureFrom(LegacyStoryHarry, TestStage))
+        Log("[MP_STORY_STATE] initial snapshot unavailable; login will remain closed");
     // Retain the canonical map actor until a real connection is available.
     // Its story fields may be needed by native game-state screening.
     if (LegacyStoryHarry != None && HPCoopHarry(LegacyStoryHarry) == None)
     {
         LegacyStoryHarry.bHidden = True;
-        LegacyStoryHarry.bIsPlayer = False;
+        // M212's native screening runs after PostBeginPlay and selects the
+        // first IsPlayer pawn. Retain this flag until the later network Login.
         LegacyStoryHarry.SetCollision(False, False, False);
         LegacyStoryHarry.Disable('Tick');
         CanonicalCutName = LegacyStoryHarry.CutName;
@@ -246,6 +270,11 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
 {
     local PlayerPawn P;
     local HPCoopHarry H;
+    if (CampaignState == None || !CampaignState.IsSnapshotReady())
+    {
+        Error = "The initial co-op campaign snapshot is unavailable.";
+        return None;
+    }
     if (CoopPlayers[0] != None && CoopPlayers[1] != None)
     {
         Error = "Campaign co-op supports two players.";
@@ -269,6 +298,8 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
         return None;
     }
     H.CoopSlot = PendingLoginSlot;
+    H.CoopCampaignState = CampaignState;
+    H.bCoopProgressApplied = CampaignState.ApplyTo(H);
     CoopPlayers[PendingLoginSlot] = H;
     ReadyPlayers[PendingLoginSlot] = 0;
     if (StoryLeader == None)
@@ -279,6 +310,8 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
         H.CutName = "CoopCompanion";
     }
     RefreshSession();
+    if (LegacyStoryHarry != None)
+        LegacyStoryHarry.bIsPlayer = False;
     Log("[MP_LOGIN] accepted pawn=" $ H $ " slot=" $ H.CoopSlot $ " leader=" $ StoryLeader);
     return P;
 }

@@ -12,12 +12,12 @@ The map imports `Skurge` and textures `skurgeWall_Rc` / `skurge_Runner_RC`, plus
 
 ## Required original interactions
 
-| Spell | Placed targets and purpose | Current implementation implication |
+| Spell | Placed targets and purpose | Initial audit implication |
 |---|---|---|
 | Rictusempra | 20 firecrabSmall and 11 orangesnail initially; stun/flip before pushing | Original projectile is whitelisted, but the new pawn startup book currently omits this learned spell. |
 | Flipendo | 6 spellTriggers, 3 GridMovers, 5 bronze cauldrons, 2 GNOMEs; also the 31 enemies during their vulnerable state | Must retain original stun→push sequence and original target handlers, with shove direction from actual caster. |
 | Alohomora | 7 spellTriggers and 15 chests (7 gold, 5 wood, 3 iron) | Includes EscapeDoor and knightdoor02 events, not just collectible containers. |
-| Lumos | gargoyle0 and gargoyle3; two LumosTriggers and two LumosSparkles | Unsupported in HPCoopWand. Full original-map functionality cannot be claimed. Trigger names indicate secret passages; whether either is mandatory for the shortest completion route was not playtested. |
+| Lumos | gargoyle0 and gargoyle3; two LumosTriggers and two LumosSparkles | Originally unsupported; the Lumos follow-up below adds the original interaction path, pending UCC/runtime verification. Trigger names indicate secret passages; shortest-route necessity was not playtested. |
 
 Original sources: `HGame/Classes/Enemies/firecrab.uc:340` and `orangesnail.uc:536` (Rictusempra defaults); `firecrabSmall.uc:186,201` and `orangesnail.uc:372,380` (dynamic Flipendo/Rictusempra); `Engine/Classes/GridMover.uc:266`; `HGame/Classes/Props/BronzeCauldron.uc:174`; `Enemies/GNOME.uc:1394`; `Props/chestbronze.uc:269`; `Misc/gargoyle.uc:95`. All paths in this report are relative to the installed local game unless prefixed `mod/` or `patches/`.
 
@@ -66,7 +66,7 @@ Original sources: `HGame/Classes/Enemies/firecrab.uc:340` and `orangesnail.uc:53
 | LumosSparkles0 | ColumnClimbRoom; area-effect distance 640 | 2358844 |
 | LumosSparkles1 | No Group override; area-effect distance 640 | 2493907 |
 
-Neither placed gargoyle overrides bInfiniteLumos. Original owner/global blockers remain: `Misc/gargoyle.uc:24–29` enables its cached PlayerHarry weapon; `Misc/LumosLight.uc:43–49` caches the global and clears its bLumosOn before caller rebinding; its TurnOn/TurnOff broadcasts apply to all actors. `Triggers/LumosTrigger.uc` caches one player for radius checks and `LumosSparkles.uc` reads that player camera. Enabling the existing spellLumos whitelist alone would not fix them.
+Neither placed gargoyle serializes bMakeLumosInfinite; its inherited value is False. Original owner/global risks addressed by the Lumos follow-up: `Misc/gargoyle.uc:24–29` enables its cached PlayerHarry weapon; `Misc/LumosLight.uc:43–49` caches the global and clears its bLumosOn before caller rebinding; its TurnOn/TurnOff broadcasts apply to all actors. `Triggers/LumosTrigger.uc` caches one player for radius checks and `LumosSparkles.uc` reads that player camera. Enabling the existing spellLumos whitelist alone would not fix them.
 
 ## Rictusempra unlock provenance and startup snapshot
 
@@ -118,3 +118,51 @@ The local PushSource starts as original PlayerHarry. On authority in HPCoopGame,
 Validated with the actual scripts/apply_patches.py apply_recipe on an isolated ignored fixture: exact output SHA, second-apply idempotence, inverse replacement byte identity, rejection of source drift without modifying that fixture, and unchanged installed source. No active game tree was patched and no UCC build was run by this audit agent. Root must include this recipe in the next build and verify first-player/second-player shove directions plus standalone regression.
 
 Known remaining original-context gap: firecrab.pushDirection at Enemies/firecrab.uc:146–180 still uses canonical PlayerHarry for later ledge decisions. Its direction may differ from the actual second caster after the immediate shove. Retained intentionally outside this recipe.
+
+## Lumos implementation follow-up: ready for root build, runtime unverified
+
+This change set edits only HPCoopWand, HPCoopSpellVisual, this report, and the existing coop-spell-caster recipe. It does not edit HPCoopHarry/HPCoopGame, installed game source, maps, assets or the running development game. The prior HChar recipe entry and its result hash remain unchanged.
+
+### Preserved original hit and event chain
+
+The unchanged path is Engine.Projectile.Touch → baseSpell.ProcessTouch → spellLumos.OnSpellHitHPawn → gargoyle.HandleSpellLumos. On a successful handler result, original baseSpell still calls HPawn.OnSpellHit and CreateHitEffects, then destroys the projectile. HPawn.OnSpellHit preserves bSpellCausesTrigger/Event dispatch. The gargoyle retains its original Green state/animation/sound sequence. No synthetic door event or direct gargoyle Trigger call is substituted for a hit.
+
+The co-op-only gargoyle branch now requires authority, the exact original spellLumos class, matching spell.Owner/Instigator/SpellWand.Owner, and a registered caster. It calls that wand’s ActivateCoopLumos(bMakeLumosInfinite). The original single-player branch is retained. No class named secretLumos exists in the inspected local HGame source; the concrete secret actors in this map are LumosTrigger0 and LumosTrigger1, with the door events listed above.
+
+### Original light, authority and two sources
+
+Each authority HPCoopWand creates an original LumosLight owned by that wand. The recipe resolves harry(Owner.Owner) before PreBeginPlay clears bLumosOn and sets RemoteRole=None before replication. It never initializes the co-op light from Level.PlayerHarryActor. Original LumosLight retains its 30-second finite timer, recast timer reset, infinite pulse and bInfiniteLumos behavior. Co-op TurnOn is gated by the wand’s registered, living owner and current weapon. Death, weapon replacement and unregistering turn the light off; destroying the wand destroys its light.
+
+Original TurnOn/TurnOff calls back into the owning wand for co-op presentation instead of broadcasting OnLumosOn/Off to every world actor. The server arms only the existing LumosTriggers on activation. Each trigger’s InLumosRadius checks all active registered owner lights and selects a source satisfying its radius and original entering-only Z restriction. Its existing states, bFirstEventSent, bEventEntering/bEventLeaving, SoundTrigger and TriggerEvent calls remain. One light expiring does not force another source off. A waiting trigger can remain armed with no active sources; its predicate remains false until a source is active and in range.
+
+Server light position is derived solely from its pawn’s Location/Rotation/CollisionRadius/CollisionHeight. No server camera, viewport, console or rendered WeaponLoc is used for authority decisions. Headless source lights allocate no particles; null-safe original ScaleParticles/UpdateLocation retain their timer/light bookkeeping.
+
+### Client presentation
+
+HPCoopSpellVisual has a persistent Lumos mode with a replicated caster, original LumosLightFX class, position, scale and terminal state. Both clients can render both players’ glow effects. Only the actual owning viewport pawn receives its native bLumosOn flag; the Engine.PlayerPawn default fLumosRadius=512 remains unchanged. Therefore native hidden-surface reveal remains local to a player carrying their own Lumos. A partner’s light is visible, and either light can open the shared authoritative secret doors, but this code does not pretend the native renderer supports arbitrary remote reveal origins.
+
+The owning-client visual drives the original LumosSparkles effects through a new guarded simulated method using that viewport pawn’s camera. It does not run native LumosTrigger gameplay or create server particles. The first map has edge-effect distance 0 and area-effect distance 640. Original SP sparkle states remain intact. Client LifeSpan is explicitly disabled for active persistent visuals because Engine.Actor does not replicate LifeSpan; the server owns expiry. Terminal/Destroyed cleanup clears native flags and particles, preserves a newer active local source, and handles an owning pawn reference disappearing on disconnect/respawn.
+
+### Integration contract for root
+
+- Build/copy both modified classes together with the expanded coop-spell-caster recipe. The recipe now contains HChar plus gargoyle, LumosLight, LumosTrigger and LumosSparkles. No additional Game API is required.
+- Existing ServerCastCoopSpell derives the original class from target vulnerability and calls W.IsSupportedCoopSpell; Lumos is now allowed there. Existing known-spell/state/cooldown/target/LOS checks remain required. Ch1’s basic learned snapshot already includes Lumos.
+- Authority-only API: W.ActivateCoopLumos(optional bool bInfinite) returns activation success; W.DeactivateCoopLumos() ends it; W.IsLumosOn() reads authoritative light state or the local viewport’s relayed flag.
+- TheLumosLight remains the original typed actor on authority. Existing authoritative harry.OnEvent('LumosOff') and CutCommand LumosOn/LumosOff/ToggleLumos calls therefore work through the patched original light callbacks, including the original direct bInfiniteLumos assignment.
+- A remote client does not own a local TheLumosLight actor. If root dispatches OnEvent('LumosOff') or those cut commands to clients, intercept that branch before Super: call DeactivateCoopLumos on authority only and let the replicated visual clear the client flag. Do not reintroduce a local original light/global bootstrap or expose an unvalidated activation RPC. No such client cut-command dispatch is required by this change.
+
+### Verification performed and remaining acceptance
+
+The current scripts/apply_patches.py was run only on an explicitly marked isolated fixture under .local/recipe-validation. All five complete source/output hash chains validated. All 22 replacements were reversible to exact original bytes; reapplication made zero changes; a changed source was rejected without altering other pending outputs. Installed original sources remained unchanged. Paired method declarations and prior HChar result hash were checked. The initial fixture attempt correctly failed because the strengthened applier requires the development-copy marker. No UCC build or game execution was run by this audit agent.
+
+Root acceptance still required: compile the full package, first-player and second-player original gargoyle hits, actual secret-door movement visible on both clients, independent simultaneous lights, finite expiry/recast and off-on within 0.5 seconds, death/disconnect/travel cleanup, local sparkle visibility, and a normal standalone Lumos regression. Original gargoyle animation/mover replication and original spell impact-particle delivery are not certified by static source inspection. Other campaign Lumos scripting and the separate firecrab ledge-direction gap remain outside this first-map result.
+
+Expanded recipe hash ledger:
+
+| File | Source SHA-256 | Result SHA-256 |
+|---|---|---|
+| `HGame/Classes/HChar.uc` | `8da013b92c445bd5a675f1bcc3609a47319bb9c318ed75613c01397a9c657fad` | `5772ddde74bb6d357fffad082322c270ee33ad2e8ad7e3d6558b734aec4d43e0` |
+| `HGame/Classes/Misc/gargoyle.uc` | `dad22b913dde24935718eb39845d5d4672e6e6f730f43d3f68552da352a9699d` | `ffd7c1dd256d120b059c67fd46d9ad49148cedd0d0f2bb081a88803a6d00d5b9` |
+| `HGame/Classes/Misc/LumosLight.uc` | `1df4d788734072ef9ac3baa13ad56879a1afcff742230d026ad74f5495f8e57a` | `351194f4a793edfff85afa99c60d30b7336fd69078cbf08348a3469691477a34` |
+| `HGame/Classes/Triggers/LumosTrigger.uc` | `d8b2d2bd3839077eed2fe1244fd86f53def601552522a44ddd059810d1c9ecda` | `66d27370b5e3c623e6722cafae1df5a16d7c787e940caf489d0e24c485ae0d33` |
+| `HGame/Classes/Triggers/LumosSparkles.uc` | `c0a7326da8dedad72e35d4f99459f2dc4d39b8995917f0bb16cd9ed77663abc2` | `f5f5978e31e68ef6eb922871b5f46b40bf9b70bc64cdd14da01778de3fb86b99` |

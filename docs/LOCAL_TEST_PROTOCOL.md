@@ -56,7 +56,7 @@ Get-FileHash -LiteralPath '.local\game\Maps\Ch1Rictusempra.unr' -Algorithm SHA25
 На ПК A:
 
 ```powershell
-.\HostCoop.cmd -Map Ch1Rictusempra -Port 7777
+.\HostCoop.cmd -Map Ch1Rictusempra -Port 7777 -TestStage RictusempraLessonComplete
 .\JoinCoop.cmd -Server 127.0.0.1 -Port 7777 -PlayerName Harry1
 ```
 
@@ -81,6 +81,13 @@ Get-FileHash -LiteralPath '.local\game\Maps\Ch1Rictusempra.unr' -Algorithm SHA25
 Это исправляет конкретный дефект прежней конфигурации: клиент брал `HPV_Entry` из исходного Default.ini, запускал на ней `HPCoopGame` и падал при поиске single-player start. У HPVersusStart флаг bSinglePlayerStart=False; в Entry есть обычный PlayerStart. В журнале проблемной сессии `coop-join-20260920-152328-415-40abf0` ошибка возникает уже после успешной инициализации rendering, поэтому её нельзя считать ошибкой видеодрайвера.
 
 Для проверки порта manifest отдельно содержит `connectUrl`, `port` и `defaultUrlPort`. Клиентский URL.Port остаётся 7777; адрес подключения всегда явно содержит выбранный `-Port`. Проверка генератора подтверждает, что URI для тестового 7787 содержит этот порт. Реальное native подключение должно подтверждаться серверным `TcpNetDriver on port 7787` и последующим соединением именно проверяемой клиентской сессии. Отсутствие порта в старой строке Browse само по себе не доказывает его потерю: старый INI уже задавал этот порт как значение по умолчанию.
+
+Для этой проверки `-TestStage RictusempraLessonComplete` — явный тестовый старт
+Ch1 с GSTATE030 и четырьмя spells после урока. Флаг допускается только на Coop Host
+с Ch1Rictusempra; клиентам он не нужен. Без флага используются map defaults,
+которые не включают предшествующий урок. Это не настоящий save после урока и не
+готовый campaign travel. До readiness оба клиента должны записать
+`local-initial-state=GSTATE030 spells=4 test-stage=True`.
 
 ## Изоляция и журналирование
 

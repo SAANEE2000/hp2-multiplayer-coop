@@ -1,10 +1,12 @@
 // Original campaign projectiles with an authority-only co-op spawn boundary.
 // The owning HPCoopHarry validates its RPC before calling CastCoopSpell.
-// Lumos, sword, duel and forced boss casts are deliberately not supported yet.
+// Sword, duel and forced boss casts are deliberately not supported yet.
+// Lumos requires the owner-scoped hooks in patches/coop-spell-caster.json.
 class HPCoopWand extends baseWand;
 
 var float CoopMuzzleMaxDistance;
 var float CoopVisualTransformMaxDistance;
+var HPCoopSpellVisual CoopLumosVisual;
 
 function PreBeginPlay()
 {
@@ -14,10 +16,12 @@ function PreBeginPlay()
 
 simulated function PostBeginPlay()
 {
-    // Original LumosLight.PreBeginPlay writes the global Harry's bLumosOn.
-    // Do not spawn that actor until an owner-scoped Lumos path is integrated.
+    // The recipe makes the original light resolve this wand's owner before
+    // its PreBeginPlay writes bLumosOn. Keep baseWand's global bootstrap out.
     Super(HWeapon).PostBeginPlay();
     BindCoopOwner();
+    if (Role == ROLE_Authority && Level.NetMode != NM_Client)
+        EnsureCoopLumosLight();
 }
 
 simulated function BindCoopOwner()
@@ -35,6 +39,7 @@ simulated function bool IsSupportedCoopSpell(Class<baseSpell> SpellClass)
 {
     return SpellClass == Class'spellFlipendo'
         || SpellClass == Class'spellAlohomora'
+        || SpellClass == Class'spellLumos'
         || SpellClass == Class'spellSkurge'
         || SpellClass == Class'spellRictusempra'
         || SpellClass == Class'spellDiffindo'
@@ -89,8 +94,6 @@ simulated function ChooseSpell(ESpellType NewSpellType, optional bool bForceSele
         case SPELL_Diffindo: SpellClass = Class'spellDiffindo'; break;
         case SPELL_Spongify: SpellClass = Class'spellSpongify'; break;
     }
-    // Lumos may be selected by the original cursor, but authority rejects it
-    // explicitly until the owner-specific light and gargoyle path is ready.
     SetCurrentSpell(SpellClass, bForceSelection);
 }
 
@@ -171,12 +174,111 @@ simulated function StopGlowingWand()
 
 simulated function bool IsLumosOn()
 {
-    return False;
+    if (Role == ROLE_Authority && Level.NetMode != NM_Client)
+        return TheLumosLight != None && TheLumosLight.bLumosOn;
+    return PlayerHarry != None && PlayerHarry.bLumosOn;
 }
 
 function LumosTurnOn()
 {
-    Log("[MP_SPELL] rejected reason=unsupported-lumos owner=" $ Owner);
+    ActivateCoopLumos();
+}
+
+function vector GetCoopLumosOrigin()
+{
+    local rotator FlatRotation;
+    local vector Point;
+    local Pawn P;
+
+    P = Pawn(Owner);
+    if (P == None)
+        return Location;
+    FlatRotation = P.Rotation;
+    FlatRotation.Pitch = 0;
+    FlatRotation.Roll = 0;
+    Point = P.Location + vector(FlatRotation) * (P.CollisionRadius + 8);
+    Point.Z += P.CollisionHeight * 0.5;
+    return Point;
+}
+
+function EnsureCoopLumosLight()
+{
+    if (Role != ROLE_Authority || Level.NetMode == NM_Client
+        || HPCoopGame(Level.Game) == None || harry(Owner) == None)
+        return;
+    if (TheLumosLight == None)
+    {
+        TheLumosLight = Spawn(Class'LumosLight', self,, GetCoopLumosOrigin());
+        if (TheLumosLight != None)
+        {
+            TheLumosLight.RemoteRole = ROLE_None;
+            TheLumosLight.bUseDebugMode = False;
+        }
+    }
+}
+
+function bool CanUseCoopLumosLight(LumosLight Light)
+{
+    local HPCoopGame G;
+
+    BindCoopOwner();
+    G = HPCoopGame(Level.Game);
+    return Role == ROLE_Authority && Level.NetMode != NM_Client
+        && G != None && PlayerHarry != None && !PlayerHarry.bDeleteMe
+        && !PlayerHarry.HarryIsDead() && PlayerHarry.Weapon == self
+        && G.IsCoopPlayer(PlayerHarry) && Light != None
+        && Light == TheLumosLight && Light.Owner == self;
+}
+
+function bool ActivateCoopLumos(optional bool bInfinite)
+{
+    EnsureCoopLumosLight();
+    if (!CanUseCoopLumosLight(TheLumosLight))
+        return False;
+    // Original infinite mode persists until a script changes the light flag.
+    if (bInfinite)
+        TheLumosLight.bInfiniteLumos = True;
+    TheLumosLight.TurnOn();
+    Log("[MP_LUMOS] activate caster=" $ PlayerHarry
+        $ " infinite=" $ TheLumosLight.bInfiniteLumos);
+    return TheLumosLight.bLumosOn;
+}
+
+function DeactivateCoopLumos()
+{
+    if (Role == ROLE_Authority && Level.NetMode != NM_Client
+        && TheLumosLight != None)
+        TheLumosLight.TurnOff();
+}
+
+function CoopLumosActivated(LumosLight Light)
+{
+    local LumosTrigger T;
+
+    if (!CanUseCoopLumosLight(Light))
+        return;
+    if (CoopLumosVisual == None)
+        CoopLumosVisual = Spawn(Class'HPCoopSpellVisual', Owner,, Light.Location);
+    if (CoopLumosVisual != None)
+        CoopLumosVisual.InitCoopLumosVisual(Light, PlayerHarry);
+    else
+        Log("[MP_LUMOS] visual spawn failed caster=" $ PlayerHarry);
+    // These original triggers retain their state/event logic. Their co-op
+    // radius check resolves any active registered source, including player 2.
+    foreach AllActors(Class'LumosTrigger', T)
+        T.OnLumosOn();
+}
+
+function CoopLumosDeactivated(LumosLight Light)
+{
+    if (Role != ROLE_Authority || Level.NetMode == NM_Client
+        || Light != TheLumosLight)
+        return;
+    if (CoopLumosVisual != None)
+        CoopLumosVisual.FinishCoopVisual();
+    // No world OnLumosOff broadcast: another player's source may remain on.
+    // Original trigger Tick evaluates active sources before sending its event.
+    Log("[MP_LUMOS] deactivate caster=" $ PlayerHarry);
 }
 
 function ToggleUseSword()
@@ -187,6 +289,14 @@ function ToggleUseSword()
 simulated event Tick(float DeltaTime)
 {
     BindCoopOwner();
+    if (Role == ROLE_Authority && Level.NetMode != NM_Client
+        && TheLumosLight != None)
+    {
+        if (TheLumosLight.bLumosOn && !CanUseCoopLumosLight(TheLumosLight))
+            TheLumosLight.TurnOff();
+        else if (TheLumosLight.bLumosOn)
+            TheLumosLight.UpdateLocation(GetCoopLumosOrigin());
+    }
     // Original baseWand.Tick dereferences Lumos/sword/charge FX on dedicated.
     if (Level.NetMode == NM_DedicatedServer || !HasLocalCoopViewport())
         return;
@@ -207,6 +317,12 @@ simulated event Tick(float DeltaTime)
 simulated event Destroyed()
 {
     DestroyCoopChargeEffect();
+    if (Role == ROLE_Authority && Level.NetMode != NM_Client
+        && TheLumosLight != None)
+    {
+        TheLumosLight.Destroy();
+        TheLumosLight = None;
+    }
     Super(HWeapon).Destroyed();
 }
 

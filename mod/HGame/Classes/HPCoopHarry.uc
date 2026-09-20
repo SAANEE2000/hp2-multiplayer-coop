@@ -16,11 +16,14 @@ var bool bLocalCaptureApplied;
 var HPCoopCutsceneView CoopStoryView;
 var float PreCutFOV;
 var int LastPresentedScene;
+var HPCoopCampaignState CoopCampaignState;
+var bool bCoopProgressApplied;
 
 replication
 {
     reliable if (Role == ROLE_Authority)
-        CoopSlot, ClientCoopReady, bCoopStoryCaptured, ClientCoopCapture, ClientCoopSubtitle;
+        CoopSlot, ClientCoopReady, bCoopStoryCaptured, ClientCoopCapture, ClientCoopSubtitle,
+        CoopCampaignState;
     reliable if (Role < ROLE_Authority)
         ServerCoopReady, ServerCastCoopSpell;
 }
@@ -171,6 +174,14 @@ function EnsureCoopAnimation()
 function EnsureLocalCoopContext()
 {
     if (!IsLocalCoopPlayer()) return;
+    if (!bCoopProgressApplied && CoopCampaignState != None)
+    {
+        bCoopProgressApplied = CoopCampaignState.ApplyTo(self);
+        if (bCoopProgressApplied)
+            Log("[MP_STORY_STATE] local-initial-state=" $ CurrentGameState
+                $ " spells=" $ CoopCampaignState.LearnedSpellCount
+                $ " test-stage=" $ CoopCampaignState.bIsTestStage);
+    }
     // Compatibility pointer is local on clients, canonical on the server.
     if (Level.NetMode == NM_Client)
         Level.PlayerHarryActor = self;
@@ -221,7 +232,7 @@ function EnsureLocalCoopContext()
     if (bCoopLoginNotified && bLocalContextReady && HPCoopWand(Weapon) != None
         && (IsInState('InvalidState') || IsInState('CoopJoining')))
         GotoState('PlayerWalking');
-    if (bCoopLoginNotified && !bCoopReadySent && Cam != None
+    if (bCoopLoginNotified && bCoopProgressApplied && !bCoopReadySent && Cam != None
         && myHUD != None && SpellCursor != None && HPCoopWand(Weapon) != None)
     {
         bCoopReadySent = True;

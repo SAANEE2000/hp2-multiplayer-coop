@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-160817-611`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-162258-321`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -36,8 +36,11 @@
    к личной BaseCam. Подробности: `docs/iterations/20260920_COOP_CUTSCENE.md`.
    Визуальная/физическая проверка не пройдена. Отключение StoryLeader посреди
    сцены, перенос captured actors/controllers и аварийная очистка ещё требуют решения.
-2. Снимок выученных заклинаний при запуске середины кампании: Rictusempra выдаётся
-   предшествующим уроком. Lumos требует owner-aware света и shared reveal policy.
+2. Явный тестовый старт `RictusempraLessonComplete` передал GSTATE030 и четыре
+   spells обоим loopback клиентам до readiness. Lumos owner-aware реализация
+   скомпилирована; реальные hit/light/reveal/door ещё не проверены. Клиентский
+   native screening не находит map Harry до позднего snapshot: это отдельный
+   нерешённый blocker общей кампании, подробнее `docs/audits/STORY_STATE_AUDIT.md`.
 3. AI для обоих игроков, health/status replication, death/respawn/checkpoint,
    authoritative pickup/trigger visibility и multiplayer travel ещё не завершены.
 4. Mounting/MountFinish/root motion исследованы, но сетевое подтягивание не доказано.

@@ -1,19 +1,23 @@
 {
   "schema_version": 1,
   "name": "coop-spell-caster",
-  "description": "Use a registered co-op projectile caster only for the original HChar Flipendo shove; preserve single-player fallback and persistent enemy PlayerHarry context.",
-  "source_snapshot": "installed/v18 HGame/Classes/HChar.uc",
+  "description": "Registered caster ownership for the original Flipendo shove and original Ch1 Lumos interaction; original single-player branches, projectile hit chain, light timer and trigger event state machine remain.",
+  "source_snapshot": "installed/v18 HGame/Classes (unchanged original source inputs)",
   "string_encoding": "latin-1-byte-preserving",
   "format_note": "ASCII JSON. Encode old/new strings as latin-1; preserve LF source bytes. Apply only to a marked development copy via scripts/apply_patches.py.",
   "scope": [
-    "HChar.HandleSpellFlipendo only; no map, AI target, enemy state, health, damage or movement changes.",
-    "Authority co-op: prefer registered spell.Instigator; fallback to registered spell.Owner. If neither qualifies, retain original PlayerHarry.",
-    "All non-co-op calls, client calls, absent/deleted spells and unregistered casters keep original PlayerHarry direction.",
-    "Existing Super callback, bFlipPushable gate, PHYS_Falling, XY magnitude, Z force and return are preserved."
+    "HChar.HandleSpellFlipendo retains original SP fallback; authority co-op uses registered projectile caster without rebinding enemy AI context.",
+    "gargoyle.HandleSpellLumos validates original projectile/wand/caster before its existing Green state and baseSpell OnSpellHit event chain.",
+    "Original LumosLight uses HPCoopWand.Owner before bootstrap, retains original finite/infinite timer, and delegates co-op visual notifications without global OnLumosOff.",
+    "Original LumosTrigger state machine and event flags remain; authority co-op radius checks consider every active registered owner light.",
+    "Original LumosSparkles effects run from the local viewport camera through a guarded simulated entrypoint; original SP states remain.",
+    "No proprietary maps/assets, Game/Harry code, broad AI behavior or active runtime tree are changed by this recipe."
   ],
   "known_gaps": [
     "firecrab.pushDirection still uses canonical PlayerHarry for subsequent ledge decisions.",
-    "Co-op enemy AI target selection and target vulnerability replication remain separate work."
+    "Native Lumos surface visibility follows the local light-owning viewport pawn; a partner only sees their own native Lumos reveal, while authoritative opened doors are shared.",
+    "Full campaign Lumos choreography and optional infinite/script commands require separate runtime coverage.",
+    "Gargoyle animation and secret-door mover replication must be verified in the two-player first-map runtime."
   ],
   "files": [
     {
@@ -37,6 +41,206 @@
           "new_sha256": "2b635485cea734ffd5ec60717485fbce2d65e01ba505f5de5116eac0114d42fa",
           "old": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n\tSuper.HandleSpellFlipendo(spell,vHitLocation);\n\tif ( bFlipPushable == True )\n\t{\n\t\tSetPhysics(PHYS_Falling);\n\t\tVelocity = Normal(Location - PlayerHarry.Location) * fFlipPushForceXY;\n\t\tVelocity.Z = fFlipPushForceZ;\n\t}\n\treturn True;\n}\n",
           "new": "function bool HandleSpellFlipendo (optional baseSpell spell, optional Vector vHitLocation)\n{\n\tlocal HPCoopGame CoopGame;\n\tlocal harry PushSource, CoopCaster;\n\n\tSuper.HandleSpellFlipendo(spell,vHitLocation);\n\tif ( bFlipPushable == True )\n\t{\n\t\t// Preserve the original actor context; only this shove uses its caster.\n\t\tPushSource = PlayerHarry;\n\t\tCoopGame = HPCoopGame(Level.Game);\n\t\tif ( Role == ROLE_Authority && Level.NetMode != NM_Client\n\t\t\t&& CoopGame != None && spell != None && !spell.bDeleteMe )\n\t\t{\n\t\t\tCoopCaster = harry(spell.Instigator);\n\t\t\tif ( CoopCaster == None || CoopCaster.bDeleteMe\n\t\t\t\t|| !CoopGame.IsCoopPlayer(CoopCaster) )\n\t\t\t\tCoopCaster = harry(spell.Owner);\n\t\t\tif ( CoopCaster != None && !CoopCaster.bDeleteMe\n\t\t\t\t&& CoopGame.IsCoopPlayer(CoopCaster) )\n\t\t\t\tPushSource = CoopCaster;\n\t\t}\n\t\tSetPhysics(PHYS_Falling);\n\t\tVelocity = Normal(Location - PushSource.Location) * fFlipPushForceXY;\n\t\tVelocity.Z = fFlipPushForceZ;\n\t}\n\treturn True;\n}\n"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Misc/gargoyle.uc",
+      "source_sha256": "dad22b913dde24935718eb39845d5d4672e6e6f730f43d3f68552da352a9699d",
+      "result_sha256": "ffd7c1dd256d120b059c67fd46d9ad49148cedd0d0f2bb081a88803a6d00d5b9",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "gargoyle.HandleSpellLumos",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "420bb6750420c412fa8643f400147656123ce86c829214d59a7178d7d37c7fa8",
+          "new_sha256": "41efaedcf652c29fa874725063770aa64172eeaf699b0637d50ad7321bf18c54",
+          "old": "function bool HandleSpellLumos (optional baseSpell spell, optional Vector vHitLocation)\n{\n  baseWand(PlayerHarry.Weapon).LumosTurnOn();\n  if ( bMakeLumosInfinite )\n  {\n    baseWand(PlayerHarry.Weapon).TheLumosLight.bInfiniteLumos = True;\n  }\n  GotoState('Green');\n  return True;\n}\n",
+          "new": "function bool HandleSpellLumos (optional baseSpell spell, optional Vector vHitLocation)\n{\n  local HPCoopGame CoopGame;\n  local HPCoopWand CoopWand;\n\n  CoopGame = HPCoopGame(Level.Game);\n  if ( spell != None )\n    CoopWand = HPCoopWand(spell.SpellWand);\n  if ( CoopGame != None || CoopWand != None )\n  {\n    if ( Role != ROLE_Authority || Level.NetMode == NM_Client\n      || CoopGame == None || spell == None || spell.bDeleteMe\n      || spell.Class != Class'spellLumos' || CoopWand == None\n      || spell.Owner != spell.Instigator || CoopWand.Owner != spell.Instigator\n      || !CoopGame.IsCoopPlayer(spell.Instigator) )\n      return False;\n    if ( !CoopWand.ActivateCoopLumos(bMakeLumosInfinite) )\n      return False;\n  }\n  else\n  {\n    baseWand(PlayerHarry.Weapon).LumosTurnOn();\n    if ( bMakeLumosInfinite )\n    {\n      baseWand(PlayerHarry.Weapon).TheLumosLight.bInfiniteLumos = True;\n    }\n  }\n  GotoState('Green');\n  return True;\n}\n"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Misc/LumosLight.uc",
+      "source_sha256": "1df4d788734072ef9ac3baa13ad56879a1afcff742230d026ad74f5495f8e57a",
+      "result_sha256": "351194f4a793edfff85afa99c60d30b7336fd69078cbf08348a3469691477a34",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "LumosLight.PreBeginPlay owner resolution",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "407ce6ab0c80ccc1e31297cce53e3560af2cd0043195957c62cb474fb17c76aa",
+          "new_sha256": "8d7de9471678b6936fbef0d26790a71305f34e47d740ebe528faf4244a844c84",
+          "old": "  PlayerHarry = harry(Level.PlayerHarryActor);\n  // SetPhysics(0);",
+          "new": "  if ( HPCoopWand(Owner) != None )\n  {\n    PlayerHarry = harry(Owner.Owner);\n    RemoteRole = ROLE_None;\n  }\n  else\n    PlayerHarry = harry(Level.PlayerHarryActor);\n  // SetPhysics(0);"
+        },
+        {
+          "function": "LumosLight.PreBeginPlay valid owner",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "9bc5053f5bf63eea0b82f939ab8ea60666ec6e2e8e777c205941693143af8de0",
+          "new_sha256": "b63b0f29daf43f8d85ced4d2a9abd6b6acdaa85989e0858db00caef6e554b9a2",
+          "old": "  Disable('Tick');\n  PlayerHarry.bLumosOn = False;\n}",
+          "new": "  Disable('Tick');\n  if ( PlayerHarry != None )\n    PlayerHarry.bLumosOn = False;\n}"
+        },
+        {
+          "function": "LumosLight.ScaleParticles headless guard",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "d4d6a6aa57ab722c2751a63ddb981ce544cb06a5e9ddcb91ef8d044c628379da",
+          "new_sha256": "dc4019eadfd42fc0f2c0964f77e54199193a12a0f046f24ade3416ee87d949da",
+          "old": "  Particles.SizeWidth.Base = Particles.Default.SizeWidth.Base * fScale;\n  Particles.SizeLength.Base = Particles.Default.SizeLength.Base * fScale;",
+          "new": "  if ( Particles != None )\n  {\n    Particles.SizeWidth.Base = Particles.Default.SizeWidth.Base * fScale;\n    Particles.SizeLength.Base = Particles.Default.SizeLength.Base * fScale;\n  }"
+        },
+        {
+          "function": "LumosLight.UpdateLocation headless guard",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "146b99da3ce8bd0bb1f28c41294d5e3ce03e68647f0ba245b838221b909dc790",
+          "new_sha256": "ca022d3f0cd4037cc7c44f557664d250924cba5ab9d986cedadd4c718f975577",
+          "old": "  SetLocation(NewLocation);\n  Particles.SetLocation(NewLocation);",
+          "new": "  SetLocation(NewLocation);\n  if ( Particles != None )\n    Particles.SetLocation(NewLocation);"
+        },
+        {
+          "function": "LumosLight.TurnOn authority gate",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "2dad9ab3456db00e3ef0f1e39bfc56eb519bbbf0860f2235a98e82b4968c4e97",
+          "new_sha256": "b0962ad828669c4b476e255c6be5c8ffa9b2c91d0a11eaebbd7105522a89d89b",
+          "old": "function TurnOn()\n{\n  local Actor A;\n\n",
+          "new": "function TurnOn()\n{\n  local Actor A;\n  local HPCoopWand CoopWand;\n\n  CoopWand = HPCoopWand(Owner);\n  if ( CoopWand != None && !CoopWand.CanUseCoopLumosLight(self) )\n    return;\n"
+        },
+        {
+          "function": "LumosLight.TurnOn active source",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "83cfadfa0450005da50612b25a66c7ee8f45f3aaefa2a7113965a074780fe367",
+          "new_sha256": "762f28b829ba2157831571ca8a8a213b30d8b351d1fd993f1b3baa417dd66ca3",
+          "old": "  if ( PlayerHarry.bLumosOn )\n  {\n    return;\n  }",
+          "new": "  if ( (CoopWand == None && PlayerHarry.bLumosOn)\n    || (CoopWand != None && bLumosOn) )\n  {\n    return;\n  }"
+        },
+        {
+          "function": "LumosLight.TurnOn scoped notification",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "aa58b9f65b933f04bdf9899c46d0f4bdb5e760372a25f5bc4d1e5d8a23685d07",
+          "new_sha256": "961c5984ed09e13a71af03cc73f537f53bd6cfb1c3d0c325a043c04b4094be42",
+          "old": "  TurnDynamicLightOn();\n  foreach AllActors(Class'Actor',A)",
+          "new": "  TurnDynamicLightOn();\n  if ( CoopWand != None )\n  {\n    CoopWand.CoopLumosActivated(self);\n    return;\n  }\n  foreach AllActors(Class'Actor',A)"
+        },
+        {
+          "function": "LumosLight.TurnOff authority gate",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "9abde429c55cd3a9a7e5d1c4c2cc33970c7e3f5580d84f3473f54ee2b30f6204",
+          "new_sha256": "246873a367dcd6ac43cd5fca0f3f5ca397d29c7b8ff0e9f2550e4cf862a3872e",
+          "old": "function TurnOff()\n{\n  local Actor A;\n\n",
+          "new": "function TurnOff()\n{\n  local Actor A;\n  local HPCoopWand CoopWand;\n\n  CoopWand = HPCoopWand(Owner);\n  if ( CoopWand != None && (Role != ROLE_Authority || Level.NetMode == NM_Client) )\n    return;\n"
+        },
+        {
+          "function": "LumosLight.TurnOff valid owner",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "8267084567bf74b2aa2192da7983221d70b33990cd1ef309665f27584fd01cac",
+          "new_sha256": "533f2a1ef9c0bd0b7c274c2a32e3583a228ae1790ba87dc772758492fe74dae9",
+          "old": "  bLumosOn = False;\n  PlayerHarry.bLumosOn = False;\n  Disable('Tick');",
+          "new": "  bLumosOn = False;\n  if ( PlayerHarry != None )\n    PlayerHarry.bLumosOn = False;\n  Disable('Tick');"
+        },
+        {
+          "function": "LumosLight.TurnOff scoped notification",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "c6d3101e96c2505368f6fc82802c335a93aa32163d1f5509a90bc810c3371926",
+          "new_sha256": "336811a9ed36df97ae191a7d626db1d4d5e4aa7fc9b4c04c8873e7de62629679",
+          "old": "  TurnDynamicLightOff();\n  foreach AllActors(Class'Actor',A)",
+          "new": "  TurnDynamicLightOff();\n  if ( CoopWand != None )\n  {\n    CoopWand.CoopLumosDeactivated(self);\n    return;\n  }\n  foreach AllActors(Class'Actor',A)"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Triggers/LumosTrigger.uc",
+      "source_sha256": "d8b2d2bd3839077eed2fe1244fd86f53def601552522a44ddd059810d1c9ecda",
+      "result_sha256": "66d27370b5e3c623e6722cafae1df5a16d7c787e940caf489d0e24c485ae0d33",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "LumosTrigger.InLumosRadius",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "8d46256bb75597cf4a91676e6ebc665b8731c70f4f223e2b8af0aad36e293463",
+          "new_sha256": "a7af493821e4571d6a378c7abc73133302356d7d184e008401642c4c0ba58488",
+          "old": "function bool InLumosRadius()\n{\n  if ( VSize(Location - PlayerHarry.Location) < fDistanceCheck )\n  {\n    return True;\n  }\n  return False;\n}\n",
+          "new": "function bool InLumosRadius()\n{\n  local HPCoopGame CoopGame;\n  local HPCoopWand CoopWand;\n  local LumosLight Light;\n  local harry Source;\n\n  CoopGame = HPCoopGame(Level.Game);\n  if ( CoopGame != None )\n  {\n    if ( Role != ROLE_Authority || Level.NetMode == NM_Client )\n      return False;\n    foreach AllActors(Class'LumosLight', Light)\n    {\n      CoopWand = HPCoopWand(Light.Owner);\n      if ( CoopWand == None || !Light.bLumosOn || Light.bDeleteMe )\n        continue;\n      Source = harry(CoopWand.Owner);\n      if ( Source == None || Source.bDeleteMe || Source.Weapon != CoopWand\n        || Light.PlayerHarry != Source || !CoopGame.IsCoopPlayer(Source) )\n        continue;\n      if ( VSize(Location - Source.Location) >= fDistanceCheck )\n        continue;\n      // Original Z restriction applies when entering, not when already on.\n      if ( IsInState('StateWaitingToTurnOn') && bUseZDistanceCheck\n        && Abs(Location.Z - Source.Location.Z) >= fZDistanceCheck )\n        continue;\n      PlayerHarry = Source;\n      return True;\n    }\n    return False;\n  }\n  if ( VSize(Location - PlayerHarry.Location) < fDistanceCheck )\n  {\n    return True;\n  }\n  return False;\n}\n"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Triggers/LumosSparkles.uc",
+      "source_sha256": "c0a7326da8dedad72e35d4f99459f2dc4d39b8995917f0bb16cd9ed77663abc2",
+      "result_sha256": "f5f5978e31e68ef6eb922871b5f46b40bf9b70bc64cdd14da01778de3fb86b99",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "LumosSparkles.TurnOnAreaEffects local presentation",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "742bfdf4c6279693b0286ec0b943c48cdcdc552cbe00e6ca9f6f7789a656ce9a",
+          "new_sha256": "ad6af3d860e5e51f6634d8890de107e90b61c30e72f942c68abf64eba3c82fa4",
+          "old": "function TurnOnAreaEffects()",
+          "new": "simulated function TurnOnAreaEffects()"
+        },
+        {
+          "function": "LumosSparkles.TurnOffAreaEffects local presentation",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "fcc800896f87bf1fd2e2a8ecd8847609d4def5548d1821b2c93a7f072dad41b8",
+          "new_sha256": "be16f8dd163a489c7d39707ed14823147fe5919b1338b52efa63b3832e52971a",
+          "old": "function TurnOffAreaEffects()",
+          "new": "simulated function TurnOffAreaEffects()"
+        },
+        {
+          "function": "LumosSparkles.TurnOnEdgeEffects local presentation",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "8b64999698471ed8048815ba6302b6d24d85543916fddaa38daf91601e12611b",
+          "new_sha256": "c938b6de283801a3da7f4f88b39aff561bb5166a817d0ae737c858c103d7373b",
+          "old": "function TurnOnEdgeEffects()",
+          "new": "simulated function TurnOnEdgeEffects()"
+        },
+        {
+          "function": "LumosSparkles.TurnOffEdgeEffects local presentation",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "a8fba7a12d8a12a878e4e8b79f482ba2a7090f2a98399c3b23ee42102bc47b67",
+          "new_sha256": "9961a0055a1aaa40f96df4e3318dfca9881fe6097d958a6ab4a25d80dcb53eb5",
+          "old": "function TurnOffEdgeEffects()",
+          "new": "simulated function TurnOffEdgeEffects()"
+        },
+        {
+          "function": "LumosSparkles.UpdateSparkles local presentation",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "077b9426d4ac3aabb75a71a08fd500688d3106f19f673f7d2834d97a8314b7fa",
+          "new_sha256": "bbc47aa217d917bff2c3a75027bc28adf114f04ba8571ff5674336f964923d30",
+          "old": "function UpdateSparkles()",
+          "new": "simulated function UpdateSparkles()"
+        },
+        {
+          "function": "LumosSparkles.TurnOnAreaEffects local particle owner",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "4215e3a4608fb11216ea19d23bbabc0125bb10de94a41af1bf46be6531ef66f8",
+          "new_sha256": "ccbd35bb52b042e167a468716d0d136bdebe02cc48614d5e87b83c99045e8417",
+          "old": "    fxAreaSparkles = Spawn(fxAreaSparklesClass,self,,Location);\n    fxAreaSparkles.SourceDepth.Base",
+          "new": "    fxAreaSparkles = Spawn(fxAreaSparklesClass,self,,Location);\n    if ( fxAreaSparkles == None )\n      return;\n    if ( HPCoopHarry(PlayerHarry) != None )\n      fxAreaSparkles.RemoteRole = ROLE_None;\n    fxAreaSparkles.SourceDepth.Base"
+        },
+        {
+          "function": "LumosSparkles.TurnOnEdgeEffects local particle owner",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "69b0bbbd4cf55dffbcb863c9f8ad2928bdc6bfbf6049afed507b48ebc2acc357",
+          "new_sha256": "69dfc6f15c18c7f258306ae85ac7b4acc1b08ab6b8a0abcc157b9a6648a8081f",
+          "old": "      fxEdgeSparkles[I] = Spawn(fxEdgeSparklesClass,self,,Location);\n      fxEdgeSparkles[I].SourceDepth.Base",
+          "new": "      fxEdgeSparkles[I] = Spawn(fxEdgeSparklesClass,self,,Location);\n      if ( HPCoopHarry(PlayerHarry) != None && fxEdgeSparkles[I] != None )\n        fxEdgeSparkles[I].RemoteRole = ROLE_None;\n      fxEdgeSparkles[I].SourceDepth.Base"
+        },
+        {
+          "function": "LumosSparkles.UpdateSparkles failed area allocation",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "efc8948a39eabbec6befa41bcaa50efb4394aa7e897681421205ad06c89cab5c",
+          "new_sha256": "4e7c230ae7b00ccc7ff2e118e71b47c988e6f543560adc66e71dcfdb19e4c09b",
+          "old": "    TurnOnAreaEffects();\n    fxAreaSparkles.ParticlesPerSec.Base",
+          "new": "    TurnOnAreaEffects();\n    if ( fxAreaSparkles == None )\n      return;\n    fxAreaSparkles.ParticlesPerSec.Base"
+        },
+        {
+          "function": "LumosSparkles.UpdateCoopLumosSparkles",
+          "action": "owner-scoped-coop-lumos",
+          "old_sha256": "3568ac73b0eeab4cd86874c3d6fecb78a3bc2319473abd78d420d6cd30da544a",
+          "new_sha256": "5839d96b4c48b9455e8b2d458c17bd3e1f7eaa01e1e9962b30dc98ba157e7e9a",
+          "old": "auto state StateLumosOff",
+          "new": "// Called only by an owning-client co-op Lumos visual, never by authority\n// trigger logic. Original single-player state transitions remain unchanged.\nsimulated function UpdateCoopLumosSparkles(harry LocalViewer, bool bEnabled)\n{\n  if ( Level.NetMode == NM_DedicatedServer || HPCoopHarry(LocalViewer) == None\n    || LocalViewer.Player == None || Viewport(LocalViewer.Player) == None )\n    return;\n  PlayerHarry = LocalViewer;\n  if ( !bEnabled || LocalViewer.Cam == None )\n  {\n    TurnOffAreaEffects();\n    TurnOffEdgeEffects();\n    return;\n  }\n  UpdateSparkles();\n}\n\nauto state StateLumosOff"
         }
       ]
     }

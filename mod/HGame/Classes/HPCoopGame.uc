@@ -40,12 +40,14 @@ event InitGame(string Options, out string Error)
     if (bCoopCapturedAuthorityDiagnostic && (Level.NetMode != NM_DedicatedServer
         || !(TestStage ~= "RictusempraLessonComplete")
         || (RuntimeProbe != "" && !(RuntimeProbe ~= "AIInspect")
-            && !(RuntimeProbe ~= "AICombat"))))
+            && !(RuntimeProbe ~= "AICombat")
+            && !(RuntimeProbe ~= "MountRootB0")
+            && !(RuntimeProbe ~= "MountRootB1"))))
     {
         Error = "CoopCapturedAuthority requires dedicated Ch1 with no active probe.";
         return;
     }
-    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat")
+    if (RuntimeProbe != "" && (!(RuntimeProbe ~= "Health") && !(RuntimeProbe ~= "Lumos") && !(RuntimeProbe ~= "Pickup") && !(RuntimeProbe ~= "PickupNet") && !(RuntimeProbe ~= "AIInspect") && !(RuntimeProbe ~= "AICombat") && !(RuntimeProbe ~= "MountRootB0") && !(RuntimeProbe ~= "MountRootB1")
         || !(TestStage ~= "RictusempraLessonComplete") || Level.NetMode != NM_DedicatedServer))
     {
         Error = "CoopProbe requires a dedicated Ch1 test fixture and a known probe.";
@@ -90,6 +92,12 @@ event InitGame(string Options, out string Error)
         || GetIntOption(Options, "RequiredPlayers", 2) != 2))
     {
         Error = "CoopFirstIntroPreflight requires captured diagnostic and two players.";
+        return;
+    }
+    if (((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1"))
+        && (!bCoopFirstIntroPreflight || CoopIntroFault != ""))
+    {
+        Error = "MountRoot diagnostic requires the normal first-intro preflight.";
         return;
     }
     MaxPlayers = 2;
@@ -144,6 +152,8 @@ event PostBeginPlay()
     }
     if (RuntimeProbe ~= "AIInspect") Spawn(Class'HPCoopAIInspectProbe', self);
     if (RuntimeProbe ~= "AICombat") Spawn(Class'HPCoopAICombatProbe', self);
+    if ((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1"))
+        Spawn(Class'HPCoopMountRootProbe', self);
     if (LegacyStoryHarry == None)
         LegacyStoryHarry = harry(Level.PlayerHarryActor);
     CampaignState = Spawn(Class'HPCoopCampaignState', self);
@@ -476,7 +486,10 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
     if (CoopPlayers[0] != None)
         PendingLoginSlot = 1;
     bLoginInProgress = True;
-    P = Super.Login(Portal, Options, Error, Class'HPCoopHarry');
+    if ((RuntimeProbe ~= "MountRootB0") || (RuntimeProbe ~= "MountRootB1"))
+        P = Super.Login(Portal, Options, Error, Class'HPCoopMountTrialHarry');
+    else
+        P = Super.Login(Portal, Options, Error, Class'HPCoopHarry');
     bLoginInProgress = False;
     H = HPCoopHarry(P);
     if (H == None)

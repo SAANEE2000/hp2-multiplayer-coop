@@ -2,7 +2,7 @@
 param(
     [switch]$RenderPreview,
     [switch]$SelfTest,
-    [ValidateSet('Main','Coop','Versus','CoopHost','CoopJoin','VersusHost','VersusJoin')]
+    [ValidateSet('Main','Coop','Versus','CoopStart','CoopLevels','CoopLoad','CoopHost','CoopJoin','VersusHost','VersusJoin')]
     [string]$PreviewPage = 'Main'
 )
 $ErrorActionPreference = 'Stop'
@@ -93,16 +93,19 @@ function Add-MenuInput {
 }
 
 function Invoke-MenuGame {
-    param([string]$Mode, [string]$Address, [int]$PortNumber, [string]$Name)
+    param([string]$Mode, [string]$Address, [int]$PortNumber, [string]$Name,
+          [string]$CoopMap = 'Ch1Rictusempra')
     try {
         if ($SelfTest) {
             $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') `
-                -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name -DryRun
+                -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name `
+                -CoopMap $CoopMap -DryRun
             $script:lastTestLaunch = $result
             return
         }
         $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') `
-            -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name
+            -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name `
+            -CoopMap $CoopMap
         if (!$result) { throw 'The game did not report a successful launch.' }
         $script:form.Close()
     } catch {
@@ -131,7 +134,10 @@ function Show-ModeMenu {
     $script:currentMode = $Mode
     $title = if ($Mode -eq 'Coop') { 'Кооператив' } else { 'Версус' }
     [void](Add-MenuLabel $title 275 35 19)
-    [void](Add-MenuButton 'Создать сервер' 355 { Show-HostMenu })
+    [void](Add-MenuButton 'Создать сервер' 355 {
+        if ($script:currentMode -eq 'Coop') { Show-CoopStartMenu }
+        else { Show-HostMenu }
+    })
     [void](Add-MenuButton 'Подключиться' 445 { Show-JoinMenu })
     [void](Add-MenuButton 'Назад' 555 { Show-MainMenu })
     if ($Mode -eq 'Coop') {
@@ -139,17 +145,76 @@ function Show-ModeMenu {
     }
 }
 
+function Show-CoopStartMenu {
+    Clear-MenuPage
+    $script:page = 'CoopStart'
+    [void](Add-MenuLabel 'Кооператив: создать сервер' 263 38 17)
+    [void](Add-MenuButton 'Новая игра' 337 {
+        Show-CoopHostMenu 'Ch1Rictusempra'
+    })
+    [void](Add-MenuButton 'Загрузить' 421 { Show-CoopLoadMenu })
+    [void](Add-MenuButton 'Выбор уровня' 505 { Show-CoopLevelsMenu })
+    [void](Add-MenuButton 'Назад' 601 { Show-ModeMenu 'Coop' })
+    [void](Add-MenuLabel 'Новая игра начинает тест с урока Риктусемпра.' 682 25 9)
+}
+
+function Show-CoopLoadMenu {
+    Clear-MenuPage
+    $script:page = 'CoopLoad'
+    [void](Add-MenuLabel 'Загрузка кооператива' 272 38 18)
+    [void](Add-MenuLabel 'Сохранения кооператива пока не поддерживаются.' 360 36 12)
+    [void](Add-MenuLabel 'Одиночные сохранения здесь открывать нельзя:' 403 30 11)
+    [void](Add-MenuLabel 'они не восстанавливают состояние двух игроков.' 435 30 11)
+    [void](Add-MenuButton 'Выбор уровня' 520 { Show-CoopLevelsMenu })
+    [void](Add-MenuButton 'Назад' 612 { Show-CoopStartMenu })
+}
+
+function Show-CoopLevelsMenu {
+    Clear-MenuPage
+    $script:page = 'CoopLevels'
+    [void](Add-MenuLabel 'Выбор уровня' 251 38 18)
+    [void](Add-MenuButton 'Риктусемпра' 300 { Show-CoopHostMenu 'Ch1Rictusempra' })
+    [void](Add-MenuButton 'Скурдж (эксп.)' 374 { Show-CoopHostMenu 'Ch2Skurge' })
+    [void](Add-MenuButton 'Диффиндо (эксп.)' 448 { Show-CoopHostMenu 'Ch3Diffindo' })
+    [void](Add-MenuButton 'Спонгифай (эксп.)' 522 { Show-CoopHostMenu 'Ch4Spongify' })
+    [void](Add-MenuButton 'Назад' 608 { Show-CoopStartMenu })
+    [void](Add-MenuLabel 'Другие уровни — прямой тестовый запуск, без прогресса.' 690 22 9)
+}
+
+function Show-CoopHostMenu {
+    param([ValidateSet('Ch1Rictusempra','Ch2Skurge','Ch3Diffindo','Ch4Spongify')]
+          [string]$Map)
+    $script:coopMap = $Map
+    Show-HostMenu
+}
+
 function Show-HostMenu {
     Clear-MenuPage
     $script:page = 'Host'
     $title = if ($script:currentMode -eq 'Coop') { 'Кооператив: сервер' } else { 'Версус: сервер' }
     [void](Add-MenuLabel $title 275 35 18)
-    $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry' 370 300
-    [void](Add-MenuLabel 'Порт сервера: 7777  •  Максимум: 2 игрока' 425 30 11)
-    [void](Add-MenuButton 'Запустить сервер' 485 {
-        Invoke-MenuGame ($script:currentMode + 'Host') '127.0.0.1' 7777 $script:nameBox.Text
+    if ($script:currentMode -eq 'Coop') {
+        $mapLabel = switch ($script:coopMap) {
+            Ch1Rictusempra { 'Риктусемпра' }
+            Ch2Skurge { 'Скурдж (эксп.)' }
+            Ch3Diffindo { 'Диффиндо (эксп.)' }
+            Ch4Spongify { 'Спонгифай (эксп.)' }
+        }
+        [void](Add-MenuLabel ("Уровень: " + $mapLabel) 318 30 11)
+    }
+    $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry' 385 300
+    [void](Add-MenuLabel 'Порт сервера: 7777  •  Максимум: 2 игрока' 440 30 11)
+    [void](Add-MenuButton 'Запустить сервер' 500 {
+        Invoke-MenuGame ($script:currentMode + 'Host') '127.0.0.1' 7777 `
+            $script:nameBox.Text $script:coopMap
     })
-    [void](Add-MenuButton 'Назад' 585 { Show-ModeMenu $script:currentMode })
+    [void](Add-MenuButton 'Назад' 595 {
+        if ($script:currentMode -eq 'Coop') { Show-CoopStartMenu }
+        else { Show-ModeMenu $script:currentMode }
+    })
+    if ($script:currentMode -eq 'Coop' -and $script:coopMap -ne 'Ch1Rictusempra') {
+        [void](Add-MenuLabel 'Экспериментальный прямой старт: прогресс не переносится.' 674 28 9)
+    }
 }
 
 function Show-JoinMenu {
@@ -177,7 +242,10 @@ function Show-JoinMenu {
 $script:form.Add_KeyDown({
     param($sender, $eventArgs)
     if ($eventArgs.KeyCode -ne [System.Windows.Forms.Keys]::Escape) { return }
-    if ($script:page -in @('Host','Join')) { Show-ModeMenu $script:currentMode }
+    if ($script:page -eq 'Host' -and $script:currentMode -eq 'Coop') { Show-CoopStartMenu }
+    elseif ($script:page -eq 'CoopLevels' -or $script:page -eq 'CoopLoad') { Show-CoopStartMenu }
+    elseif ($script:page -eq 'CoopStart') { Show-ModeMenu 'Coop' }
+    elseif ($script:page -in @('Host','Join')) { Show-ModeMenu $script:currentMode }
     elseif ($script:page -eq 'Mode') { Show-MainMenu }
     else { $script:form.Close() }
 })
@@ -188,7 +256,11 @@ try {
         $script:form.Show()
         [System.Windows.Forms.Application]::DoEvents()
         foreach ($step in @(
-            @('Кооператив','Mode'), @('Подключиться','Join'), @('Назад','Mode'),
+            @('Кооператив','Mode'), @('Создать сервер','CoopStart'),
+            @('Загрузить','CoopLoad'), @('Выбор уровня','CoopLevels'),
+            @('Скурдж (эксп.)','Host'), @('Назад','CoopStart'),
+            @('Выбор уровня','CoopLevels'), @('Назад','CoopStart'),
+            @('Назад','Mode'), @('Подключиться','Join'), @('Назад','Mode'),
             @('Назад','Main'), @('Версус','Mode'), @('Создать сервер','Host'),
             @('Назад','Mode'), @('Назад','Main')
         )) {
@@ -213,14 +285,34 @@ try {
             throw 'Single-player menu route failed.'
         }
         Show-ModeMenu 'Coop'
-        Show-HostMenu
+        Show-CoopStartMenu
+        $newCoopButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Новая игра'
+        }) | Select-Object -First 1
+        $newCoopButton.PerformClick()
+        if ($script:page -ne 'Host' -or $script:coopMap -ne 'Ch1Rictusempra') {
+            throw 'Co-op new-game menu route failed.'
+        }
         $hostButton = @($script:form.Controls | Where-Object {
             $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Запустить сервер'
         }) | Select-Object -First 1
         $hostButton.PerformClick()
         if ($script:lastTestLaunch.LaunchMode -ne 'CoopHost' -or
-            $script:lastTestLaunch.URL -notmatch 'HGame\.HPCoopGame\?listen') {
+            $script:lastTestLaunch.URL -notmatch '^Ch1Rictusempra\.unr\?game=HGame\.HPCoopGame\?listen') {
             throw 'Co-op host menu route failed.'
+        }
+        Show-CoopLevelsMenu
+        $levelButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Диффиндо (эксп.)'
+        }) | Select-Object -First 1
+        $levelButton.PerformClick()
+        $hostButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Запустить сервер'
+        }) | Select-Object -First 1
+        $hostButton.PerformClick()
+        if ($script:lastTestLaunch.CoopMap -ne 'Ch3Diffindo' -or
+            $script:lastTestLaunch.URL -notmatch '^Ch3Diffindo\.unr\?game=HGame\.HPCoopGame\?listen') {
+            throw 'Co-op level-selection route failed.'
         }
         Show-ModeMenu 'Versus'
         Show-JoinMenu
@@ -237,7 +329,10 @@ try {
         switch ($PreviewPage) {
             Coop       { Show-ModeMenu 'Coop' }
             Versus     { Show-ModeMenu 'Versus' }
-            CoopHost   { Show-ModeMenu 'Coop'; Show-HostMenu }
+            CoopStart  { Show-ModeMenu 'Coop'; Show-CoopStartMenu }
+            CoopLevels { Show-ModeMenu 'Coop'; Show-CoopLevelsMenu }
+            CoopLoad   { Show-ModeMenu 'Coop'; Show-CoopLoadMenu }
+            CoopHost   { Show-ModeMenu 'Coop'; Show-CoopHostMenu 'Ch1Rictusempra' }
             CoopJoin   { Show-ModeMenu 'Coop'; Show-JoinMenu }
             VersusHost { Show-ModeMenu 'Versus'; Show-HostMenu }
             VersusJoin { Show-ModeMenu 'Versus'; Show-JoinMenu }

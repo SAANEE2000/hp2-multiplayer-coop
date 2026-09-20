@@ -5,6 +5,8 @@ param(
     [string]$Server = '127.0.0.1',
     [ValidateRange(1024,65535)][int]$Port = 7777,
     [string]$PlayerName = 'Harry',
+    [ValidateSet('Ch1Rictusempra','Ch2Skurge','Ch3Diffindo','Ch4Spongify')]
+    [string]$CoopMap = 'Ch1Rictusempra',
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -61,7 +63,7 @@ $runRoot = $prepared.runRoot
 $url = switch ($LaunchMode) {
     Original   { 'startup.unr?game=Engine.GameInfo' }
     Single     { 'PrivetDr.unr?game=Engine.GameInfo' }
-    CoopHost   { "Ch1Rictusempra.unr?game=HGame.HPCoopGame?listen?MaxPlayers=2?Name=$PlayerName" }
+    CoopHost   { "$CoopMap.unr?game=HGame.HPCoopGame?listen?MaxPlayers=2?Name=$PlayerName" }
     CoopJoin   { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Coop" }
     VersusHost { "HPV_Entry.unr?game=HGame.HPVersusGame?listen?MaxPlayers=2?Name=$PlayerName`?ScoreLimit=3" }
     VersusJoin { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Versus" }
@@ -69,7 +71,7 @@ $url = switch ($LaunchMode) {
 $mapName = switch ($LaunchMode) {
     Original { 'startup.unr' }
     Single { 'PrivetDr.unr' }
-    CoopHost { 'Ch1Rictusempra.unr' }
+    CoopHost { "$CoopMap.unr" }
     VersusHost { 'HPV_Entry.unr' }
     default { 'Entry.unr' }
 }
@@ -80,7 +82,7 @@ $arguments = @($url, '-windowed', '-NOFRONTEND', '-NewWindow',
     ('INI=' + (Split-Path $prepared.engineIni -Leaf)),
     ('USERINI=' + (Split-Path $prepared.userIni -Leaf)), "-log=$logName", '-FORCEFLUSH')
 if ($DryRun) {
-    [PSCustomObject]@{LaunchMode=$LaunchMode; URL=$url; Arguments=$arguments;
+    [PSCustomObject]@{LaunchMode=$LaunchMode; CoopMap=$CoopMap; URL=$url; Arguments=$arguments;
         EngineIni=$prepared.engineIni; UserIni=$prepared.userIni; Executable=$exe}
     return
 }

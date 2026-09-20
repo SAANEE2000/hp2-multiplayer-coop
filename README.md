@@ -16,3 +16,5 @@ open a start menu using the original menu art, with Single Player, Co-op and
 Versus routes into the verified `.local/game` copy. The native three-button
 Game.exe front-end is preserved for save loading and settings. See
 `docs/MENU_TEST_QUICKSTART.md` for setup on another PC.
+Co-op server creation offers a new Ch1 test, direct level launch for Ch1–Ch4,
+and an honest load screen: co-op save/load is not implemented yet.

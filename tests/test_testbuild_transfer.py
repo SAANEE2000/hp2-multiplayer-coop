@@ -99,6 +99,10 @@ class TestBuildTransfer(unittest.TestCase):
         self.assertEqual(files(self.repo), before)
 
     def test_roundtrip_validation_backups_and_honest_origin(self):
+        manifest = self.local / "source-manifest.json"
+        manifest.write_text('[{"path":"mod/example.uc","sha256":"fixture"}]', encoding="utf-8")
+        self.build.update(sourceDirty=True, sourceManifest=str(manifest), commit="1" * 40)
+        self.write_build()
         artifact = self.export()
         before = files(self.repo)
         validated = self.run_script("Import-TestBuild.ps1", "-Artifact", artifact, "-WorkRoot", self.target, "-ValidateOnly")
@@ -112,6 +116,9 @@ class TestBuildTransfer(unittest.TestCase):
         self.assertIsNone(imported["exitCode"])
         self.assertTrue(imported["artifactIntegrityVerified"])
         self.assertTrue(imported["sourceBuild"]["passed"])
+        self.assertTrue(imported["sourceBuild"]["sourceDirty"])
+        self.assertEqual(imported["sourceBuild"]["sourceManifestSha256"], digest(manifest.read_bytes()))
+        self.assertEqual(imported["sourceBuild"]["commit"], "1" * 40)
         self.assertFalse(imported["baseline"])
         backups = Path(imported["importRoot"])
         for name, value in self.packages.items():

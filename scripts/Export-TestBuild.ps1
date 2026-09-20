@@ -27,7 +27,11 @@ if ($build.origin -eq 'imported-test-build') {
     }
     $sourceBuild = $build.sourceBuild
 } else {
-    $sourceBuild = [ordered]@{passed=$build.passed; exitCode=$build.exitCode; baseline=$build.baseline; commit=$build.commit}
+    $sourceBuild = [ordered]@{passed=$build.passed; exitCode=$build.exitCode; baseline=$build.baseline;
+        commit=$build.commit; sourceDirty=$build.sourceDirty; sourceManifestSha256=$null}
+    if ($build.sourceManifest -and (Test-Path -LiteralPath $build.sourceManifest -PathType Leaf)) {
+        $sourceBuild.sourceManifestSha256 = (Get-FileHash -LiteralPath $build.sourceManifest -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
 }
 if ($sourceBuild.passed -isnot [bool] -or !$sourceBuild.passed -or $sourceBuild.exitCode -ne 0 -or
     $sourceBuild.baseline -isnot [bool]) { throw 'A recorded source UCC PASS and explicit baseline flag are required.' }
@@ -73,7 +77,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 $manifest = [ordered]@{
     schemaVersion=1; kind='hp2-private-test-build'; createdUtc=[DateTime]::UtcNow.ToString('o')
     sourceBuild=$sourceBuild; exportCommit=$exportCommit
-    commitNote='exportCommit is the HEAD at export time; sourceBuild.commit is unknown unless recorded by the source build.'
+    commitNote='exportCommit is HEAD at export; sourceBuild.commit is build-time HEAD, not a claim of clean sources. Null sourceDirty means unknown; true means uncommitted inputs. Package hashes identify the actual binary build.'
     files=$files
     distribution='Private transfer between licensed development copies only; do not publish game packages.'
 }

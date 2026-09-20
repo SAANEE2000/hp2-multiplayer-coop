@@ -25,7 +25,7 @@
 На втором ПК подготовить собственную development copy и после остановки её Game/UCC проверить и импортировать полученный архив (имя ZIP заменить на фактическое):
 
 ```powershell
-.\scripts\Prepare-LocalGame.ps1
+.\scripts\Prepare-LocalGame.ps1 -GameRoot 'D:\Games\HP2-M212'
 .\scripts\Import-TestBuild.ps1 -Artifact '.local\distribution\hp2-test-build-ИМЯ.zip' -ValidateOnly
 .\scripts\Import-TestBuild.ps1 -Artifact '.local\distribution\hp2-test-build-ИМЯ.zip'
 ```

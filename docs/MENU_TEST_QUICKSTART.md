@@ -31,19 +31,17 @@ $artifact = '.local\distribution\hp2-test-build-20260921-003721-386-d3cfc7e9.zip
 
 ## Запуск через меню
 
-На ПК A запустите игру из рабочей копии. Если нужен отдельный диагностический
-лог для каждой сессии, выполните в PowerShell:
+На ПК A запустите [Play-Menu-Test.cmd](../Play-Menu-Test.cmd) двойным щелчком
+из распакованного комплекта либо выполните в PowerShell:
 
 ```powershell
-Push-Location (Join-Path $workRoot 'System')
-$env:__COMPAT_LAYER = 'RunAsInvoker'
-.\Game.exe -windowed -NewWindow -log=MenuHost.log
-Pop-Location
+.\scripts\Start-MenuTest.ps1
 ```
 
-Для второго ПК замените имя на `MenuClient.log`, для отдельного одиночного
-запуска — на `MenuSingle.log`. Для одиночной кампании нажмите `Single Player`.
-Она открывает исходную карту `PrivetDr.unr` с обычным `Engine.GameInfo`.
+Скрипт проверяет тестовые пакеты, готовит отдельный профиль и открывает
+`startup.unr` с новым меню. Каждый запуск создаёт лог с уникальным именем.
+Для одиночной кампании нажмите `Single Player`. Она открывает исходную карту
+`PrivetDr.unr` с обычным `Engine.GameInfo`.
 
 Для сети на ПК A выберите `Multiplayer` → `Co-op campaign` либо `Versus` →
 `Create server`. Сервер использует порт 7777, вмещает двух игроков и сразу
@@ -61,9 +59,8 @@ Pop-Location
 
 После проверки пришлите три session-лога: сервер и клиент для сетевого запуска,
 а также отдельный лог одиночного запуска; укажите, что фактически было видно
-на экранах и работали ли управление/камеры. При запуске с `-log=...` файлы
-лежат в `Документы\HP2-Multiplayer-Development`; штатные логи могут быть в
-его подкаталоге `Logs`.
+на экранах и работали ли управление/камеры. Логи запуска через скрипт имеют
+имя `HP2MP-menu-*.log` и лежат в `Документы\HP2-Multiplayer-Development`.
 Особенно полезны строки `[MP_MENU]`, `[MP_LOGIN]`, `Join succeeded`,
 `[MP_CUTSCENE]` и `HPVersusSpellSelect`. Локальный сетевой smoke test уже
 подтвердил загрузку карт и вход двух игроков, но клики по меню, изображение и

@@ -9,6 +9,11 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
 $logRoot = Join-Path $repo ".local\builds\$stamp"
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 if (!$Baseline) {
+    $recipes = @(Get-ChildItem -LiteralPath (Join-Path $repo 'patches') -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)
+    foreach ($recipe in $recipes) {
+        & python (Join-Path $repo 'scripts\apply_patches.py') --work-root $WorkRoot $recipe.FullName
+        if ($LASTEXITCODE -ne 0) { throw "Patch failed: $($recipe.Name)" }
+    }
     $overlay = Join-Path $repo 'mod\HGame\Classes'
     if (Test-Path -LiteralPath $overlay) {
         Get-ChildItem -LiteralPath $overlay -Recurse -File | ForEach-Object {

@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "name": "restore-legacy-gameplay",
+  "description": "Exact byte replacements restoring original base single-player functions while preserving every opt-in v8-v16 network movement/animation hunk. Do not apply to original snapshots.",
+  "upstream_repository": "https://github.com/metallicafan212/HP2UScriptDecompile",
+  "upstream_commit": "7105bae78ee2e7c5a3b4d2dff65e1ea7cc903e8b",
+  "source_snapshot": "supplied v18/v18/HGame/Classes",
+  "string_encoding": "latin-1-byte-preserving",
+  "format_note": "This JSON file is ASCII. JSON old/new strings represent exact source bytes via Latin-1 code points; encode each value using latin-1 before binary comparison/replacement. Do not decode source as UTF-8 or normalize line endings.",
+  "apply_policy": [
+    "Target only a development copy. Validate every whole-file input SHA before any write.",
+    "Each old byte sequence must occur exactly once. Apply replacements in listed order to an in-memory byte buffer.",
+    "Validate the complete output SHA before atomically writing that file. Never accept partial matches or patch by line number.",
+    "Build and validate standalone, co-op authority and Versus overrides. Do not force health/camera/input in a global Timer or Tick."
+  ],
+  "files": [
+    {
+      "path": "HGame/Classes/harry.uc",
+      "source_sha256": "c4dfe134fdc5da24d691296cc65f60999cb5b8fa60e1e6dacefa485fef09f6c3",
+      "upstream_file_sha256": "30ad3bf91d6c46e8caf158270c24d2fc8cf5580ce653c92040f18ab39fcbacb5",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "KillHarry",
+          "action": "restore-upstream-function",
+          "source_lines": [
+            1565,
+            1600
+          ],
+          "upstream_lines": [
+            1565,
+            1583
+          ],
+          "old_sha256": "ada0560ed9b68b0011450d1b34bb3a86c3a4e79fab1f6598a5be0d7401d7dc30",
+          "new_sha256": "04675cc4f3cd3eb94653fcc2e481dbe7b335f9624cc94fe6c866f4ec90dedb64",
+          "old": "function KillHarry (bool bImmediateDeath)\n{\n    if (Role != ROLE_Authority)\n    {\n        // \u00d0\u009a\u00d0\u00bb\u00d0\u00b8\u00d0\u00b5\u00d0\u00bd\u00d1\u0082\u00d1\u008b \u00d0\u00bf\u00d0\u00be\u00d0\u00bb\u00d0\u00bd\u00d0\u00be\u00d1\u0081\u00d1\u0082\u00d1\u008c\u00d1\u008e \u00d0\u00b8\u00d0\u00b3\u00d0\u00bd\u00d0\u00be\u00d1\u0080\u00d0\u00b8\u00d1\u0080\u00d1\u0083\u00d1\u008e\u00d1\u0082 KillHarry\n        return;\n    }\n\n    // \u00d0\u00a2\u00d0\u00be\u00d0\u00bb\u00d1\u008c\u00d0\u00ba\u00d0\u00be \u00d1\u0081\u00d0\u00b5\u00d1\u0080\u00d0\u00b2\u00d0\u00b5\u00d1\u0080 \u00d0\u00bc\u00d0\u00be\u00d0\u00b6\u00d0\u00b5\u00d1\u0082 \u00d1\u0083\u00d0\u00b1\u00d0\u00b8\u00d0\u00b2\u00d0\u00b0\u00d1\u0082\u00d1\u008c (\u00d0\u00bd\u00d0\u00be \u00d0\u00bc\u00d1\u008b \u00d0\u00b2\u00d1\u0081\u00d1\u0091 \u00d1\u0080\u00d0\u00b0\u00d0\u00b2\u00d0\u00bd\u00d0\u00be \u00d0\u00b1\u00d0\u00bb\u00d0\u00be\u00d0\u00ba\u00d0\u00b8\u00d1\u0080\u00d1\u0083\u00d0\u00b5\u00d0\u00bc)\n    if (bAllowHarryToDie == False)\n    {\n        Health = 100;\n        bAllowHarryToDie = False;\n        return;\n    }\n\n    // \u00d0\u009e\u00d1\u0080\u00d0\u00b8\u00d0\u00b3\u00d0\u00b8\u00d0\u00bd\u00d0\u00b0\u00d0\u00bb\u00d1\u008c\u00d0\u00bd\u00d1\u008b\u00d0\u00b9 \u00d0\u00ba\u00d0\u00be\u00d0\u00b4 (\u00d0\u00bd\u00d0\u00b0 \u00d1\u0081\u00d0\u00bb\u00d1\u0083\u00d1\u0087\u00d0\u00b0\u00d0\u00b9, \u00d0\u00b5\u00d1\u0081\u00d0\u00bb\u00d0\u00b8 \u00d1\u0081\u00d0\u00b5\u00d1\u0080\u00d0\u00b2\u00d0\u00b5\u00d1\u0080 \u00d0\u00b4\u00d0\u00b5\u00d0\u00b9\u00d1\u0081\u00d1\u0082\u00d0\u00b2\u00d0\u00b8\u00d1\u0082\u00d0\u00b5\u00d0\u00bb\u00d1\u008c\u00d0\u00bd\u00d0\u00be \u00d1\u0085\u00d0\u00be\u00d1\u0087\u00d0\u00b5\u00d1\u0082 \u00d1\u0083\u00d0\u00b1\u00d0\u00b8\u00d1\u0082\u00d1\u008c)\n    ClientMessage(\"argghhh I'm Dead!!!!   in KillHarry\");\n    if ( Director != None )\n    {\n        Director.OnPlayerDying();\n    }\n    if ( baseBoss(BossTarget) != None )\n    {\n        StopBossEncounter();\n    }\n    if ( (baseBoss(BossTarget) != None) && (baseBoss(BossTarget).TrigEventWhenVictor != '') )\n    {\n        baseBoss(BossTarget).SendVictoriousTrigger();\n    } \n    else \n    {\n        bAllowHarryToDie = bImmediateDeath;\n        GotoState('stateDead');\n    }\n}\n",
+          "new": "function KillHarry (bool bImmediateDeath)\n{\n  ClientMessage(\"argghhh I'm Dead!!!!   in KillHarry\");\n  if ( Director != None )\n  {\n    Director.OnPlayerDying();\n  }\n  if ( baseBoss(BossTarget) != None )\n  {\n    StopBossEncounter();\n  }\n  if ( (baseBoss(BossTarget) != None) && (baseBoss(BossTarget).TrigEventWhenVictor != '') )\n  {\n    baseBoss(BossTarget).SendVictoriousTrigger();\n  } else {\n    bAllowHarryToDie = bImmediateDeath;\n    GotoState('stateDead');\n  }\n}\n"
+        },
+        {
+          "function": "KillHarryWithClub",
+          "action": "restore-upstream-function",
+          "source_lines": [
+            1602,
+            1608
+          ],
+          "upstream_lines": [
+            1585,
+            1598
+          ],
+          "old_sha256": "1f26573e3bf6080e31a785f298fe646cc76a16939f5943f09105ea07efcceb51",
+          "new_sha256": "74cf95311878c69330d90185b61f84f22b85439d7d6a2ceae48078e3c1632b31",
+          "old": "function KillHarryWithClub (bool bImmediateDeath, Actor A)\n{\n    if (Role != ROLE_Authority)\n        return;\n    \n   return;\n}\n",
+          "new": "function KillHarryWithClub (bool bImmediateDeath, Actor A)\n{\n  local int Yaw;\n  local Rotator R;\n\n  bClubDeath = True;\n  KillHarry(bImmediateDeath);\n  Yaw = A.Rotation.Yaw;\n  Yaw += 65536 / 4;\n  R = Rotation;\n  R.Yaw = Yaw;\n  SetRotation(R);\n  DesiredRotation = R;\n}\n"
+        },
+        {
+          "function": "TakeDamage",
+          "action": "restore-upstream-function",
+          "source_lines": [
+            2288,
+            2294
+          ],
+          "upstream_lines": [
+            2278,
+            2450
+          ],
+          "old_sha256": "e74c78e2b8c90d57815990b5e020a2196aaf831108e6931b21ccca586576480d",
+          "new_sha256": "f7c3b7a6d35409895059cd08720f1efa1ed44dda761b1791637ea79548e4b25d",
+          "old": "function TakeDamage(int Damage, Pawn InstigatedBy, vector HitLocation, vector Momentum, name DamageType)\n{\n    if (Role != ROLE_Authority)\n        return;   // \u00d0\u009a\u00d0\u00bb\u00d0\u00b8\u00d0\u00b5\u00d0\u00bd\u00d1\u0082\u00d1\u008b \u00d0\u00b8\u00d0\u00b3\u00d0\u00bd\u00d0\u00be\u00d1\u0080\u00d0\u00b8\u00d1\u0080\u00d1\u0083\u00d1\u008e\u00d1\u0082 \u00d1\u0083\u00d1\u0080\u00d0\u00be\u00d0\u00bd\n\n    Super.TakeDamage(Damage, InstigatedBy, HitLocation, Momentum, DamageType);\n}\n",
+          "new": "function TakeDamage (int Damage, Pawn InstigatedBy, Vector HitLocation, Vector Momentum, name DamageType)\n{\n  local Sound snd;\n  local bool bPlayKnockBack;\n  local bool bPlayHurtSound;\n  local float fFlashScale;\n  local StatusItem siWiggenPotion;\n  local bool bFallDamage;\n  local float fDamageScaled;\n  local int FinalDamage;\n  \n  if ( (CarryingActor != None) && (CarryingActor == InstigatedBy) )\n  {\n    return;\n  }\n  \n  bPlayHurtSound = True;\n  fDamageScaled = Damage;\n  switch (Difficulty)\n  {\n    case DifficultyEasy:\n    fDamageScaled = (fDamageScaled * fDamageMultiplier_Easy);\n    break;\n    case DifficultyMedium:\n    fDamageScaled = (fDamageScaled * fDamageMultiplier_Medium);\n    break;\n    case DifficultyHard:\n    fDamageScaled = (fDamageScaled * fDamageMultiplier_Hard);\n    break;\n    default:\n  }\n  FinalDamage = FMax(fDamageScaled,fMinDamageScalar); \n  fFlashScale = FClamp(FinalDamage,20.0,60.0);\n  switch (DamageType)\n  {\n    case 'Falling':\n    ClientFlash(-0.02 * fFlashScale,fFlashScale * vect(20.00,20.00,20.00));\n    break;\n    case 'Ectoplasma':\n    if (  !bEctoFlashed )\n    {\n      bEctoFlashed = True;\n      ClientFlash(-0.03 * fFlashScale,fFlashScale * vect(9.38,14.06,4.69));\n    }\n    break;\n    case 'PoisonCloud':\n    ClientFlash(-0.01171875 * fFlashScale,fFlashScale * vect(7.80,11.72,11.72));\n    break;\n    default:\n  }\n  if (  !HarryIsDead() )\n  {\n    if ( CarryingActor != None )\n    {\n      DropCarryingActor();\n    }\n    bThrow = False;\n    if ( (DamageType == 'ZonePain') || (DamageType == 'pit') || (DamageType == 'Crushed') || (DamageType == 'RolledOver') )\n    {\n      bPlayHurtSound = False;\n      if ( ((DamageType == 'Crushed') || (DamageType == 'RolledOver')) && (GetHealthCount() > 0) )\n      {\n        bPlayHurtSound = True;\n      }\n      if ( (DamageType == 'ZonePain') || (DamageType == 'pit') )\n      {\n        bInstantDeath = True;\n      }\n      if ( (DamageType == 'Crushed') || (DamageType == 'RolledOver') )\n      {\n        bClubDeath = True;\n      }\n      if ( DamageType == 'RolledOver' )\n      {\n        bSlowDeath = True;\n      }\n      FinalDamage = 1000;\n      if ( (DamageType == 'ZonePain') || (DamageType == 'pit') )\n      {\n        bHidden = True;\n      }\n    } else {\n      if ( (DamageType == 'Falling') && (FinalDamage > 20) )\n      {\n        bFallDamage = True;\n      }\n      if ( iEctoRefCount > 0 )\n      {\n        if (  !bPlayedEctoKnockBack || ( ++iEctoHurtSoundCount >= 6) )\n        {\n          iEctoHurtSoundCount = 0;\n        } else {\n          bPlayHurtSound = False;\n        }\n      }\n      if ( DamageType == 'AcidHit' )\n      {\n        if ( fTimeSinceLastAcidHit < 0.333 )\n        {\n          FinalDamage = 0;\n        } else {\n          fTimeSinceLastAcidHit = 0.0;\n        }\n      }\n      if ( iWebAnimRefCount > 0 )\n      {\n        if (  !bPlayedEctoKnockBack || ( ++iEctoHurtSoundCount >= 6) )\n        {\n          iEctoHurtSoundCount = 0;\n        } else {\n          bPlayHurtSound = False;\n        }\n      }\n      bPlayKnockBack = True;\n      if ( iEctoRefCount > 0 )\n      {\n        if ( bPlayedEctoKnockBack )\n        {\n          bPlayKnockBack = False;\n        }\n        bPlayedEctoKnockBack = True;\n      }\n      if ( iEctoRefCount > 0 )\n      {\n        if ( bPlayedEctoKnockBack )\n        {\n          bPlayKnockBack = False;\n        }\n        bPlayedEctoKnockBack = True;\n      }\n      if ( bPlayKnockBack )\n      {\n        HarryAnimChannel.DoKnockBack();\n      }\n      Acceleration *= vect(0.00,0.00,1.00);\n    }\n    if ( bPlayHurtSound )\n    {\n      PlayHurtEmoteSound();\n    }\n  }\n  if ( (GetHealthCount() > 0) &&  !bFraserMode )\n  {\n    ClientMessage(\"baseHarry: argghhh I'm HIT!!!!  \" $ string(FinalDamage) $ \" Difficulty:\" $ string(Difficulty) $ \" Type:\" $ string(DamageType) $ \" State:\" $ string(GetStateName()));\n    AddHealth( -FinalDamage);\n    if ( GetHealthCount() <= 0.0 )\n    {\n      siWiggenPotion = managerStatus.GetStatusItem(Class'StatusGroupPotions',Class'StatusItemWiggenwell');\n      if ( bAutoQuaff &&  !bFallDamage &&  !bInstantDeath &&  !bClubDeath && siWiggenPotion.nCount >= 1 )\n      {\n        AddHealth(1);\n        DoDrinkWiggenwell();\n      } else {\n        bHarryKilled = True;\n      }\n    }\n    if ( BossTarget != None )\n    {\n      if ( bHarryKilled )\n      {\n        BossTarget.OnEvent('HarryWasKilled');\n      } else {\n        BossTarget.OnEvent('HarryWasHurt');\n      }\n    }\n    if ( bHarryKilled )\n    {\n      KillHarry(True);\n    }\n  } else {\n    ClientMessage(\"baseHarry: argghhh I'm HIT!!!! (no damage) \" $ string(FinalDamage) $ \" Type:\" $ string(DamageType) $ \" State:\" $ string(GetStateName()));\n  }\n}\n"
+        },
+        {
+          "function": "Timer",
+          "action": "restore-upstream-function",
+          "source_lines": [
+            4991,
+            5012
+          ],
+          "upstream_lines": [
+            5091,
+            5094
+          ],
+          "old_sha256": "f69b803a78af36fb3774b12edf94daa9b337affe34eeaf371c93ff2ae71e1956",
+          "new_sha256": "2ab55f18353c49345fc4743550b5eab57664588b55cf10c031463cec7f3deaf6",
+          "old": "function Timer()\n{\n  SleepyAnimTimerSub();\n\n    Super.Timer();\n\n    Health = 100;\n    bAllowHarryToDie = False;\n\t\n\tif (Role < ROLE_Authority || Role == ROLE_AutonomousProxy)\n    {\n        EnablePlayerInput();\n        GotoState('PlayerWalking');\n        SetPhysics(PHYS_Walking);\n        \n        if (Cam != None)\n        {\n            Cam.SetCameraMode(3);\n            Cam.GotoState('StateStandardCam');\n        }\n    }\n}\n",
+          "new": "function Timer()\n{\n  SleepyAnimTimerSub();\n}\n"
+        },
+        {
+          "function": "PostNetBeginPlay",
+          "action": "remove-added-global-override",
+          "source_lines": [
+            6214,
+            6241
+          ],
+          "upstream_lines": null,
+          "old_sha256": "416b9c9971369c5c69d0574bc1d9c84192bf3a285d5f3ff505020efe8e921e08",
+          "new_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "old": "event PostNetBeginPlay()\n{\n    Super.PostNetBeginPlay();\n    \n    if (Role < ROLE_Authority || Role == ROLE_AutonomousProxy)\n    {\n        EnablePlayerInput();\n        bKeepStationary = False;\n        bIsCaptured = False;\n        bAllowHarryToDie = False;\n        bCanMoveInSpecialPause = True;\n        \n        if (myHUD != None)\n            myHUD.EndCutScene();\n        \n        GotoState('PlayerWalking');\n        SetPhysics(PHYS_Walking);\n        Health = 100;\n        \n        if (Cam != None)\n        {\n            Cam.SetCameraMode(3);\n            Cam.GotoState('StateStandardCam');\n            Cam.InitTarget(self);\n            Cam.InitPositionAndRotation(True);\n        }\n    }\n}\n",
+          "new": ""
+        },
+        {
+          "function": "Tick",
+          "action": "remove-added-global-override",
+          "source_lines": [
+            6243,
+            6259
+          ],
+          "upstream_lines": null,
+          "old_sha256": "5f845fc1aa58127e5e74cd0bcdb4af58285373110108af63f0391f77178b0642",
+          "new_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "old": "function Tick(float DeltaTime)\n{\n    Super.Tick(DeltaTime);   // \u00d0\u00be\u00d1\u0081\u00d1\u0082\u00d0\u00b0\u00d0\u00b2\u00d1\u008c, \u00d0\u00b5\u00d1\u0081\u00d0\u00bb\u00d0\u00b8 \u00d0\u00b1\u00d1\u008b\u00d0\u00bb\u00d0\u00b0\n    \n    if (Cam != None)\n    {\n        // \u00d0\u009f\u00d0\u00be\u00d1\u0081\u00d1\u0082\u00d0\u00be\u00d1\u008f\u00d0\u00bd\u00d0\u00bd\u00d0\u00be \u00d0\u00bf\u00d1\u0080\u00d0\u00b8\u00d0\u00bd\u00d1\u0083\u00d0\u00b6\u00d0\u00b4\u00d0\u00b0\u00d0\u00b5\u00d0\u00bc \u00d0\u00ba\u00d0\u00b0\u00d0\u00bc\u00d0\u00b5\u00d1\u0080\u00d1\u0083 \u00d0\u00b1\u00d1\u008b\u00d1\u0082\u00d1\u008c \u00d0\u00b2 \u00d0\u00bd\u00d0\u00be\u00d1\u0080\u00d0\u00bc\u00d0\u00b0\u00d0\u00bb\u00d1\u008c\u00d0\u00bd\u00d0\u00be\u00d0\u00bc \u00d1\u0080\u00d0\u00b5\u00d0\u00b6\u00d0\u00b8\u00d0\u00bc\u00d0\u00b5\n        if (Cam.CameraMode != 3)  // 3 = CM_Standard\n        {\n            Cam.SetCameraMode(3);\n            Cam.GotoState('StateStandardCam');\n            Cam.InitTarget(self);\n            Cam.InitPositionAndRotation(True);\n            log(\"=== Tick forced Standard Camera ===\");\n        }\n    }\n}\n",
+          "new": ""
+        }
+      ],
+      "result_sha256": "09d939227a6e3b4844990d0206b322ac2fd2738d58425df0d7e5274062a48ef0"
+    },
+    {
+      "path": "HGame/Classes/Director.uc",
+      "source_sha256": "2cca4b30a4f03668db45fb73f9f24d5b100442d800c7906a5b81fa6ed7a8a3a8",
+      "upstream_file_sha256": "d919f313740e9182f8afef17d74739adc58c2cde63e705ee11fc75db5cdade41",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "OnPlayerPossessed",
+          "action": "restore-upstream-function",
+          "source_lines": [
+            105,
+            135
+          ],
+          "upstream_lines": [
+            105,
+            109
+          ],
+          "old_sha256": "fc037b74d15e439f064ec52810f9efc9a760272c4da11beb07f72cebde6ec901",
+          "new_sha256": "3a5798af922d531b7a2c081b49de37c5010e69d651839ed96175092c713849a1",
+          "old": "function OnPlayerPossessed()\n{\n    Log(\"Player possessed - Director detected new player\");\n    \n    if (PlayerHarry != None)\n    {\n        PlayerHarry.EnablePlayerInput();\n        PlayerHarry.bKeepStationary = False;\n        PlayerHarry.bIsCaptured = False;\n        PlayerHarry.bAllowHarryToDie = False;\n        \n        PlayerHarry.GotoState('PlayerWalking');\n        PlayerHarry.SetPhysics(PHYS_Walking);\n        PlayerHarry.bIsPlayer = True;\n        PlayerHarry.bHidden = False;\n        PlayerHarry.Health = 100;\n        \n        PlayerHarry.ClientSetRotation(PlayerHarry.Rotation);\n        PlayerHarry.ViewRotation = PlayerHarry.Rotation;\n        \n        if (PlayerHarry.Cam != None)\n        {\n            PlayerHarry.Cam.SetCameraMode(3); // CM_Standard\n            PlayerHarry.Cam.InitTarget(PlayerHarry);\n            PlayerHarry.Cam.InitPositionAndRotation(True);\n            Log(\"=== Director forced Standard Camera for new player ===\");\n        }\n        \n        Console = baseConsole(PlayerHarry.Player.Console);\n    }\n}\n",
+          "new": "function OnPlayerPossessed()\n{\n  Log(\"Player possessed\");\n  Console = baseConsole(PlayerHarry.Player.Console);\n}\n"
+        }
+      ],
+      "result_sha256": "d919f313740e9182f8afef17d74739adc58c2cde63e705ee11fc75db5cdade41"
+    }
+  ]
+}

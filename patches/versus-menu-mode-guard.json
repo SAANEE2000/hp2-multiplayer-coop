@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "versus-menu-mode-guard",
+  "description": "Reject a menu client that selected Co-op when it joins a Versus server; direct legacy join URLs remain accepted.",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "837d12d150f123e203fdbb2eb800f9506ff9434111550d52f2b1f8971762faef",
+      "result_sha256": "a1cacf5d9bf1afad1962959edbe3d9f69e3bb4233f5007b3936bdb6aba9051d2",
+      "replacements": [
+        {
+          "old": "    if (TooManyPlayers())\r\n",
+          "new": "    if (ParseOption(Options, \"MPMode\") != \"\"\r\n        && !(ParseOption(Options, \"MPMode\") ~= \"Versus\"))\r\n    {\r\n        Error = \"This server is running Versus, not the selected mode.\";\r\n        return None;\r\n    }\r\n    if (TooManyPlayers())\r\n",
+          "old_sha256": "c975400b459d6c84ae36e829af951bfbeff7e7e3c4d98d4ee384c783259385ac",
+          "new_sha256": "1d21c0e9c84f84e612937648e38ce54e19b198a37593d4a4f4d3da7b4ee3af19"
+        }
+      ]
+    }
+  ]
+}

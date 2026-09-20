@@ -491,6 +491,12 @@ event PlayerPawn Login(string Portal, string Options, out string Error, class<Pl
 {
     local PlayerPawn P;
     local HPCoopHarry H;
+    if (ParseOption(Options, "MPMode") != ""
+        && !(ParseOption(Options, "MPMode") ~= "Coop"))
+    {
+        Error = "This server is running Co-op, not the selected mode.";
+        return None;
+    }
     if (IntroCoordinator != None && IntroCoordinator.Phase == 6)
     {
         Error = "This intro session failed. A fresh host is required.";

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "name": "multiplayer-main-menu",
+  "description": "Add Single Player and Multiplayer navigation to the installed FEMainPage without vendoring the full M212 class.",
+  "files": [
+    {
+      "path": "HGame/Classes/Menu/FEMainPage.uc",
+      "source_sha256": "3039a87f98c9a9fc34b9f53e4b0f8b5de8d734fa7bff92eb394dd0dff587431a",
+      "result_sha256": "5ec7776bb3fadd97029d2a8de9d0a9e316bbba48b0f6c197ed21dc2d98309aa5",
+      "replacements": [
+        {
+          "old": "var HGameButton NewGameButton;\n",
+          "new": "var HGameButton NewGameButton;\nvar HGameButton MultiplayerButton;\nvar HPMultiplayerPage MultiplayerPage;\n",
+          "old_sha256": "89b8d1990c88df0a03c8bac665730ae6ab2707ad5e653ab57061aae5061fa79b",
+          "new_sha256": "4e53135a0b8c25cb2d4bdcbf486283164000adfa6bcd8e2497aa056b1218bec2"
+        },
+        {
+          "old": "  Super.Created();\n  LegalText = Localize(\"all\",\"legal_title_01\",\"Pickup\");",
+          "new": "  Super.Created();\n  NewGameButton = HGameButton(CreateControl(Class'HGameButton',205.0,137.0,230.0,26.0));\n  NewGameButton.SetFont(F_HPMenuLarge);\n  NewGameButton.TextColor.R = 250;\n  NewGameButton.TextColor.G = 250;\n  NewGameButton.TextColor.B = 250;\n  NewGameButton.bColorOver = True;\n  NewGameButton.Align = TA_Center;\n  NewGameButton.SetText(\"Single Player\");\n  NewGameButton.ToolTipString = \"Start the original campaign\";\n  MultiplayerButton = HGameButton(CreateControl(Class'HGameButton',205.0,170.0,230.0,26.0));\n  MultiplayerButton.SetFont(F_HPMenuLarge);\n  MultiplayerButton.TextColor.R = 250;\n  MultiplayerButton.TextColor.G = 250;\n  MultiplayerButton.TextColor.B = 250;\n  MultiplayerButton.bColorOver = True;\n  MultiplayerButton.Align = TA_Center;\n  MultiplayerButton.SetText(\"Multiplayer\");\n  MultiplayerButton.ToolTipString = \"Co-op or Versus\";\n  LegalText = Localize(\"all\",\"legal_title_01\",\"Pickup\");",
+          "old_sha256": "517e5c2f7f5a1645e5b4f274fbcbf9c316724ab7935463dc7f274f55542ca1e8",
+          "new_sha256": "2f3024fbe50a9cf6f0055c3a05a30604634e7091ecaf6e1fcefb01aead1acb0f"
+        },
+        {
+          "old": "      case NewGameButton:\n      break;\n",
+          "new": "      case NewGameButton:\n      FEBook(book).bGamePlaying = True;\n      FEBook(book).CloseBook();\n      GetPlayerOwner().ClientTravel(\"PrivetDr.unr?game=Engine.GameInfo\", TRAVEL_Absolute, False);\n      break;\n      case MultiplayerButton:\n      if ( MultiplayerPage == None )\n          MultiplayerPage = HPMultiplayerPage(FEBook(book).CreatePage(Class'HPMultiplayerPage', \"MULTIPLAYER\"));\n      if ( MultiplayerPage != None ) FEBook(book).ChangePage(MultiplayerPage);\n      break;\n",
+          "old_sha256": "18ca220c9a88123f67b8f2b0f73cb695484858371186aa85f36e45edb7b96795",
+          "new_sha256": "bc690062a65b3de6bf3b4665f9d6c2ba04cfa537dd9df01555ea4d8ac1a7693b"
+        }
+      ]
+    }
+  ]
+}

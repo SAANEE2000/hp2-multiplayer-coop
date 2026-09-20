@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "name": "versus-menu-spell-keys",
+  "description": "Make Versus number-key spell selection work from ordinary game settings without changing User.ini or single-player controls.",
+  "files": [
+    {
+      "path": "HGame/Classes/Internal/HPConsole.uc",
+      "source_sha256": "975a8de2d7e5f5d9ff1926f8733c072bb1802c317aad08a151b09355893f18fd",
+      "result_sha256": "80bed498b0a9e7e018c9a00dfed15bbe35531ca01997d613306316b65cccc471",
+      "replacements": [
+        {
+          "old": "function bool ApplyVersusMovementKey(EInputKey Key, EInputAction Action)\r\n",
+          "new": "// Menu-launched Versus retains the player's ordinary User.ini. Intercept the\r\n// number keys only while a local Versus pawn owns gameplay input.\r\nfunction bool ApplyVersusSpellKey(EInputKey Key, EInputAction Action)\r\n{\r\n    local HPVersusHarry H;\r\n    if (Action != IST_Press) return False;\r\n    H = GetLocalVersusPawn();\r\n    if (H == None) return False;\r\n    switch (Key)\r\n    {\r\n        case IK_1: H.VersusSpell1(); return True;\r\n        case IK_2: H.VersusSpell2(); return True;\r\n        case IK_3: H.VersusSpell3(); return True;\r\n        case IK_4: H.VersusSpell4(); return True;\r\n        case IK_5: H.VersusSpell5(); return True;\r\n        case IK_6: H.VersusSpell6(); return True;\r\n    }\r\n    return False;\r\n}\r\n\r\nfunction bool ApplyVersusMovementKey(EInputKey Key, EInputAction Action)\r\n",
+          "old_sha256": "9a8041d3e5bf502447390a188309ed8309f9b15dcdb18c5d3420f94ebe479e98",
+          "new_sha256": "3a5f5776f9f05b9467545a6b0fd3feda65a3d482463fc1564272069eb5bc22a8"
+        },
+        {
+          "old": "\tApplyVersusMovementKey(Key, Action);\r\n\tk = Key;",
+          "new": "\tApplyVersusMovementKey(Key, Action);\r\n\tif (ApplyVersusSpellKey(Key, Action)) return True;\r\n\tk = Key;",
+          "old_sha256": "3c59464050f7cc68af5a9097afb8e8c6cb433f432a5e8fccdf074ab412ec94df",
+          "new_sha256": "3b71b8ada4cab61c1bb1cbb77930e04dfa5c32a72168d4f12e6dfe9ef1ae260a"
+        }
+      ]
+    }
+  ]
+}

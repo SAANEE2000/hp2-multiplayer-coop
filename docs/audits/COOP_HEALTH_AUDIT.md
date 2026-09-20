@@ -104,8 +104,9 @@ for explicit actor overlap checks while the dead pawn's collision is disabled.
 The root narrowed harmless-overlap exceptions to an exact finished one-shot
 CutScene, or exact MusicTrigger/NewMusicTrigger with no blocking flags, empty
 Event and no music-loop event callback. Other triggers remain excluded. These
-exceptions need the next runtime placement test; they are not a general trigger
-whitelist. SetLocation must succeed at the exact tested point; its
+exceptions were exercised by the passing first-room authority fixture; they
+are not a general trigger whitelist or proof for other geometry. SetLocation
+must succeed at the exact tested point; its
 resulting zone must not be kill/pain/water. Dynamic bases are rejected. The player
 recovers `min(iMinHealthAfterDeath, own capacity)` health (normally 41), not full
 capacity, while retaining personal inventory/progress. Absence of a safe candidate

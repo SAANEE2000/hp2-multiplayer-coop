@@ -13,7 +13,7 @@
 - Оригинальная игра/архивы сохранены. Все сборки и запуски идут из `.local/game`.
   Retail assets, бинарники и полный decompile не добавлены в Git.
 - Чистый UCC rebuild baseline: 0 ошибок / 279 warnings. Последняя co-op сборка
-  `20260920-172646-691`: **0 ошибок / 268 warnings**. Три дублирующих объявления
+  `20260920-174112-409`: **0 ошибок / 268 warnings**. Три дублирующих объявления
   классов исправлены; два ресурса проверены в скомпилированных defaults.
   Остальные warnings требуют адресного разбора; это не warning-free build.
 - Отдельные HPCoopGame/Harry/PRI/GRI: два слота, StoryLeader, owner-local
@@ -27,7 +27,8 @@
   видимости, ledge, заклинаний или прохождения.
 - Сборка содержит серверный запрос оригинальных projectiles с проверкой caster,
   состояния, cooldown, spellbook, цели, диапазона, offset, направления и LOS.
-  Клиентский визуал отделён от server collision. Касты в игре пока не приняты.
+  Клиентский визуал отделён от server collision. Для Lumos подтверждены
+  original server hits двух владельцев; ручные casts и визуал ещё не приняты.
 
 ## Текущие блокеры первого уровня
 
@@ -40,9 +41,9 @@
    сцены, перенос captured actors/controllers и аварийная очистка ещё требуют решения.
 2. Явный тестовый старт `RictusempraLessonComplete` передал GSTATE030 и четыре
    spells обоим loopback клиентам до readiness. Lumos owner-aware реализация
-   скомпилирована; fixture подтвердила original hit и свой свет для slot 0,
-   но второй projectile не дал наблюдаемого hit за 5 секунд. Два света,
-   reveal/door и expiry ещё не приняты. Клиентский
+   прошла fixture с двумя original hits по map gargoyles, двумя источниками,
+   независимым выключением и штатным 30s expiry. См.
+   `docs/iterations/20260920_COOP_LUMOS_HITS.md`. Reveal/door/визуал ещё не приняты. Клиентский
    native screening не находит map Harry до позднего snapshot: это отдельный
    нерешённый blocker общей кампании, подробнее `docs/audits/STORY_STATE_AUDIT.md`.
 3. Authority health/status/potion и одиночное возрождение реализованы. Explicit

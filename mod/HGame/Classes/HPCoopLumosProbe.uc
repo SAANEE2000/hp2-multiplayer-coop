@@ -132,7 +132,7 @@ function bool IsClearPosition(HPCoopHarry H, vector Position)
 function bool FindCastPosition(byte Slot, out vector Position, out rotator Facing)
 {
     local int Ring, I;
-    local vector Top, Bottom, HitLocation, HitNormal, Extent, Candidate, Muzzle, Chest;
+    local vector Top, Bottom, HitLocation, HitNormal, Extent, SpellExtent, Candidate, Muzzle, Chest;
     local rotator Direction, Flat;
     local Actor A;
     local HPCoopHarry H;
@@ -142,6 +142,9 @@ function bool FindCastPosition(byte Slot, out vector Position, out rotator Facin
     Extent.X = H.CollisionRadius;
     Extent.Y = H.CollisionRadius;
     Extent.Z = 0;
+    SpellExtent.X = Class'spellLumos'.Default.CollisionRadius;
+    SpellExtent.Y = SpellExtent.X;
+    SpellExtent.Z = Class'spellLumos'.Default.CollisionHeight;
     for (Ring = 0; Ring < 3; Ring++)
         for (I = 0; I < 16; I++)
         {
@@ -164,8 +167,10 @@ function bool FindCastPosition(byte Slot, out vector Position, out rotator Facin
             Muzzle.Z += H.CollisionHeight * 0.5;
             Chest = Candidate;
             Chest.Z += H.CollisionHeight * 0.5;
-            if (H.Trace(HitLocation, HitNormal, Muzzle, Chest, True) != None) continue;
-            A = H.Trace(HitLocation, HitNormal, Target.Location, Muzzle, True);
+            // A visible point is insufficient at a BSP corner: the original
+            // projectile has a nonzero collision extent and can hit that wall.
+            if (H.Trace(HitLocation, HitNormal, Muzzle, Chest, True, SpellExtent) != None) continue;
+            A = H.Trace(HitLocation, HitNormal, Target.Location, Muzzle, True, SpellExtent);
             if (A != None && A != Target) continue;
             if (VSize(Target.Location - Muzzle) > Class'SpellCursor'.Default.fLOS_Distance * 1.25)
                 continue;
@@ -229,6 +234,8 @@ function bool CastAndRestore(byte Slot)
             && S.SpellWand == Wands[Slot] && S.TargetActor == Targets[Slot];
         if (bAccepted)
         {
+            // Existing opt-in flag enables contact/destruction diagnostics only.
+            S.SetDebugMode(True);
             SpellNames[Slot] = string(S);
             AcceptedCastTimes[Slot] = H.NextCoopCastTime;
         }

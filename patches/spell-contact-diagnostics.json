@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "name": "spell-contact-diagnostics",
+  "description": "Read-only contact/destruction logging under the existing opt-in baseSpell debug flag. No collision, owner, hit handler or trajectory changes.",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/baseSpell.uc",
+      "source_sha256": "ddc4be4b8de98946a9342e350ce80f9ff417ef64468eefe1057ea38cfb105d74",
+      "result_sha256": "99328c21a1aa8ec0c75fee14fbe1eeec20dcae499752852e829c4830896ee713",
+      "line_endings": "LF",
+      "replacements": [
+        {
+          "function": "Destroyed",
+          "old_sha256": "260519f5080ce06e5ca850279ab3beddc621619d96ccdb3bea8a5c6097876b19",
+          "new_sha256": "a77eeadcff377bb28f7ff2bd1d977cf4b5fe5549630704331a27ad4de8a29075",
+          "old": "event Destroyed()\n{\n",
+          "new": "event Destroyed()\n{\n  if ( bUseDebugMode )\n    Log(\"[MP_SPELL_TRACE] event=destroy spell=\" $ self $ \" location=\" $ Location $ \" velocity=\" $ Velocity $ \" target=\" $ TargetActor $ \" lifetime=\" $ SpellLifeTime);\n"
+        },
+        {
+          "function": "HitWall",
+          "old_sha256": "0160a5b10fbf61c0b0453e8ce3386524c780ad25bea85716e4af5d6563c855ea",
+          "new_sha256": "da7c335a4b01e944db4e000ed65f5076aff8c04622683dfedde45d97457d1f4d",
+          "old": "simulated function HitWall (Vector HitNormal, Actor Wall)\n{\n",
+          "new": "simulated function HitWall (Vector HitNormal, Actor Wall)\n{\n  if ( bUseDebugMode )\n    Log(\"[MP_SPELL_TRACE] event=wall spell=\" $ self $ \" wall=\" $ Wall $ \" location=\" $ Location $ \" normal=\" $ HitNormal);\n"
+        },
+        {
+          "function": "ProcessTouch",
+          "old_sha256": "964cb0b880fe810f0f2264eb0e2b3dff36c0ce4ffcc4f5f1897c2f3f22d771b9",
+          "new_sha256": "c8d4b96941f858ce1be3981e213f60781110147cfb6e1559758a1ba51724a647",
+          "old": "function ProcessTouch (Actor Other, Vector HitLocation)\n{\n",
+          "new": "function ProcessTouch (Actor Other, Vector HitLocation)\n{\n  if ( bUseDebugMode )\n    Log(\"[MP_SPELL_TRACE] event=touch spell=\" $ self $ \" other=\" $ Other $ \" hit=\" $ HitLocation $ \" location=\" $ Location);\n"
+        }
+      ]
+    }
+  ]
+}

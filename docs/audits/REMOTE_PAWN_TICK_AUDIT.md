@@ -112,3 +112,11 @@ placement, and owner resumption. Club/slow presentation and any original
 mount/jump state that waits on latent animation remain separate validation
 items. Animation completion and placement passing on one host still do not
 establish visual quality or two-PC/input acceptance.
+
+Follow-up evidence: the root's build 20260920-172646-691 passed the dedicated
+health fixture through phase 12 in run coop-host-20260920-172741-742-9ed7a1.
+The collected server engine-0.log records both safe sample placements at health
+41 and owner resume acknowledgements; slot 1's actual non-instant faint ended
+at frame 0.993378. The source-driven diagnosis and the Game-dispatched correction
+therefore have runtime support for this sampled instant/non-instant sequence.
+Club/slow, other geometry, movement states and client visuals remain separate.

@@ -8,6 +8,8 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$')][string]$Server = '127.0.0.1',
     [ValidateRange(1024,65532)][int]$Port = 7777,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$')][string]$PlayerName = 'Harry',
+    [ValidateRange(2,8)][int]$MaxPlayers = 2,
+    [ValidateRange(1,99)][int]$ScoreLimit = 3,
     [ValidateSet('None','RictusempraLessonComplete')][string]$TestStage = 'None',
     [ValidateSet('None','Health','Lumos','Pickup','PickupNet','AIInspect','AICombat','AICombatDeath','AISnail','Travel','MountRootB0','MountRootB1')][string]$RuntimeProbe = 'None',
     [switch]$CapturedAuthorityDiagnostic,
@@ -18,6 +20,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
+if ($Mode -eq 'Coop' -and $MaxPlayers -ne 2) { throw 'Co-op remains limited to two players.' }
 
 function Get-EngineLogCandidates {
     param([string]$Root, [string]$LogName, [string]$RequestedFolder, [string]$RuntimeIni)
@@ -240,14 +243,12 @@ $config = Set-IniValues $config 'URL' ([ordered]@{
 })
 $config = Set-IniValues $config 'FirstRun' ([ordered]@{FirstRun=469; Reconfig=0; ForceSoftware=0})
 $config = Set-IniValues $config 'Engine.Engine' ([ordered]@{DefaultGame=$localGameClass; DefaultServerGame=$localGameClass})
-$config = Set-IniValues $config 'Engine.GameInfo' ([ordered]@{MaxPlayers=2})
-if ($Mode -eq 'Coop') {
-    # The inherited 2600-byte modem rate starves camera and enemy updates.
-    $config = Set-IniValues $config 'Engine.Player' ([ordered]@{ConfiguredInternetSpeed=50000; ConfiguredLanSpeed=50000})
-    $config = Set-IniValues $config 'IpDrv.TcpNetDriver' ([ordered]@{MaxClientRate=50000})
-}
-$config = Set-IniValues $config $gameClass ([ordered]@{MaxPlayers=2})
-if ($Mode -eq 'Versus') { $config = Set-IniValues $config $gameClass ([ordered]@{ScoreLimit=3}) }
+$config = Set-IniValues $config 'Engine.GameInfo' ([ordered]@{MaxPlayers=$MaxPlayers})
+# The inherited 2600-byte modem rate starves multiplayer camera and pawn updates.
+$config = Set-IniValues $config 'Engine.Player' ([ordered]@{ConfiguredInternetSpeed=50000; ConfiguredLanSpeed=50000})
+$config = Set-IniValues $config 'IpDrv.TcpNetDriver' ([ordered]@{MaxClientRate=50000})
+$config = Set-IniValues $config $gameClass ([ordered]@{MaxPlayers=$MaxPlayers})
+if ($Mode -eq 'Versus') { $config = Set-IniValues $config $gameClass ([ordered]@{ScoreLimit=$ScoreLimit}) }
 $config = Set-IniValues $config 'IpDrv.UdpBeacon' ([ordered]@{DoBeacon='False'})
 $config = Set-IniValues $config 'IpServer.UdpServerUplink' ([ordered]@{DoUplink='False'})
 $config = Set-IniValues $config 'UWeb.WebServer' ([ordered]@{bEnabled='False'})
@@ -296,8 +297,8 @@ Copy-Item -LiteralPath $engineIni -Destination (Join-Path $runRoot 'Engine.ini')
 Copy-Item -LiteralPath $userIni -Destination (Join-Path $runRoot 'User.ini')
 
 if ($Role -eq 'Host') {
-    $url = '{0}.unr?game={1}?MaxPlayers=2' -f $mapName,$gameClass
-    if ($Mode -eq 'Versus') { $url += '?ScoreLimit=3' }
+    $url = '{0}.unr?game={1}?MaxPlayers={2}' -f $mapName,$gameClass,$MaxPlayers
+    if ($Mode -eq 'Versus') { $url += "?ScoreLimit=$ScoreLimit" }
     if ($TestStage -ne 'None') { $url += "?CoopTestStage=$TestStage" }
     if ($RuntimeProbe -ne 'None') { $url += "?CoopProbe=$RuntimeProbe" }
     if ($CapturedAuthorityDiagnostic) { $url += '?CoopCapturedAuthority=1' }
@@ -327,6 +328,7 @@ $manifest = [ordered]@{
     connectUrl=$(if ($Role -eq 'Join') { $url } else { $null });
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
     playerName=$PlayerName; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
+    maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit;
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;
     runRoot=$runRoot; profileRoot=$profileRoot; userFolder="HP2-MP-$session"; processId=$null;
     profileIsolation='UNVERIFIED: M212 bootstrap may select UserFolder/SavePath from Default.ini before the custom INI.';
@@ -346,7 +348,7 @@ if (!$PrepareOnly) {
         $env:__COMPAT_LAYER = 'RunAsInvoker'
         $start = @{
             FilePath=$executable; ArgumentList=$launchArgs; WorkingDirectory=$system; PassThru=$true;
-            WindowStyle=$(if ($Role -eq 'Host') { 'Hidden' } else { 'Normal' })
+            WindowStyle=$(if ($Role -eq 'Host' -or $Unattended) { 'Hidden' } else { 'Normal' })
         }
         # Redirection also selects CreateProcess instead of ShellExecute so the
         # scoped compatibility environment is inherited by the legacy client.

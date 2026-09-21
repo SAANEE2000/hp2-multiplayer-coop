@@ -271,6 +271,11 @@ if ($Mode -eq 'Coop') {
         LeftMouse='AltFire | Button bBroomAction | Button bVendorReply';
         RightMouse='Jump | Button bBroomAction | Button bDuelCycleSpell'; Shift='Button bRun'
     }
+} elseif (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json')) {
+    # The supplied v16 DefUser.ini combines the direct buttons with native
+    # MoveForward/StrafeLeft/etc. Keep those binds so the documented
+    # VersusUseNativeMovement command remains playable on both clients.
+    $bindings = $null
 } else {
     # v18's proven direct bridge consumes these buttons. Do not add a second axis.
     $bindings = [ordered]@{
@@ -284,7 +289,7 @@ if ($Mode -eq 'Coop') {
         '4'='VersusSpell4'; '5'='VersusSpell5'; '6'='VersusSpell6'
     }
 }
-$userConfig = Set-IniValues $userConfig 'Engine.Input' $bindings
+if ($null -ne $bindings) { $userConfig = Set-IniValues $userConfig 'Engine.Input' $bindings }
 Set-Content -LiteralPath $engineIni -Value $config -Encoding ASCII
 Set-Content -LiteralPath $userIni -Value $userConfig -Encoding ASCII
 Copy-Item -LiteralPath $engineIni -Destination (Join-Path $runRoot 'Engine.ini')

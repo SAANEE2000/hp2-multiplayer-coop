@@ -1,0 +1,32 @@
+Begin Map
+Begin Actor Class=HGame.HPVersusStart Name=HPVersusStart2
+    VersusSpawnIndex=2
+    Tag=HPVersusStart
+    Location=(X=-128,Y=300,Z=122.5)
+End Actor
+Begin Actor Class=HGame.HPVersusStart Name=HPVersusStart3
+    VersusSpawnIndex=3
+    Tag=HPVersusStart
+    Location=(X=128,Y=300,Z=122.5)
+End Actor
+Begin Actor Class=HGame.HPVersusStart Name=HPVersusStart4
+    VersusSpawnIndex=4
+    Tag=HPVersusStart
+    Location=(X=-128,Y=0,Z=122.5)
+End Actor
+Begin Actor Class=HGame.HPVersusStart Name=HPVersusStart5
+    VersusSpawnIndex=5
+    Tag=HPVersusStart
+    Location=(X=128,Y=0,Z=122.5)
+End Actor
+Begin Actor Class=HGame.HPVersusStart Name=HPVersusStart6
+    VersusSpawnIndex=6
+    Tag=HPVersusStart
+    Location=(X=-128,Y=-300,Z=122.5)
+End Actor
+Begin Actor Class=HGame.HPVersusStart Name=HPVersusStart7
+    VersusSpawnIndex=7
+    Tag=HPVersusStart
+    Location=(X=128,Y=-300,Z=122.5)
+End Actor
+End Map

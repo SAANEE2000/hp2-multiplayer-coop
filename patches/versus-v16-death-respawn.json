@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-death-respawn",
+  "description": "Keep Versus deaths out of the single-player LoadGame state and respawn each pawn on its own timer after a successful placement.",
+  "source_snapshot": "HPVersus_v16_remote_bottom_align_20260905 SHA-256 A2B13B924BF9BBA9F81C6A70E38024657C71F6F1F861FA49BF3F812C86EFB9BF",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "d59aee7b9718d296b70bac246b8c8df0d6eda39d434aef604dd206f381505146",
+      "result_sha256": "1514e93442d38c1bc3535455a9d681c983101dfe0b6f070d8cdf802ce55f9186",
+      "replacements": [
+        {
+          "old": "var bool bVersusDead;\nvar float LastVersusHitTime;\nvar byte VersusSlot;             // 0 or 1; assigned by HPVersusGame.PostLogin, read by FindPlayerStart\n\n",
+          "new": "var bool bVersusDead;\nvar float LastVersusHitTime;\nvar float VersusRespawnAt;\nvar byte VersusSlot;             // 0 or 1; assigned by HPVersusGame.PostLogin, read by FindPlayerStart\n\n",
+          "old_sha256": "9685efe607420080ee59a2464a53912ab16544d682b570f6573ab0bcc52baea8",
+          "new_sha256": "53a3ae87262cc88b1b2596207102a6aef509c90a07daa71729a905783150515f"
+        },
+        {
+          "old": "    reliable if (Role == ROLE_Authority)\n        bVersusDead, VersusSlot, SelectedVersusSpell, VersusCastSerial,\n        ClientSetVersusSlot;\n\n    reliable if (Role < ROLE_Authority)\n",
+          "new": "    reliable if (Role == ROLE_Authority)\n        bVersusDead, VersusSlot, SelectedVersusSpell, VersusCastSerial,\n        ClientSetVersusSlot, ClientVersusDeath, ClientVersusRespawn;\n\n    reliable if (Role < ROLE_Authority)\n",
+          "old_sha256": "15a6168413d6366166a1f0c75dbecf45fa453af2de3a881ea50f71380c8d6a94",
+          "new_sha256": "5ca2c5c46296513c6da1c1078180e9410f2e4ac94b5c8e8cd4a8c0b930c427b9"
+        },
+        {
+          "old": "    bCanMoveInSpecialPause = True;\n    bVersusDead = False;\n\n    if (bLocalPlayer)\n",
+          "new": "    bCanMoveInSpecialPause = True;\n    bVersusDead = False;\n    bFrozen = False;\n\n    if (bLocalPlayer)\n",
+          "old_sha256": "c8adf9e22643334203bd1703a4b5122073772d5c12ca650f3d03167d4e43a11c",
+          "new_sha256": "1870f99791e8f8acb6a62156b7ec3da4f9f467528fbf95a061524ac72a5632c8"
+        },
+        {
+          "old": "    local byte bJumpEdge;\n\n    if (!IsLocalViewportPlayer())\n        return;\n\n",
+          "new": "    local byte bJumpEdge;\n\n    if (bVersusDead || !IsLocalViewportPlayer())\n        return;\n\n",
+          "old_sha256": "86ded2dd86258c8c5026c94ea7cdc0edfc9b6d02154f461d74344eae15dd94d7",
+          "new_sha256": "caa044f0feae83eefe5235a8f195e74134c57cda30270ecb0455ebbb3231660d"
+        },
+        {
+          "old": "    local HPVersusHarry ObservedHarry;\n\n    if (IsLocalViewportPlayer())\n    {\n",
+          "new": "    local HPVersusHarry ObservedHarry;\n\n    if (bVersusDead)\n    {\n        ClearVersusInput();\n        return;\n    }\n\n    if (IsLocalViewportPlayer())\n    {\n",
+          "old_sha256": "d34e302d07ac8096ed064b76959d2aa41a557418c9debc700c8dad2bd8060c6a",
+          "new_sha256": "ce6dc82178f2ac605c8fcb129ba6d416101b972b28e3b1c72a457403368da562"
+        },
+        {
+          "old": "    Health = 0;\n    SetHealth(0);\n\n    VG = HPVersusGame(Level.Game);\n    if (VG != None)\n    {\n        VG.NotifyVersusDeath(self, Killer, DamageType);\n        return;\n    }\n\n    GotoState('stateDead');\n}\n\n",
+          "new": "    Health = 0;\n    SetHealth(0);\n    ClearVersusInput();\n    GotoState('VersusDead');\n    ClientVersusDeath();\n\n    VG = HPVersusGame(Level.Game);\n    if (VG != None)\n        VG.NotifyVersusDeath(self, Killer, DamageType);\n}\n\nfunction ClientVersusDeath()\n{\n    bVersusDead = True;\n    Health = 0;\n    ClearVersusInput();\n    GotoState('VersusDead');\n}\n\nfunction ClientVersusRespawn()\n{\n    bVersusDead = False;\n    SetupVersusPlayer();\n}\n\nstate VersusDead\n{\n    ignores Fire, AltFire, DoJump, TakeDamage;\n\n    function BeginState()\n    {\n        ClearVersusInput();\n        bKeepStationary = True;\n        bFrozen = True;\n        Velocity = vect(0,0,0);\n        Acceleration = vect(0,0,0);\n        SetPhysics(PHYS_None);\n        PlayAnim('faint', 1.0, 0.2);\n    }\n}\n\n",
+          "old_sha256": "0206e7ee79b858640641eba5733860646f6ddc276e39d59a83627139b06fef28",
+          "new_sha256": "7f2115f4c2fa2960839fef2a3c5b256cc5e74459ade6421b0fa23788c0effef2"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "7a66cffd0a3eff06ad3b59474b925b7ab5e7a5db8878052f8897efdf9c68c50d",
+      "result_sha256": "ac355cb1c6bbb3e49d3cf54765d39e9673760975612db9ff8a0cc498bd04c76e",
+      "replacements": [
+        {
+          "old": "    Super.PostBeginPlay();\n    bMatchInProgress = True;\n    CleanupLegacyHarryActors();\n    SpawnVersusDirector();\n",
+          "new": "    Super.PostBeginPlay();\n    bMatchInProgress = True;\n    SetTimer(0.20, True);\n    CleanupLegacyHarryActors();\n    SpawnVersusDirector();\n",
+          "old_sha256": "4fd2b939555667cc1163a30cb38e278787f647e3186d8924334fdea2ebda455f",
+          "new_sha256": "02a97e4b7813e9907bfe4e031b24f83ebd91cc6870f2fcd3ea2e5fb279c0563c"
+        },
+        {
+          "old": "        return;\n\n    KillerPlayer = PlayerPawn(Killer);\n    if (KillerPlayer != None && KillerPlayer != Victim)\n",
+          "new": "        return;\n\n    Victim.VersusRespawnAt = Level.TimeSeconds + RespawnDelay;\n    if (Victim.PlayerReplicationInfo != None)\n        Victim.PlayerReplicationInfo.Deaths += 1;\n\n    KillerPlayer = PlayerPawn(Killer);\n    if (KillerPlayer != None && KillerPlayer != Victim)\n",
+          "old_sha256": "ee044561862be114a84bf203b12cf73db2a258ebe73b183d2ddc1c4bf27d66a1",
+          "new_sha256": "96d65cefaf92e2d0bc69180eb67965e506d804ef19056c13835e4c896b88f639"
+        },
+        {
+          "old": "\n    UpdateVersusGRI();\n    SetTimer(RespawnDelay, False);\n}\n\n",
+          "new": "\n    UpdateVersusGRI();\n}\n\n",
+          "old_sha256": "c857a12d4e257e60cc4b01cfad994355fdf05db9ffa5e5a0bb743db25e19b94c",
+          "new_sha256": "74ed048f7ea5d1207d46db2211708585ba673d86df79b436ba31cdb5cef3898e"
+        },
+        {
+          "old": "    {\n        H = HPVersusHarry(P);\n        if (H != None && H.bVersusDead)\n        {\n            RestartPlayer(H);\n            H.SetupVersusPlayer();\n            H.bVersusDead = False;\n        }\n    }\n",
+          "new": "    {\n        H = HPVersusHarry(P);\n        if (H != None && H.bVersusDead && bMatchInProgress\n            && Level.TimeSeconds >= H.VersusRespawnAt)\n        {\n            if (RestartPlayer(H))\n            {\n                H.SetupVersusPlayer();\n                H.VersusRespawnAt = 0;\n                H.ClientVersusRespawn();\n            }\n        }\n    }\n",
+          "old_sha256": "eeb5b1b67e91f7b9bc0b53c42f6722eb886aa0ec747363cb20da268f48cbf4b8",
+          "new_sha256": "f6dc614754255dc554b13506c89e03af77f521f33f20d94d2a87c8d17cd03f98"
+        }
+      ]
+    }
+  ]
+}

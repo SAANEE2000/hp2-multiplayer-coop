@@ -1,12 +1,20 @@
 [CmdletBinding()]
-param([string]$GameRoot, [string]$WorkRoot, [switch]$Baseline)
+param([string]$GameRoot, [string]$WorkRoot, [switch]$Baseline, [switch]$VersusV16)
 $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
+if ($Baseline -and $VersusV16) { throw 'Choose either raw -Baseline or patched -VersusV16.' }
 if (!$WorkRoot) {
-    $WorkRoot = Join-Path $repo $(if ($Baseline) { '.local\baseline-game' } else { '.local\game' })
+    $WorkRoot = Join-Path $repo $(if ($VersusV16) { '.local\versus-v16-game' } elseif ($Baseline) { '.local\baseline-game' } else { '.local\game' })
 }
 & (Join-Path $repo 'scripts\Prepare-LocalGame.ps1') -GameRoot $GameRoot -WorkRoot $WorkRoot | Out-Null
 $WorkRoot = (Resolve-Path -LiteralPath $WorkRoot).Path
+if ($VersusV16) {
+    $v16MarkerPath = Join-Path $WorkRoot '.hp2-versus-v16-source.json'
+    if (!(Test-Path -LiteralPath $v16MarkerPath)) { throw 'Prepare the supplied v16 source in this WorkRoot first.' }
+    $v16Marker = Get-Content -LiteralPath $v16MarkerPath -Raw | ConvertFrom-Json
+    if ($v16Marker.sha256 -ne 'A2B13B924BF9BBA9F81C6A70E38024657C71F6F1F861FA49BF3F812C86EFB9BF' -or
+        $v16Marker.classes -ne 857) { throw 'Unrecognized v16 source marker.' }
+}
 # Refuse to swap packages underneath a running test client or server.
 foreach ($running in @(Get-Process -Name 'Game','UCC' -ErrorAction SilentlyContinue)) {
     $runningPath = $null
@@ -45,7 +53,9 @@ $buildCommit = (& git -C $repo rev-parse HEAD 2>$null)
 $buildBranch = (& git -C $repo branch --show-current 2>$null)
 $buildDirty = [bool](& git -C $repo status --porcelain 2>$null)
 if (!$Baseline) {
-    $recipes = @(Get-ChildItem -LiteralPath (Join-Path $repo 'patches') -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)
+    $recipeFilter = if ($VersusV16) { 'versus-v16-*.json' } else { '*.json' }
+    $recipes = @(Get-ChildItem -LiteralPath (Join-Path $repo 'patches') -Filter $recipeFilter -ErrorAction SilentlyContinue | Sort-Object Name)
+    if ($VersusV16 -and $recipes.Count -eq 0) { throw 'No versus-v16 patch recipes found.' }
     if ($recipes.Count -gt 0) {
         # One batch validates all files and orders each source/result hash chain.
         # File-name order cannot express recipes that patch the same source.
@@ -54,7 +64,7 @@ if (!$Baseline) {
         if ($LASTEXITCODE -ne 0) { throw 'Patch batch failed; no build was started.' }
     }
     $overlay = Join-Path $repo 'mod\HGame\Classes'
-    if (Test-Path -LiteralPath $overlay) {
+    if (!$VersusV16 -and (Test-Path -LiteralPath $overlay)) {
         Get-ChildItem -LiteralPath $overlay -Recurse -File | ForEach-Object {
             $relative = $_.FullName.Substring($overlay.Length).TrimStart('\')
             $dest = Join-Path $WorkRoot "HGame\Classes\$relative"
@@ -85,7 +95,8 @@ try {
 } finally { $env:__COMPAT_LAYER = $previousCompat }
 $text = (Get-Content -LiteralPath $output -Raw -ErrorAction SilentlyContinue) + (Get-Content -LiteralPath $errorLog -Raw -ErrorAction SilentlyContinue)
 $pass = $p.ExitCode -eq 0 -and (Test-Path -LiteralPath (Join-Path $system 'HGame.u')) -and (Test-Path -LiteralPath (Join-Path $system 'M212Share.u')) -and $text -match 'Success - 0 error\(s\)' -and $text -notmatch '(?im)(Error in |Critical:|Compile failed|Failed to compile|\b[1-9][0-9]* error\(s\))'
-$result = @{passed=$pass; exitCode=$p.ExitCode; baseline=[bool]$Baseline; log=$output; workRoot=$WorkRoot; origin='local-ucc'; localUccRun=$true; commit=$buildCommit; branch=$buildBranch; sourceDirty=$buildDirty; sourceManifest=(Join-Path $logRoot 'source-manifest.json')}
+$result = @{passed=$pass; exitCode=$p.ExitCode; baseline=[bool]$Baseline; versusV16=[bool]$VersusV16; log=$output; workRoot=$WorkRoot; origin='local-ucc'; localUccRun=$true; commit=$buildCommit; branch=$buildBranch; sourceDirty=$buildDirty; sourceManifest=(Join-Path $logRoot 'source-manifest.json')}
+if ($VersusV16) { $result.sourceArchiveSha256 = $v16Marker.sha256 }
 if (Test-Path -LiteralPath (Join-Path $system 'HGame.u')) { $result.hgameSha256=(Get-FileHash -LiteralPath (Join-Path $system 'HGame.u') -Algorithm SHA256).Hash }
 if (Test-Path -LiteralPath (Join-Path $system 'M212Share.u')) { $result.m212ShareSha256=(Get-FileHash -LiteralPath (Join-Path $system 'M212Share.u') -Algorithm SHA256).Hash }
 $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logRoot 'result.json') -Encoding UTF8

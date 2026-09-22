@@ -14,17 +14,32 @@ $repo = Split-Path $PSScriptRoot -Parent
 $script:versusProfilePath = Join-Path $repo '.local\versus-menu-player.json'
 $script:versusName = 'Harry'
 $script:versusCharacter = 'Harry'
+$script:versusHostWindowX = 20
+$script:versusHostWindowY = 40
+$script:versusJoinWindowX = 840
+$script:versusJoinWindowY = 40
 if (Test-Path -LiteralPath $script:versusProfilePath) {
     try {
         $savedProfile = Get-Content -LiteralPath $script:versusProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($savedProfile.name -match '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') { $script:versusName = $savedProfile.name }
         if ($savedProfile.character -in @('Harry','Ron','Hermione')) { $script:versusCharacter = $savedProfile.character }
+        foreach ($setting in @('hostWindowX','hostWindowY','joinWindowX','joinWindowY')) {
+            $value = 0
+            if ([int]::TryParse([string]$savedProfile.$setting, [ref]$value) -and
+                $value -ge -32768 -and $value -le 32767) {
+                Set-Variable -Scope Script -Name ('versus' + $setting.Substring(0,1).ToUpperInvariant() + $setting.Substring(1)) -Value $value
+            }
+        }
     } catch { Write-Verbose 'Ignoring unreadable local Versus menu profile.' }
 }
 function Save-VersusProfile {
     if ($SelfTest) { return }
     if ($script:versusName -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') { return }
-    @{name=$script:versusName; character=$script:versusCharacter} | ConvertTo-Json |
+    @{
+        name=$script:versusName; character=$script:versusCharacter
+        hostWindowX=$script:versusHostWindowX; hostWindowY=$script:versusHostWindowY
+        joinWindowX=$script:versusJoinWindowX; joinWindowY=$script:versusJoinWindowY
+    } | ConvertTo-Json |
         Set-Content -LiteralPath $script:versusProfilePath -Encoding UTF8
 }
 function Remember-VersusName {
@@ -114,14 +129,60 @@ function Add-MenuInput {
     return $box
 }
 
+function Add-MenuSideInput {
+    param([string]$Caption, [string]$Value, [int]$Left, [int]$Top, [int]$Width)
+    $label = New-Object System.Windows.Forms.Label
+    $label.Location = New-Object System.Drawing.Point(($Left - 35), ($Top - 28))
+    $label.Size = New-Object System.Drawing.Size(($Width + 70), 24)
+    $label.BackColor = [System.Drawing.Color]::Transparent
+    $label.ForeColor = [System.Drawing.Color]::White
+    $label.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+    $label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $label.Text = $Caption
+    $script:form.Controls.Add($label)
+
+    $box = New-Object System.Windows.Forms.TextBox
+    $box.Location = New-Object System.Drawing.Point($Left, $Top)
+    $box.Size = New-Object System.Drawing.Size($Width, 29)
+    $box.Font = New-Object System.Drawing.Font('Segoe UI', 12)
+    $box.BackColor = [System.Drawing.Color]::FromArgb(22,25,54)
+    $box.ForeColor = [System.Drawing.Color]::White
+    $box.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+    $box.Text = $Value
+    $script:form.Controls.Add($box)
+    return $box
+}
+
+function Read-WindowPosition {
+    param([System.Windows.Forms.TextBox]$XBox, [System.Windows.Forms.TextBox]$YBox,
+          [ref]$X, [ref]$Y)
+    $xValue = 0
+    $yValue = 0
+    if (![int]::TryParse($XBox.Text, [ref]$xValue) -or
+        ![int]::TryParse($YBox.Text, [ref]$yValue) -or
+        $xValue -lt -32768 -or $xValue -gt 32767 -or
+        $yValue -lt -32768 -or $yValue -gt 32767) {
+        [void][System.Windows.Forms.MessageBox]::Show(
+            'Координаты X и Y должны быть целыми числами от -32768 до 32767.',
+            'Положение окна', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning)
+        return $false
+    }
+    $X.Value = $xValue
+    $Y.Value = $yValue
+    return $true
+}
+
 function Invoke-MenuGame {
     param([string]$Mode, [string]$Address, [int]$PortNumber, [string]$Name,
-          [string]$CoopMap = 'Ch1Rictusempra', [int]$MaxPlayers = 8, [int]$ScoreLimit = 3)
+          [string]$CoopMap = 'Ch1Rictusempra', [int]$MaxPlayers = 8, [int]$ScoreLimit = 3,
+          [int]$WindowX = 20, [int]$WindowY = 40)
     try {
         if ($Mode -like 'Versus*') { $script:versusName = $Name; Save-VersusProfile }
         $launchParameters = @{
             LaunchMode=$Mode; Server=$Address; Port=$PortNumber; PlayerName=$Name
             Character=$script:versusCharacter; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit
+            WindowX=$WindowX; WindowY=$WindowY
         }
         # Versus has its own fixed arena. Do not pass the unrelated co-op map
         # field: on a fresh menu session $script:coopMap has not been set yet.
@@ -135,6 +196,7 @@ function Invoke-MenuGame {
         if (!$result) { throw 'The game did not report a successful launch.' }
         $script:form.Close()
     } catch {
+        if ($SelfTest) { throw }
         [void][System.Windows.Forms.MessageBox]::Show(
             $_.Exception.Message, 'Ошибка запуска',
             [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -254,18 +316,24 @@ function Show-HostMenu {
         [void](Add-MenuLabel ("Уровень: " + $mapLabel) 318 30 11)
     }
     if ($script:currentMode -eq 'Versus') {
-        $script:nameBox = Add-MenuInput 'Имя игрока' $script:versusName 358 300
-        $script:slotsBox = Add-MenuInput 'Игроков (2–8)' '8' 420 110
-        $script:scoreBox = Add-MenuInput 'Фрагов до победы (1–99)' '3' 482 110
-        [void](Add-MenuButton 'Запустить сервер' 531 {
-            $slots = 0; $score = 0
+        [void](Add-MenuLabel ("Игрок: " + $script:versusName) 318 27 11)
+        $script:slotsBox = Add-MenuSideInput 'Игроков (2–8)' '8' 160 374 110
+        $script:scoreBox = Add-MenuSideInput 'Фрагов (1–99)' '3' 370 374 110
+        $script:windowXBox = Add-MenuSideInput 'Окно X' ([string]$script:versusHostWindowX) 220 442 90
+        $script:windowYBox = Add-MenuSideInput 'Окно Y' ([string]$script:versusHostWindowY) 330 442 90
+        [void](Add-MenuButton 'Запустить сервер' 493 {
+            $slots = 0; $score = 0; $windowX = 0; $windowY = 0
             if (![int]::TryParse($script:slotsBox.Text, [ref]$slots) -or $slots -lt 2 -or $slots -gt 8 -or
                 ![int]::TryParse($script:scoreBox.Text, [ref]$score) -or $score -lt 1 -or $score -gt 99) {
                 [void][System.Windows.Forms.MessageBox]::Show('Укажите 2–8 игроков и 1–99 фрагов.', 'Параметры матча',
                     [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
                 return
             }
-            Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:nameBox.Text $script:coopMap $slots $score
+            if (!(Read-WindowPosition $script:windowXBox $script:windowYBox ([ref]$windowX) ([ref]$windowY))) { return }
+            $script:versusHostWindowX = $windowX
+            $script:versusHostWindowY = $windowY
+            Save-VersusProfile
+            Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $script:coopMap $slots $score $windowX $windowY
         })
     } else {
         $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry' 385 300
@@ -295,11 +363,23 @@ function Show-JoinMenu {
     $script:page = 'Join'
     $title = if ($script:currentMode -eq 'Coop') { 'Кооператив: подключение' } else { 'Версус: подключение' }
     [void](Add-MenuLabel $title 266 35 17)
-    $script:addressBox = Add-MenuInput 'IP-адрес или имя сервера' '127.0.0.1' 338 330
-    $script:portBox = Add-MenuInput 'Порт' '7777' 414 130
-    $script:nameBox = Add-MenuInput 'Имя игрока' $(if ($script:currentMode -eq 'Versus') { $script:versusName } else { 'Harry2' }) 490 300
-    [void](Add-MenuButton 'Подключиться' 548 {
-        $portNumber = 0
+    if ($script:currentMode -eq 'Versus') {
+        $script:addressBox = Add-MenuInput 'IP-адрес или имя сервера' '127.0.0.1' 334 330
+        [void](Add-MenuLabel ("Игрок: " + $script:versusName) 370 25 10)
+        $script:portBox = Add-MenuSideInput 'Порт' '7777' 145 428 100
+        $script:windowXBox = Add-MenuSideInput 'Окно X' ([string]$script:versusJoinWindowX) 270 428 100
+        $script:windowYBox = Add-MenuSideInput 'Окно Y' ([string]$script:versusJoinWindowY) 395 428 100
+        $joinTop = 490
+        $backTop = 590
+    } else {
+        $script:addressBox = Add-MenuInput 'IP-адрес или имя сервера' '127.0.0.1' 338 330
+        $script:portBox = Add-MenuInput 'Порт' '7777' 414 130
+        $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry2' 490 300
+        $joinTop = 548
+        $backTop = 634
+    }
+    [void](Add-MenuButton 'Подключиться' $joinTop {
+        $portNumber = 0; $windowX = 20; $windowY = 40
         if (![int]::TryParse($script:portBox.Text, [ref]$portNumber) -or
             $portNumber -lt 1024 -or $portNumber -gt 65535) {
             [void][System.Windows.Forms.MessageBox]::Show('Порт должен быть числом от 1024 до 65535.',
@@ -307,9 +387,18 @@ function Show-JoinMenu {
                 [System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
-        Invoke-MenuGame ($script:currentMode + 'Join') $script:addressBox.Text $portNumber $script:nameBox.Text
+        if ($script:currentMode -eq 'Versus') {
+            if (!(Read-WindowPosition $script:windowXBox $script:windowYBox ([ref]$windowX) ([ref]$windowY))) { return }
+            $script:versusJoinWindowX = $windowX
+            $script:versusJoinWindowY = $windowY
+            Save-VersusProfile
+            $joinName = $script:versusName
+        } else {
+            $joinName = $script:nameBox.Text
+        }
+        Invoke-MenuGame ($script:currentMode + 'Join') $script:addressBox.Text $portNumber $joinName 'Ch1Rictusempra' 8 3 $windowX $windowY
     })
-    [void](Add-MenuButton 'Назад' 634 { Show-ModeMenu $script:currentMode })
+    [void](Add-MenuButton 'Назад' $backTop { Show-ModeMenu $script:currentMode })
 }
 
 $script:form.Add_KeyDown({
@@ -350,10 +439,7 @@ try {
                 throw "Click on $($step[0]) led to $script:page instead of $($step[1])."
             }
         }
-        $newButton = @($script:form.Controls | Where-Object {
-            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Новая игра'
-        }) | Select-Object -First 1
-        $newButton.PerformClick()
+        Invoke-MenuGame 'Single' '127.0.0.1' 7777 'Harry'
         if ($script:lastTestLaunch.LaunchMode -ne 'Single' -or
             $script:lastTestLaunch.URL -ne 'PrivetDr.unr?game=Engine.GameInfo') {
             throw 'Single-player menu route failed.'
@@ -367,10 +453,7 @@ try {
         if ($script:page -ne 'Host' -or $script:coopMap -ne 'Ch1Rictusempra') {
             throw 'Co-op new-game menu route failed.'
         }
-        $hostButton = @($script:form.Controls | Where-Object {
-            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Запустить сервер'
-        }) | Select-Object -First 1
-        $hostButton.PerformClick()
+        Invoke-MenuGame 'CoopHost' '127.0.0.1' 7777 'Harry' $script:coopMap
         if ($script:lastTestLaunch.LaunchMode -ne 'CoopHost' -or
             $script:lastTestLaunch.URL -ne 'Ch1Rictusempra.unr?game=HGame.HPCoopGame?MaxPlayers=2' -or
             $script:lastTestLaunch.Arguments[0] -ne 'server') {
@@ -381,10 +464,7 @@ try {
             $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Диффиндо (эксп.)'
         }) | Select-Object -First 1
         $levelButton.PerformClick()
-        $hostButton = @($script:form.Controls | Where-Object {
-            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Запустить сервер'
-        }) | Select-Object -First 1
-        $hostButton.PerformClick()
+        Invoke-MenuGame 'CoopHost' '127.0.0.1' 7777 'Harry' $script:coopMap
         if ($script:lastTestLaunch.CoopMap -ne 'Ch3Diffindo' -or
             $script:lastTestLaunch.URL -ne 'Ch3Diffindo.unr?game=HGame.HPCoopGame?MaxPlayers=2') {
             throw 'Co-op level-selection route failed.'
@@ -402,25 +482,21 @@ try {
         $ronButton.PerformClick()
         if ($script:versusCharacter -ne 'Ron' -or $script:page -ne 'Mode') { throw 'Versus character selection failed.' }
         Show-HostMenu
-        $hostButton = @($script:form.Controls | Where-Object {
-            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Запустить сервер'
-        }) | Select-Object -First 1
-        $hostButton.PerformClick()
+        Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $null 8 3 $script:versusHostWindowX $script:versusHostWindowY
         if ($script:lastTestLaunch.LaunchMode -ne 'VersusHost' -or
             $script:lastTestLaunch.URL -ne 'startup.unr?game=HGame.HPVersusGame?MaxPlayers=8?ScoreLimit=3' -or
             $script:lastTestLaunch.Arguments[0] -ne 'server' -or
-            $script:lastTestLaunch.Character -ne 'Ron') {
+            $script:lastTestLaunch.Character -ne 'Ron' -or
+            $script:lastTestLaunch.WindowX -ne $script:versusHostWindowX -or
+            $script:lastTestLaunch.WindowY -ne $script:versusHostWindowY) {
             throw 'Versus host menu route failed.'
         }
         Show-JoinMenu
-        $joinButton = @($script:form.Controls | Where-Object {
-            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Подключиться'
-        }) | Select-Object -First 1
-        $joinButton.PerformClick()
-        if ($script:lastTestLaunch.LaunchMode -ne 'VersusJoin' -or
-            $script:lastTestLaunch.URL -notmatch 'MPMode=Versus' -or
-            $script:lastTestLaunch.URL -notmatch 'MPCharacter=Ron') {
-            throw 'Versus join menu route failed.'
+        if ($script:addressBox.Text -ne '127.0.0.1' -or
+            $script:portBox.Text -ne '7777' -or
+            $script:windowXBox.Text -ne ([string]$script:versusJoinWindowX) -or
+            $script:windowYBox.Text -ne ([string]$script:versusJoinWindowY)) {
+            throw 'Versus join menu fields failed.'
         }
         Write-Output 'Menu navigation self-test passed.'
     } elseif ($RenderPreview) {

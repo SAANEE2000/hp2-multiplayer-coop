@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-character-motion",
+  "description": "Map Ron and Hermione to their shipped generic strafe and aim sequences, and give each a short differentiated jump exertion sound.",
+  "source_snapshot": "HPVersus_v16_remote_bottom_align_20260905 plus prior v16 patches",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "b2261a6faeabc80e20832ae16aeb3db2ff701120196811c3147b3fd96df97711",
+      "result_sha256": "28017b318705f97bf33784599e1de0ec1670bb053cfd1ca1ac2a9e6c10267076",
+      "replacements": [
+        {
+          "old": "Class'cHarryAnimChannel'",
+          "new": "Class'HPVersusAnimChannel'",
+          "old_sha256": "c9d5a7bf7587db34003fc412f901f4aa7362db88184603857b615e5d6441b029",
+          "new_sha256": "7d48c6ccfd5fef254e81075c73cebb7ed6eeeb48bcc5f3e4122f031d467ab431"
+        },
+        {
+          "old": "function name GetVersusDesiredMovementAnim()\n{\n    local vector X;\n    local vector Y;\n    local vector Z;\n    local vector Dir;\n\n    GetAxes(Rotation, X, Y, Z);\n    Dir = Normal(Acceleration);\n\n    if ((Dir Dot X < 0.75) && (Dir != vect(0.00,0.00,0.00)))\n    {\n        if (Dir Dot X < -0.75)\n            return HarryAnims[HarryAnimSet].WalkBack;\n\n        if (Dir Dot Y > 0)\n            return HarryAnims[HarryAnimSet].StrafeRight;\n\n        return HarryAnims[HarryAnimSet].StrafeLeft;\n    }\n\n    return HarryAnims[HarryAnimSet].run;\n}\n\nfunction bool IsVersusJumpOrFallAnim(name SequenceName)\n{\n    return SequenceName == HarryAnims[HarryAnimSet].Jump\n        || SequenceName == HarryAnims[HarryAnimSet].Jump2\n        || SequenceName == HarryAnims[HarryAnimSet].Fall\n        || SequenceName == AnimFalling;\n}\n\nfunction bool IsVersusMovementAnim(name SequenceName)\n{\n    return SequenceName == HarryAnims[HarryAnimSet].run\n        || SequenceName == HarryAnims[HarryAnimSet].Walk\n        || SequenceName == HarryAnims[HarryAnimSet].WalkBack\n        || SequenceName == HarryAnims[HarryAnimSet].StrafeRight\n        || SequenceName == HarryAnims[HarryAnimSet].StrafeLeft;\n}\n\n",
+          "new": "function name GetVersusDesiredMovementAnim()\n{\n    local vector X;\n    local vector Y;\n    local vector Z;\n    local vector Dir;\n\n    GetAxes(Rotation, X, Y, Z);\n    Dir = Normal(Acceleration);\n\n    if ((Dir Dot X < 0.75) && (Dir != vect(0.00,0.00,0.00)))\n    {\n        if (Dir Dot X < -0.75)\n        {\n            if (UsesVersusGenericAnimationSet())\n                return 'duel_runback';\n\n            return HarryAnims[HarryAnimSet].WalkBack;\n        }\n\n        if (Dir Dot Y > 0)\n        {\n            if (UsesVersusGenericAnimationSet())\n                return 'strafe_right';\n\n            return HarryAnims[HarryAnimSet].StrafeRight;\n        }\n\n        if (UsesVersusGenericAnimationSet())\n            return 'strafe_left';\n\n        return HarryAnims[HarryAnimSet].StrafeLeft;\n    }\n\n    if (UsesVersusGenericAnimationSet())\n        return 'run';\n\n    return HarryAnims[HarryAnimSet].run;\n}\n\nfunction bool UsesVersusGenericAnimationSet()\n{\n    return Mesh == SkeletalMesh'HPModels.skronMesh'\n        || Mesh == SkeletalMesh'HPModels.skhermioneMesh';\n}\n\nfunction bool IsVersusJumpOrFallAnim(name SequenceName)\n{\n    return SequenceName == HarryAnims[HarryAnimSet].Jump\n        || SequenceName == HarryAnims[HarryAnimSet].Jump2\n        || SequenceName == HarryAnims[HarryAnimSet].Fall\n        || SequenceName == AnimFalling;\n}\n\nfunction bool IsVersusMovementAnim(name SequenceName)\n{\n    return SequenceName == HarryAnims[HarryAnimSet].run\n        || SequenceName == HarryAnims[HarryAnimSet].Walk\n        || SequenceName == HarryAnims[HarryAnimSet].WalkBack\n        || SequenceName == HarryAnims[HarryAnimSet].StrafeRight\n        || SequenceName == HarryAnims[HarryAnimSet].StrafeLeft\n        || SequenceName == 'duel_runback'\n        || SequenceName == 'strafe_right'\n        || SequenceName == 'strafe_left';\n}\n\nfunction TweenToRunning(float TweenTime)\n{\n    local name DesiredAnim;\n\n    if (!UsesVersusGenericAnimationSet())\n    {\n        Super.TweenToRunning(TweenTime);\n        return;\n    }\n\n    BaseEyeHeight = Default.BaseEyeHeight;\n    if (!EnsureVersusAnimationChannel(\"TweenToRunning\"))\n        return;\n    if (!HarryAnimChannel.PlayHarryMovementAnims())\n        return;\n\n    DesiredAnim = GetVersusDesiredMovementAnim();\n    if (!HasAnim(DesiredAnim))\n        DesiredAnim = 'run';\n\n    LoopAnim(DesiredAnim, 0.89999998, TweenTime,, HarryAnimType);\n    bMovingBackwards = DesiredAnim == 'duel_runback';\n}\n\n",
+          "old_sha256": "9fa4977ac8aab8dbe1344acc95697155d7220a07845c0377ad84064843289119",
+          "new_sha256": "e2a24d4ab4e82cc2406b2d61cff84cf8dcd6536c1e1fefe8b5c48a14144c6bf9"
+        },
+        {
+          "old": "function ApplyCharacterSkin(string CharacterName)",
+          "new": "function PlayJumpEmoteSound()\n{\n    // The shipped Ron and Hermione meshes use the generic male/female\n    // animation sets and do not carry character-specific jump properties.\n    // Reuse the short neutral exertion sounds already shipped in HPSounds,\n    // with a small pitch split so the three playable characters are distinct.\n    if (Mesh == SkeletalMesh'HPModels.skronMesh')\n    {\n        PlayOwnedSound(Sound'HPSounds.Har_Emotes.jump1', SLOT_Talk, 1.35, False, 1200.0, 0.88);\n        return;\n    }\n\n    if (Mesh == SkeletalMesh'HPModels.skhermioneMesh')\n    {\n        PlayOwnedSound(Sound'HPSounds.Har_Emotes.jump2', SLOT_Talk, 1.25, False, 1200.0, 1.12);\n        return;\n    }\n\n    Super.PlayJumpEmoteSound();\n}\n\nfunction ApplyCharacterSkin(string CharacterName)",
+          "old_sha256": "f5399b63395cd06003d7fb14751328aced0ae588fe6ab665371a8e621ca9f185",
+          "new_sha256": "4b2afc272139aa82dedcb66f0cc5c97f421a3f5aa79017ccbc4b4751b25b9805"
+        }
+      ]
+    }
+  ]
+}

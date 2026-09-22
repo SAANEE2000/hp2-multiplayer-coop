@@ -11,6 +11,8 @@ param(
     [ValidateSet('Harry','Ron','Hermione')][string]$Character = 'Harry',
     [ValidateRange(2,8)][int]$MaxPlayers = 2,
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
+    [ValidateRange(-32768,32767)][int]$WindowX = 20,
+    [ValidateRange(-32768,32767)][int]$WindowY = 40,
     [ValidateSet('None','RictusempraLessonComplete')][string]$TestStage = 'None',
     [ValidateSet('None','Health','Lumos','Pickup','PickupNet','AIInspect','AICombat','AICombatDeath','AISnail','Travel','MountRootB0','MountRootB1')][string]$RuntimeProbe = 'None',
     [switch]$CapturedAuthorityDiagnostic,
@@ -217,6 +219,85 @@ function Set-IniValues {
     return ($lines -join "`r`n")
 }
 
+function Set-ProcessWindowPosition {
+    param(
+        [Parameter(Mandatory=$true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory=$true)][int]$X,
+        [Parameter(Mandatory=$true)][int]$Y,
+        [int]$TimeoutMilliseconds = 12000
+    )
+
+    if (!('HP2MP.NativeWindow' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace HP2MP {
+    public static class NativeWindow {
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPos(
+            IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
+
+        public static IntPtr FindLargestVisibleWindow(int processId) {
+            IntPtr best = IntPtr.Zero;
+            long bestArea = 0;
+            EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+                uint owner;
+                RECT rect;
+                GetWindowThreadProcessId(hWnd, out owner);
+                if (owner != (uint)processId || !IsWindowVisible(hWnd) || !GetWindowRect(hWnd, out rect))
+                    return true;
+                long width = Math.Max(0, rect.Right - rect.Left);
+                long height = Math.Max(0, rect.Bottom - rect.Top);
+                long area = width * height;
+                if (area > bestArea) { bestArea = area; best = hWnd; }
+                return true;
+            }, IntPtr.Zero);
+            return best;
+        }
+    }
+}
+'@
+    }
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
+    $firstAppliedAt = $null
+    $positionApplied = $false
+    do {
+        $Process.Refresh()
+        if ($Process.HasExited) { return $false }
+        $windowHandle = [HP2MP.NativeWindow]::FindLargestVisibleWindow($Process.Id)
+        if ($windowHandle -ne [IntPtr]::Zero) {
+            # Preserve size and Z-order and do not steal focus while arranging
+            # two local clients. HP2 replaces/repositions its early bootstrap
+            # window, so keep applying the requested position until the final
+            # render window has stayed up for five seconds.
+            $moved = [HP2MP.NativeWindow]::SetWindowPos(
+                $windowHandle, [IntPtr]::Zero,
+                $X, $Y, 0, 0, 0x0015)
+            if ($moved) {
+                $positionApplied = $true
+                if ($null -eq $firstAppliedAt) { $firstAppliedAt = [DateTime]::UtcNow }
+                if (([DateTime]::UtcNow - $firstAppliedAt).TotalSeconds -ge 5) { return $true }
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    return $positionApplied
+}
+
 $session = '{0}-{1}-{2}-{3}' -f $Mode.ToLowerInvariant(),$Role.ToLowerInvariant(),(Get-Date -Format 'yyyyMMdd-HHmmss-fff'),([Guid]::NewGuid().ToString('N').Substring(0,6))
 $stem = "HP2MP-$session"
 $runRoot = Join-Path $repo ".local\runs\$session"
@@ -333,6 +414,7 @@ $manifest = [ordered]@{
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
     playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
     maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit;
+    windowed=$true; windowX=$WindowX; windowY=$WindowY; windowPositionApplied=$false;
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;
     runRoot=$runRoot; profileRoot=$profileRoot; userFolder="HP2-MP-$session"; processId=$null;
     profileIsolation='UNVERIFIED: M212 bootstrap may select UserFolder/SavePath from Default.ini before the custom INI.';
@@ -363,6 +445,13 @@ if (!$PrepareOnly) {
         $manifest.status = 'STARTED'
         $manifest.processId = $process.Id
         $manifest.started = Get-Date -Format o
+        if ($Role -eq 'Join' -and !$Unattended) {
+            $manifest.windowPositionApplied = Set-ProcessWindowPosition -Process $process -X $WindowX -Y $WindowY
+            if (!$manifest.windowPositionApplied) {
+                $manifest.windowPositionError = 'The game window handle did not become available within 12 seconds.'
+                Write-Warning $manifest.windowPositionError
+            }
+        }
     } catch {
         $manifest.status = 'LAUNCH_FAILED'
         $manifest.error = $_.Exception.Message

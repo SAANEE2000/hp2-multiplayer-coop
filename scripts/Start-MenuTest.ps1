@@ -8,11 +8,89 @@ param(
     [ValidateSet('Harry','Ron','Hermione')][string]$Character = 'Harry',
     [ValidateRange(2,8)][int]$MaxPlayers = 8,
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
+    [ValidateRange(-32768,32767)][int]$WindowX = 20,
+    [ValidateRange(-32768,32767)][int]$WindowY = 40,
     [ValidateSet('Ch1Rictusempra','Ch2Skurge','Ch3Diffindo','Ch4Spongify')]
     [string]$CoopMap = 'Ch1Rictusempra',
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
+
+function Set-ProcessWindowPosition {
+    param(
+        [Parameter(Mandatory=$true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory=$true)][int]$X,
+        [Parameter(Mandatory=$true)][int]$Y,
+        [int]$TimeoutMilliseconds = 12000
+    )
+
+    if (!('HP2MP.NativeWindow' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace HP2MP {
+    public static class NativeWindow {
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPos(
+            IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
+
+        public static IntPtr FindLargestVisibleWindow(int processId) {
+            IntPtr best = IntPtr.Zero;
+            long bestArea = 0;
+            EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+                uint owner;
+                RECT rect;
+                GetWindowThreadProcessId(hWnd, out owner);
+                if (owner != (uint)processId || !IsWindowVisible(hWnd) || !GetWindowRect(hWnd, out rect))
+                    return true;
+                long width = Math.Max(0, rect.Right - rect.Left);
+                long height = Math.Max(0, rect.Bottom - rect.Top);
+                long area = width * height;
+                if (area > bestArea) { bestArea = area; best = hWnd; }
+                return true;
+            }, IntPtr.Zero);
+            return best;
+        }
+    }
+}
+'@
+    }
+
+    $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
+    $firstAppliedAt = $null
+    $positionApplied = $false
+    do {
+        $Process.Refresh()
+        if ($Process.HasExited) { return $false }
+        $windowHandle = [HP2MP.NativeWindow]::FindLargestVisibleWindow($Process.Id)
+        if ($windowHandle -ne [IntPtr]::Zero) {
+            $moved = [HP2MP.NativeWindow]::SetWindowPos(
+                $windowHandle, [IntPtr]::Zero,
+                $X, $Y, 0, 0, 0x0015)
+            if ($moved) {
+                $positionApplied = $true
+                if ($null -eq $firstAppliedAt) { $firstAppliedAt = [DateTime]::UtcNow }
+                if (([DateTime]::UtcNow - $firstAppliedAt).TotalSeconds -ge 5) { return $true }
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    return $positionApplied
+}
+
 $repo = Split-Path $PSScriptRoot -Parent
 $gameRoot = Join-Path $repo $(if ($LaunchMode -like 'Versus*') { '.local\versus-v16-game' } else { '.local\game' })
 $system = Join-Path $gameRoot 'System'
@@ -63,7 +141,8 @@ $profileMode = if ($LaunchMode -like 'Versus*') { 'Versus' } else { 'Coop' }
 $prepared = $null
 if ($LaunchMode -notin @('CoopHost','VersusHost')) {
     $prepared = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
-        -Mode $profileMode -Role Join -WorkRoot $gameRoot -PrepareOnly -PlayerName $PlayerName
+        -Mode $profileMode -Role Join -WorkRoot $gameRoot -PrepareOnly -PlayerName $PlayerName `
+        -WindowX $WindowX -WindowY $WindowY
     if ($prepared.status -ne 'PREPARED') { throw 'Could not prepare the isolated menu profile.' }
     $runRoot = $prepared.runRoot
 }
@@ -94,6 +173,7 @@ $arguments = if ($LaunchMode -in @('CoopHost','VersusHost')) {
 }
 if ($DryRun) {
     [PSCustomObject]@{LaunchMode=$LaunchMode; CoopMap=$CoopMap; Character=$Character; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit; URL=$url; Arguments=$arguments;
+        Windowed=$true; WindowX=$WindowX; WindowY=$WindowY;
         EngineIni=$prepared.engineIni; UserIni=$prepared.userIni;
         Executable=$(if ($LaunchMode -in @('CoopHost','VersusHost')) { Join-Path $system 'UCC.exe' } else { $exe });
         LocalClientExecutable=$exe}
@@ -126,7 +206,8 @@ if ($LaunchMode -in @('CoopHost','VersusHost')) {
         }
         if (!$serverReady) { throw 'The server did not become ready within 20 seconds.' }
         $localRun = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
-            -Mode $profileMode -Role Join -WorkRoot $gameRoot -Server '127.0.0.1' -Port $Port -PlayerName $PlayerName -Character $Character
+            -Mode $profileMode -Role Join -WorkRoot $gameRoot -Server '127.0.0.1' -Port $Port -PlayerName $PlayerName -Character $Character `
+            -WindowX $WindowX -WindowY $WindowY
         if ($localRun.status -ne 'STARTED') { throw 'The local client did not start.' }
         Start-Sleep -Seconds 3
         $serverProcess = Get-Process -Id $hostRun.processId -ErrorAction SilentlyContinue
@@ -177,6 +258,11 @@ try {
 Start-Sleep -Seconds 3
 $process.Refresh()
 if ($process.HasExited) { throw "Game.exe exited immediately with code $($process.ExitCode)." }
+$windowPositionApplied = Set-ProcessWindowPosition -Process $process -X $WindowX -Y $WindowY
+if (!$windowPositionApplied) {
+    Write-Warning 'The game is windowed, but its window handle was not available for positioning within 12 seconds.'
+}
 $documents = [Environment]::GetFolderPath('MyDocuments')
 Write-Output "Test game is running (PID $($process.Id), mode $LaunchMode): $exe"
+Write-Output "Windowed position requested: X=$WindowX, Y=$WindowY; applied=$windowPositionApplied"
 Write-Output "Expected log: $(Join-Path (Join-Path $documents 'HP2-Multiplayer-Development') $logName)"

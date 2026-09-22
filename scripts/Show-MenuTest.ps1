@@ -119,16 +119,19 @@ function Invoke-MenuGame {
           [string]$CoopMap = 'Ch1Rictusempra', [int]$MaxPlayers = 8, [int]$ScoreLimit = 3)
     try {
         if ($Mode -like 'Versus*') { $script:versusName = $Name; Save-VersusProfile }
+        $launchParameters = @{
+            LaunchMode=$Mode; Server=$Address; Port=$PortNumber; PlayerName=$Name
+            Character=$script:versusCharacter; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit
+        }
+        # Versus has its own fixed arena. Do not pass the unrelated co-op map
+        # field: on a fresh menu session $script:coopMap has not been set yet.
+        if ($Mode -like 'Coop*') { $launchParameters.CoopMap = $CoopMap }
         if ($SelfTest) {
-            $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') `
-                -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name `
-                -CoopMap $CoopMap -Character $script:versusCharacter -MaxPlayers $MaxPlayers -ScoreLimit $ScoreLimit -DryRun
+            $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') @launchParameters -DryRun
             $script:lastTestLaunch = $result
             return
         }
-        $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') `
-            -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name `
-            -CoopMap $CoopMap -Character $script:versusCharacter -MaxPlayers $MaxPlayers -ScoreLimit $ScoreLimit
+        $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') @launchParameters
         if (!$result) { throw 'The game did not report a successful launch.' }
         $script:form.Close()
     } catch {
@@ -387,6 +390,8 @@ try {
             throw 'Co-op level-selection route failed.'
         }
         Show-ModeMenu 'Versus'
+        # Reproduce a fresh process: no co-op page has initialized this value.
+        $script:coopMap = $null
         $chooseButton = @($script:form.Controls | Where-Object {
             $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Выбрать персонажа'
         }) | Select-Object -First 1

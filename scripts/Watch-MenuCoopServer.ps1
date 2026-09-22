@@ -27,7 +27,7 @@ while ($true) {
     $client = Get-ExactProcess $ClientProcessId $clientExe $ClientStartTicks
     if (!$client) {
         Stop-Process -Id $ServerProcessId -ErrorAction Stop
-        Write-Output 'Local player closed the game; stopped the matching co-op server.'
+        Write-Output 'Local player closed the game; stopped the matching server.'
         return
     }
     Start-Sleep -Seconds 2

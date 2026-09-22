@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-hud-respawn",
+  "description": "Replicate personal respawn countdown and attach the Versus score HUD.",
+  "source_snapshot": "HPVersus_v16_remote_bottom_align_20260905 plus prior v16 patches",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "ba8e0df8dcf7d3f6dcc4b5c45df95724eca94f0089828e2eafdda696d8147371",
+      "result_sha256": "962d6ae1733144258ea9ef49996c6a5a58876bedb43d3394d956336cc6d5cc5e",
+      "replacements": [
+        {
+          "old": "    local HPVersusPRI KillerPRI;\n\n    if (Victim == None)\n        return;\n    if (!bMatchInProgress)\n        return;\n\n    Victim.VersusRespawnAt = Level.TimeSeconds + RespawnDelay;\n    if (Victim.PlayerReplicationInfo != None)\n        Victim.PlayerReplicationInfo.Deaths += 1;\n\n    KillerPlayer = PlayerPawn(Killer);\n    if (KillerPlayer != None && KillerPlayer != Victim)\n    {\n        KillerPRI = HPVersusPRI(KillerPlayer.PlayerReplicationInfo);\n        if (KillerPRI != None)\n",
+          "new": "    local HPVersusPRI KillerPRI;\n\n    if (Victim == None)\n        return;\n    if (!bMatchInProgress)\n        return;\n\n    Victim.VersusRespawnAt = Level.TimeSeconds + RespawnDelay;\n    Victim.VersusRespawnSeconds = byte(int(RespawnDelay + 0.99));\n    if (Victim.PlayerReplicationInfo != None)\n        Victim.PlayerReplicationInfo.Deaths += 1;\n\n    KillerPlayer = PlayerPawn(Killer);\n    if (KillerPlayer != None && KillerPlayer != Victim)\n    {\n        KillerPRI = HPVersusPRI(KillerPlayer.PlayerReplicationInfo);\n        if (KillerPRI != None)\n",
+          "old_sha256": "d67ce7037d4bdb499c4c3b19e504a68258a1897e24932edd6c9a8708b1744439",
+          "new_sha256": "17e82f20c12667e2e31f0e9118c2e6cdaf62b22b8199dda943673990eeec49e5"
+        },
+        {
+          "old": "            PRI.RoundScore = 0;\n            PRI.Score = 0;\n            PRI.Deaths = 0;\n        }\n        if (RestartPlayer(H))\n        {\n            H.SetupVersusPlayer();\n            H.VersusRespawnAt = 0;\n            H.ClientVersusRespawn();\n        }\n        else\n        {\n            H.bVersusDead = True;\n            H.VersusRespawnAt = Level.TimeSeconds + 0.20;\n            H.GotoState('VersusDead');\n            H.ClientVersusDeath();\n        }\n    }\n\n    G = HPVersusGRI(GameReplicationInfo);\n    if (G != None)\n        G.WinnerName = \"\";\n",
+          "new": "            PRI.RoundScore = 0;\n            PRI.Score = 0;\n            PRI.Deaths = 0;\n        }\n        if (RestartPlayer(H))\n        {\n            H.SetupVersusPlayer();\n            H.VersusRespawnAt = 0;\n            H.VersusRespawnSeconds = 0;\n            H.ClientVersusRespawn();\n        }\n        else\n        {\n            H.bVersusDead = True;\n            H.VersusRespawnAt = Level.TimeSeconds + 0.20;\n            H.VersusRespawnSeconds = 0;\n            H.GotoState('VersusDead');\n            H.ClientVersusDeath();\n        }\n    }\n\n    G = HPVersusGRI(GameReplicationInfo);\n    if (G != None)\n        G.WinnerName = \"\";\n",
+          "old_sha256": "402d0a2fd7296fedafd16f9e12d7d3dc4f3a70ad05c73ce0bb065dd9ac034910",
+          "new_sha256": "369cb1cb57065466a3a9c6a74f2b3d1cd11775fd1f3c6edbb93aba00c54cd908"
+        },
+        {
+          "old": "function RespawnDeadPlayers()\n{\n    local Pawn P;\n    local HPVersusHarry H;\n\n    for (P = Level.PawnList; P != None; P = P.NextPawn)\n    {\n        H = HPVersusHarry(P);\n        if (H != None && H.bVersusDead && VersusPhase != 'MatchOver'\n            && Level.TimeSeconds >= H.VersusRespawnAt)\n        {\n            if (RestartPlayer(H))\n            {\n                H.SetupVersusPlayer();\n                H.VersusRespawnAt = 0;\n                H.ClientVersusRespawn();\n            }\n        }\n    }\n}\n\nfunction EndVersusMatch(PlayerPawn Winner)\n{\n",
+          "new": "function RespawnDeadPlayers()\n{\n    local Pawn P;\n    local HPVersusHarry H;\n\n    for (P = Level.PawnList; P != None; P = P.NextPawn)\n    {\n        H = HPVersusHarry(P);\n        if (H == None || !H.bVersusDead || VersusPhase == 'MatchOver')\n            continue;\n\n        if (H.VersusRespawnAt > Level.TimeSeconds)\n            H.VersusRespawnSeconds = byte(int(H.VersusRespawnAt - Level.TimeSeconds + 0.99));\n        else\n            H.VersusRespawnSeconds = 0;\n\n        if (Level.TimeSeconds >= H.VersusRespawnAt)\n        {\n            if (RestartPlayer(H))\n            {\n                H.SetupVersusPlayer();\n                H.VersusRespawnAt = 0;\n                H.VersusRespawnSeconds = 0;\n                H.ClientVersusRespawn();\n            }\n        }\n    }\n}\n\nfunction EndVersusMatch(PlayerPawn Winner)\n{\n",
+          "old_sha256": "74b2cf07c6686e73d8a0fd7c999af3dd29cc2990e3b64070e1bb391c60ef753e",
+          "new_sha256": "0d3a372d1a36c296f786a346f32afee24f6695c66311095cc87d5a5b45c46fa6"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "975ce5a2d98e5c1b8fc84439dd462dad378d46669f2480a73259a4accb7845fa",
+      "result_sha256": "7a9a2249a7b1844d645c405ee50604f784c4400062a9cdbdb411bac8c9943c73",
+      "replacements": [
+        {
+          "old": "// forced immortality loop.\n//=============================================================================\n\nclass HPVersusHarry extends harry;\n\nvar bool bVersusDead;\nvar float LastVersusHitTime;\nvar float VersusRespawnAt;\nvar byte VersusSlot;             // 0..7; assigned by HPVersusGame.Login\nvar bool bVersusRegistered;      // authoritative slot reservation until Logout\n\n// Experimental direct input bridge for HP2 multiplayer.\n// These are bound through User.ini with `Button bVersus...` and are also\n// set by HPConsole.KeyEvent as a fallback when normal Axis aliases do not\n// reach the network pawn.\nvar input byte bVersusMoveForward;\n",
+          "new": "// forced immortality loop.\n//=============================================================================\n\nclass HPVersusHarry extends harry;\n\nvar bool bVersusDead;\nvar float LastVersusHitTime;\nvar float VersusRespawnAt;\nvar byte VersusRespawnSeconds;\nvar byte VersusSlot;             // 0..7; assigned by HPVersusGame.Login\nvar bool bVersusRegistered;      // authoritative slot reservation until Logout\n\n// Experimental direct input bridge for HP2 multiplayer.\n// These are bound through User.ini with `Button bVersus...` and are also\n// set by HPConsole.KeyEvent as a fallback when normal Axis aliases do not\n// reach the network pawn.\nvar input byte bVersusMoveForward;\n",
+          "old_sha256": "5bb01483ad5d2161d78dc1abdd4825028297309dfd348b568b51dc6a2fd314b4",
+          "new_sha256": "b582fb736420ba5227d1ac56a2b9dc5d72abd89c6ed514e61b5ec696f16fecbb"
+        },
+        {
+          "old": "var float VersusMuzzleForwardOffset;\nvar float VersusMuzzleHeightOffset;\nvar Weapon LastLoggedVersusWeapon;\nvar SpellCursor LastLoggedVersusCursor;\n\nreplication\n{\n    reliable if (Role == ROLE_Authority)\n        bVersusDead, VersusSlot, SelectedVersusSpell, VersusCastSerial,\n        ClientSetVersusSlot, ClientVersusDeath, ClientVersusRespawn;\n\n    reliable if (Role < ROLE_Authority)\n        ServerSelectCharacter, ServerRequestCast, ServerVersusNudge,\n        ServerVersusMoveInput, ServerSetVersusEngineMovement,\n        ServerVersusNetState, ServerVersusSpellState,\n        ServerSelectVersusSpell;\n}\n",
+          "new": "var float VersusMuzzleForwardOffset;\nvar float VersusMuzzleHeightOffset;\nvar Weapon LastLoggedVersusWeapon;\nvar SpellCursor LastLoggedVersusCursor;\n\nreplication\n{\n    reliable if (Role == ROLE_Authority)\n        bVersusDead, VersusSlot, VersusRespawnSeconds, SelectedVersusSpell, VersusCastSerial,\n        ClientSetVersusSlot, ClientVersusDeath, ClientVersusRespawn;\n\n    reliable if (Role < ROLE_Authority)\n        ServerSelectCharacter, ServerRequestCast, ServerVersusNudge,\n        ServerVersusMoveInput, ServerSetVersusEngineMovement,\n        ServerVersusNetState, ServerVersusSpellState,\n        ServerSelectVersusSpell;\n}\n",
+          "old_sha256": "aa012dad3fec791b73fd660c4e8daa0714a92c424c4de0d72f6a7462f25302bb",
+          "new_sha256": "7d6138475df9c40b665833827e3631fbf1c6cc93122446080e84a73ac9f58e93"
+        },
+        {
+          "old": "        $ \" serverMuzzle=\" $ string(ServerMuzzle)\n        $ \" castSerial=\" $ string(VersusCastSerial)\n        $ \" spawned=\" $ string(SpawnedSpell));\n}\n\ndefaultproperties\n{\n    PlayerReplicationInfoClass=Class'HPVersusPRI'\n    bAllowHarryToDie=True\n    bCanMoveInSpecialPause=True\n    bUseEngineNetworkMovement=False\n    Health=100\n    VersusDirectMoveSpeed=260.000000\n    VersusDirectAirScale=0.450000\n    SelectedVersusSpell=0\n    VersusAimStartTime=-1.000000\n",
+          "new": "        $ \" serverMuzzle=\" $ string(ServerMuzzle)\n        $ \" castSerial=\" $ string(VersusCastSerial)\n        $ \" spawned=\" $ string(SpawnedSpell));\n}\n\ndefaultproperties\n{\n    PlayerReplicationInfoClass=Class'HPVersusPRI'\n    HUDType=Class'HPVersusHUD'\n    bAllowHarryToDie=True\n    bCanMoveInSpecialPause=True\n    bUseEngineNetworkMovement=False\n    Health=100\n    VersusDirectMoveSpeed=260.000000\n    VersusDirectAirScale=0.450000\n    SelectedVersusSpell=0\n    VersusAimStartTime=-1.000000\n",
+          "old_sha256": "5de938a0b3b2d14558bd686bdf7a09d31713b20f66a0ea1e0369aad0c8c22053",
+          "new_sha256": "eb827700c7be9909c62a10c1047ec2ecfd51222bacd699e019e540df5e43de2e"
+        }
+      ]
+    }
+  ]
+}

@@ -5,16 +5,20 @@ param(
     [string]$Server = '127.0.0.1',
     [ValidateRange(1024,65535)][int]$Port = 7777,
     [string]$PlayerName = 'Harry',
+    [ValidateSet('Harry','Ron','Hermione')][string]$Character = 'Harry',
+    [ValidateRange(2,8)][int]$MaxPlayers = 8,
+    [ValidateRange(1,99)][int]$ScoreLimit = 3,
     [ValidateSet('Ch1Rictusempra','Ch2Skurge','Ch3Diffindo','Ch4Spongify')]
     [string]$CoopMap = 'Ch1Rictusempra',
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$gameRoot = Join-Path $repo '.local\game'
+$gameRoot = Join-Path $repo $(if ($LaunchMode -like 'Versus*') { '.local\versus-v16-game' } else { '.local\game' })
 $system = Join-Path $gameRoot 'System'
 $exe = Join-Path $system 'Game.exe'
-$buildRecord = Join-Path $repo '.local\last-build.json'
+$modeBuild = Join-Path $repo $(if ($LaunchMode -like 'Versus*') { '.local\last-build-v16.json' } else { '.local\last-build-coop.json' })
+$buildRecord = if (Test-Path -LiteralPath $modeBuild) { $modeBuild } else { Join-Path $repo '.local\last-build.json' }
 
 if (!(Test-Path -LiteralPath (Join-Path $gameRoot '.hp2-development-copy.json') -PathType Leaf)) {
     throw "Development game copy is missing: $gameRoot"
@@ -57,9 +61,9 @@ if ($LaunchMode -in @('CoopJoin','VersusJoin')) {
 $logName = 'HP2MP-menu-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log'
 $profileMode = if ($LaunchMode -like 'Versus*') { 'Versus' } else { 'Coop' }
 $prepared = $null
-if ($LaunchMode -ne 'CoopHost') {
+if ($LaunchMode -notin @('CoopHost','VersusHost')) {
     $prepared = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
-        -Mode $profileMode -Role Join -PrepareOnly -PlayerName $PlayerName
+        -Mode $profileMode -Role Join -WorkRoot $gameRoot -PrepareOnly -PlayerName $PlayerName
     if ($prepared.status -ne 'PREPARED') { throw 'Could not prepare the isolated menu profile.' }
     $runRoot = $prepared.runRoot
 }
@@ -68,20 +72,20 @@ $url = switch ($LaunchMode) {
     Single     { 'PrivetDr.unr?game=Engine.GameInfo' }
     CoopHost   { "$CoopMap.unr?game=HGame.HPCoopGame?MaxPlayers=2" }
     CoopJoin   { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Coop" }
-    VersusHost { "HPV_Entry.unr?game=HGame.HPVersusGame?listen?MaxPlayers=2?Name=$PlayerName`?ScoreLimit=3" }
-    VersusJoin { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Versus" }
+    VersusHost { "startup.unr?game=HGame.HPVersusGame?MaxPlayers=$MaxPlayers`?ScoreLimit=$ScoreLimit" }
+    VersusJoin { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Versus`?MPCharacter=$Character" }
 }
 $mapName = switch ($LaunchMode) {
     Original { 'startup.unr' }
     Single { 'PrivetDr.unr' }
     CoopHost { "$CoopMap.unr" }
-    VersusHost { 'HPV_Entry.unr' }
+    VersusHost { 'startup.unr' }
     default { 'Entry.unr' }
 }
 if (!(Test-Path -LiteralPath (Join-Path $gameRoot "Maps\$mapName") -PathType Leaf)) {
     throw "Map is missing from the test game: $mapName"
 }
-$arguments = if ($LaunchMode -eq 'CoopHost') {
+$arguments = if ($LaunchMode -in @('CoopHost','VersusHost')) {
     @('server', $url, "port=$Port", '-unattended', '-FORCEFLUSH')
 } else {
     @($url, '-windowed', '-NOFRONTEND', '-NewWindow',
@@ -89,27 +93,30 @@ $arguments = if ($LaunchMode -eq 'CoopHost') {
         ('USERINI=' + (Split-Path $prepared.userIni -Leaf)), "-log=$logName", '-FORCEFLUSH')
 }
 if ($DryRun) {
-    [PSCustomObject]@{LaunchMode=$LaunchMode; CoopMap=$CoopMap; URL=$url; Arguments=$arguments;
+    [PSCustomObject]@{LaunchMode=$LaunchMode; CoopMap=$CoopMap; Character=$Character; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit; URL=$url; Arguments=$arguments;
         EngineIni=$prepared.engineIni; UserIni=$prepared.userIni;
-        Executable=$(if ($LaunchMode -eq 'CoopHost') { Join-Path $system 'UCC.exe' } else { $exe });
+        Executable=$(if ($LaunchMode -in @('CoopHost','VersusHost')) { Join-Path $system 'UCC.exe' } else { $exe });
         LocalClientExecutable=$exe}
     return
 }
-if ($LaunchMode -eq 'CoopHost') {
+if ($LaunchMode -in @('CoopHost','VersusHost')) {
     # A playable host is a dedicated server plus a separate local client.
     # The single-process listen path gives the host a second BaseCam and breaks
     # the original CutScript capture/command pairing on campaign intros.
     $hostRun = $null
     $localRun = $null
     try {
+        $hostMap = if ($LaunchMode -eq 'CoopHost') { $CoopMap } else { 'startup' }
+        $hostSlots = if ($LaunchMode -eq 'CoopHost') { 2 } else { $MaxPlayers }
         $hostRun = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
-            -Mode Coop -Role Host -Map $CoopMap -Port $Port -PlayerName $PlayerName -Unattended
-        if ($hostRun.status -ne 'STARTED') { throw 'The co-op server did not start.' }
+            -Mode $profileMode -Role Host -WorkRoot $gameRoot -Map $hostMap -Port $Port `
+            -MaxPlayers $hostSlots -ScoreLimit $ScoreLimit -PlayerName $PlayerName -Unattended
+        if ($hostRun.status -ne 'STARTED') { throw 'The server did not start.' }
         $hostOutput = Join-Path $hostRun.runRoot 'server-stdout.log'
         $serverReady = $false
         for ($attempt = 0; $attempt -lt 40; $attempt++) {
             $running = Get-Process -Id $hostRun.processId -ErrorAction SilentlyContinue
-            if (!$running) { throw 'The co-op server exited during startup.' }
+            if (!$running) { throw 'The server exited during startup.' }
             if ((Test-Path -LiteralPath $hostOutput) -and
                 (Select-String -LiteralPath $hostOutput -SimpleMatch 'Game engine initialized' -Quiet)) {
                 $serverReady = $true
@@ -117,15 +124,15 @@ if ($LaunchMode -eq 'CoopHost') {
             }
             Start-Sleep -Milliseconds 500
         }
-        if (!$serverReady) { throw 'The co-op server did not become ready within 20 seconds.' }
+        if (!$serverReady) { throw 'The server did not become ready within 20 seconds.' }
         $localRun = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
-            -Mode Coop -Role Join -Server '127.0.0.1' -Port $Port -PlayerName $PlayerName
-        if ($localRun.status -ne 'STARTED') { throw 'The local co-op client did not start.' }
+            -Mode $profileMode -Role Join -WorkRoot $gameRoot -Server '127.0.0.1' -Port $Port -PlayerName $PlayerName -Character $Character
+        if ($localRun.status -ne 'STARTED') { throw 'The local client did not start.' }
         Start-Sleep -Seconds 3
         $serverProcess = Get-Process -Id $hostRun.processId -ErrorAction SilentlyContinue
         $clientProcess = Get-Process -Id $localRun.processId -ErrorAction SilentlyContinue
         if (!$serverProcess -or !$clientProcess) {
-            throw 'The co-op server or local client exited immediately.'
+            throw 'The server or local client exited immediately.'
         }
         $watcherScript = Join-Path $PSScriptRoot 'Watch-MenuCoopServer.ps1'
         $watcherArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $watcherScript +
@@ -138,7 +145,7 @@ if ($LaunchMode -eq 'CoopHost') {
             -WindowStyle Hidden -PassThru `
             -RedirectStandardOutput (Join-Path $hostRun.runRoot 'menu-watch-stdout.log') `
             -RedirectStandardError (Join-Path $hostRun.runRoot 'menu-watch-stderr.log')
-        Write-Output "Co-op server running (PID $($hostRun.processId), map $CoopMap)."
+        Write-Output "$profileMode server running (PID $($hostRun.processId), map $hostMap, slots $hostSlots, score limit $ScoreLimit)."
         Write-Output "Your local game client is running (PID $($localRun.processId)); the second player connects to port $Port."
         Write-Output "Server log: $(Join-Path $hostRun.runRoot 'server-stdout.log')"
         Write-Output "Local client session: $($localRun.session)"

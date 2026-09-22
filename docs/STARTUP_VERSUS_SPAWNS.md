@@ -1,6 +1,6 @@
 # Startup.unr: Versus spawn points
 
-The local test map at `.local/versus-audit-game/Maps/startup.unr` has eight
+The local test map at `.local/versus-v16-game/Maps/startup.unr` has eight
 `HPVersusStart` actors with `VersusSpawnIndex` 0 through 7. The supplied retail
 map is unchanged and is not distributed in this repository.
 
@@ -15,6 +15,7 @@ The six added points occupy three rows at Y = 300, 0 and -300, with X = -128
 and 128. Their Z is 122.5. The original two starts remain at approximately
 (1, 500, 96) and (1, -500, 96).
 
-This patch changes the map only. The current `HPVersusGame` still assigns two
-slots and defaults to `MaxPlayers=2`, so eight-player gameplay requires
-separate game-mode changes and runtime verification.
+The v16 Versus mode now assigns unique slots 0–7, checks start occupancy,
+rejects a ninth connection and reuses a slot after the server closes the old
+connection. Eight connected clients passed this loopback test; eight-player
+combat and visual spawn safety on two physical PCs remain unverified.

@@ -54,7 +54,8 @@ $buildBranch = (& git -C $repo branch --show-current 2>$null)
 $buildDirty = [bool](& git -C $repo status --porcelain 2>$null)
 if (!$Baseline) {
     $recipeFilter = if ($VersusV16) { 'versus-v16-*.json' } else { '*.json' }
-    $recipes = @(Get-ChildItem -LiteralPath (Join-Path $repo 'patches') -Filter $recipeFilter -ErrorAction SilentlyContinue | Sort-Object Name)
+    $recipes = @(Get-ChildItem -LiteralPath (Join-Path $repo 'patches') -Filter $recipeFilter -ErrorAction SilentlyContinue |
+        Where-Object { $VersusV16 -or $_.Name -notlike 'versus-v16-*' } | Sort-Object Name)
     if ($VersusV16 -and $recipes.Count -eq 0) { throw 'No versus-v16 patch recipes found.' }
     if ($recipes.Count -gt 0) {
         # One batch validates all files and orders each source/result hash chain.
@@ -70,6 +71,20 @@ if (!$Baseline) {
             $dest = Join-Path $WorkRoot "HGame\Classes\$relative"
             New-Item -ItemType Directory -Path (Split-Path $dest -Parent) -Force | Out-Null
             Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
+        }
+    }
+    if ($VersusV16) {
+        $versusOverlay = Join-Path $repo 'mod\versus-v16\HGame\Classes'
+        foreach ($sourceFile in @(Get-ChildItem -LiteralPath $versusOverlay -File -Filter '*.uc')) {
+            $destination = Join-Path $WorkRoot "HGame\Classes\$($sourceFile.Name)"
+            if (Test-Path -LiteralPath $destination) {
+                if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne
+                    (Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash) {
+                    throw "Versus overlay would overwrite v16 source: $($sourceFile.Name)"
+                }
+            } else {
+                Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination
+            }
         }
     }
 }
@@ -101,6 +116,11 @@ if (Test-Path -LiteralPath (Join-Path $system 'HGame.u')) { $result.hgameSha256=
 if (Test-Path -LiteralPath (Join-Path $system 'M212Share.u')) { $result.m212ShareSha256=(Get-FileHash -LiteralPath (Join-Path $system 'M212Share.u') -Algorithm SHA256).Hash }
 $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logRoot 'result.json') -Encoding UTF8
 $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build.json') -Encoding UTF8
+if ($VersusV16) {
+    $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-v16.json') -Encoding UTF8
+} elseif (!$Baseline) {
+    $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-coop.json') -Encoding UTF8
+}
 Get-Content -LiteralPath $output -Tail 24
 Write-Output "Build logs: $logRoot"
 if (!$pass) { throw 'UCC make failed; inspect the preserved build logs.' }

@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ArchivePath, [string]$WorkRoot, [switch]$ResumePreparedCopy)
+param([string]$ArchivePath, [string]$GameRoot, [string]$WorkRoot, [switch]$ResumePreparedCopy)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 if (!$ArchivePath) {
@@ -20,7 +20,7 @@ if (Test-Path -LiteralPath $WorkRoot) {
     }
 }
 
-& (Join-Path $PSScriptRoot 'Prepare-LocalGame.ps1') -WorkRoot $WorkRoot | Out-Null
+& (Join-Path $PSScriptRoot 'Prepare-LocalGame.ps1') -GameRoot $GameRoot -WorkRoot $WorkRoot | Out-Null
 $classesRoot = Join-Path $WorkRoot 'HGame\Classes'
 $systemRoot = Join-Path $WorkRoot 'System'
 Add-Type -AssemblyName System.IO.Compression.FileSystem

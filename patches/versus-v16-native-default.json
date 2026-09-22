@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-native-default",
+  "description": "Select and synchronize the user-verified Native movement mode once for each local Versus pawn, preserving the explicit Direct fallback command.",
+  "source_snapshot": "HPVersus_v16_remote_bottom_align_20260905 plus death, match, eight-slot patches",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "430eb4db34c20ae62393413997117641efc79f1d5aa19e9efe5233cf2fd5705c",
+      "result_sha256": "b93c6e5173fab5b25c93a5c0cca62df1041eb8af5f8b5a69185e37925a8e5636",
+      "replacements": [
+        {
+          "old": "// state was written for single-player and does not call PlayerPawn.ReplicateMove,\n// so horizontal axes can reach Acceleration but still never move/replicate on a\n// dedicated server.  This bridge moves the pawn explicitly while we keep the\n// normal jump path intact.\nvar float VersusDirectMoveSpeed;\nvar float VersusDirectAirScale;\nvar float NextVersusMoveLogTime;\n\n// Opt-in probe for PlayerPawn.ReplicateMove/SavedMove/ServerMove.  False is\n// the proven v7 direct-movement fallback and remains the shipped default until\n// a two-PC dedicated test validates the native M212 path.\nvar bool bUseEngineNetworkMovement;\nvar float NextVersusNativeTraceTime;\nvar float NextVersusCorrectionTraceTime;\nvar float NextVersusAnimTraceTime;\nvar float NextVersusAnimChannelRetryTime;\nvar float NextVersusRemoteAnimChannelRetryTime;\nvar float NextVersusBodyTraceTime;\nvar float NextVersusProxyTraceTime;\nvar HPVersusRemoteAnimChannel VersusRemoteAnimChannel;\n",
+          "new": "// state was written for single-player and does not call PlayerPawn.ReplicateMove,\n// so horizontal axes can reach Acceleration but still never move/replicate on a\n// dedicated server.  This bridge moves the pawn explicitly while we keep the\n// normal jump path intact.\nvar float VersusDirectMoveSpeed;\nvar float VersusDirectAirScale;\nvar float NextVersusMoveLogTime;\n\n// Local Versus pawns select native PlayerPawn movement on setup; the direct\n// movement command remains available as a fallback during field testing.\nvar bool bUseEngineNetworkMovement;\nvar bool bVersusMovementChoiceMade;\nvar float NextVersusNativeTraceTime;\nvar float NextVersusCorrectionTraceTime;\nvar float NextVersusAnimTraceTime;\nvar float NextVersusAnimChannelRetryTime;\nvar float NextVersusRemoteAnimChannelRetryTime;\nvar float NextVersusBodyTraceTime;\nvar float NextVersusProxyTraceTime;\nvar HPVersusRemoteAnimChannel VersusRemoteAnimChannel;\n",
+          "old_sha256": "fad6a5fa79cb6f0478c59859e00a52580224da5bba198b187b5fb4abd3d9c74c",
+          "new_sha256": "e4510daf6d0a69474ba0912880ff2a92ed5f913d2ee6d8eefa33a21bd333f6e4"
+        },
+        {
+          "old": "    bFrozen = False;\n\n    if (bLocalPlayer)\n    {\n        CleanupLocalLegacyHarry();\n        Level.PlayerHarryActor = self;\n        EnablePlayerInput();\n        EnsureVersusAnimationChannel(\"SetupVersusPlayer\");\n\n        if (myHUD != None)\n            myHUD.EndCutScene();\n    }\n\n    if (!IsInState('PlayerWalking'))\n        GotoState('PlayerWalking');\n\n",
+          "new": "    bFrozen = False;\n\n    if (bLocalPlayer)\n    {\n        CleanupLocalLegacyHarry();\n        Level.PlayerHarryActor = self;\n        EnablePlayerInput();\n        EnsureVersusAnimationChannel(\"SetupVersusPlayer\");\n\n        if (!bVersusMovementChoiceMade)\n        {\n            Log(\"HPVersusMovementAuto pawn=\" $ string(self) $ \" mode=Native\");\n            SetVersusEngineMovement(True);\n        }\n\n        if (myHUD != None)\n            myHUD.EndCutScene();\n    }\n\n    if (!IsInState('PlayerWalking'))\n        GotoState('PlayerWalking');\n\n",
+          "old_sha256": "e1684f89245945720e8bbeff15206a8d92b22885f0abe714f3fda1af37b94706",
+          "new_sha256": "6cbdf5091653c214131456fcc7ded624c6fc3f6d9bee59d9e8434113501066d6"
+        },
+        {
+          "old": "            $ \" new=\" $ string(AnimSequence)\n            $ \" rate=\" $ string(AnimRate));\n        NextVersusAnimTraceTime = Level.TimeSeconds + 0.10;\n    }\n}\n\nfunction SetVersusEngineMovement(bool bEnable)\n{\n    bUseEngineNetworkMovement = bEnable;\n    ClearVersusInput();\n    Acceleration = vect(0.00,0.00,0.00);\n\n    if (Role < ROLE_Authority)\n        ServerSetVersusEngineMovement(bEnable);\n\n    Log(\"HPVersusMovementMode pawn=\" $ string(self)\n",
+          "new": "            $ \" new=\" $ string(AnimSequence)\n            $ \" rate=\" $ string(AnimRate));\n        NextVersusAnimTraceTime = Level.TimeSeconds + 0.10;\n    }\n}\n\nfunction SetVersusEngineMovement(bool bEnable)\n{\n    bVersusMovementChoiceMade = True;\n    bUseEngineNetworkMovement = bEnable;\n    ClearVersusInput();\n    Acceleration = vect(0.00,0.00,0.00);\n\n    if (Role < ROLE_Authority)\n        ServerSetVersusEngineMovement(bEnable);\n\n    Log(\"HPVersusMovementMode pawn=\" $ string(self)\n",
+          "old_sha256": "de74c405e8dc2e6978b6ffd4a008c98179f9bf02394e23ca561bd385149a4761",
+          "new_sha256": "74a413de19ff4851c9de90b0320f65da8a3e06dbeacb2d0dc3af4edd8f2b7ca4"
+        },
+        {
+          "old": "        $ \" slot=\" $ string(VersusSlot)\n        $ \" d=\" $ string(D)\n        $ \" loc=\" $ string(Location));\n}\n\nevent PlayerInput(float DeltaTime)\n{\n    local HPVersusHarry ObservedHarry;\n\n    if (bVersusDead)\n    {\n        ClearVersusInput();\n        return;\n    }\n\n    if (IsLocalViewportPlayer())\n",
+          "new": "        $ \" slot=\" $ string(VersusSlot)\n        $ \" d=\" $ string(D)\n        $ \" loc=\" $ string(Location));\n}\n\nevent PlayerInput(float DeltaTime)\n{\n    local HPVersusHarry ObservedHarry;\n\n    if (IsLocalViewportPlayer() && !bVersusMovementChoiceMade)\n    {\n        Log(\"HPVersusMovementAuto pawn=\" $ string(self) $ \" mode=Native\");\n        SetVersusEngineMovement(True);\n    }\n\n    if (bVersusDead)\n    {\n        ClearVersusInput();\n        return;\n    }\n\n    if (IsLocalViewportPlayer())\n",
+          "old_sha256": "25fdcf1a45f2e14079eaf69e09b838a1a1c1327401e2894078a1ef65255b9cb9",
+          "new_sha256": "813595298d28c08d48c3ebc2366a77590e8b48b01774867654ea8ecdba46d6ba"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-character-choice",
+  "description": "Accept Harry, Ron or Hermione from the join URL, validate and replicate the cosmetic character choice without replacing the multiplayer pawn.",
+  "source_snapshot": "HPVersus_v16_remote_bottom_align_20260905 plus prior v16 patches",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "7799c1dc4a7e369f190cc4269099c79d55e983854e9d865bc78737e2e1ab74d9",
+      "result_sha256": "ba8e0df8dcf7d3f6dcc4b5c45df95724eca94f0089828e2eafdda696d8147371",
+      "replacements": [
+        {
+          "old": "    string Portal,\n    string Options,\n    out string Error,\n    class<playerpawn> SpawnClass\n)\n{\n    local PlayerPawn NewPlayer;\n    local HPVersusHarry H;\n    local byte LoginSlot;\n\n    if (TooManyPlayers())\n    {\n        Error = \"Versus server is full.\";\n        return None;\n    }\n\n    // Clients still send their single-player class in the URL\n",
+          "new": "    string Portal,\n    string Options,\n    out string Error,\n    class<playerpawn> SpawnClass\n)\n{\n    local PlayerPawn NewPlayer;\n    local HPVersusHarry H;\n    local HPVersusPRI VPRI;\n    local byte LoginSlot;\n    local string LoginCharacter;\n\n    if (TooManyPlayers())\n    {\n        Error = \"Versus server is full.\";\n        return None;\n    }\n\n    // Clients still send their single-player class in the URL\n",
+          "old_sha256": "d9d2497c643c91b0fba20681b8fc4bcfe78c3d23ac8dd3d905201b09632e8a2d",
+          "new_sha256": "d3d6956579a55dad3374d8c33842c67b3edf1eed0447d5d4992df75eed7a9aa0"
+        },
+        {
+          "old": "\n    NewPlayer = Super.Login(Portal, Options, Error, SpawnClass);\n\n    bHasPendingLoginSlot = False;\n\n    H = HPVersusHarry(NewPlayer);\n    if (H != None)\n    {\n        H.VersusSlot = LoginSlot;\n        H.bVersusRegistered = True;\n        H.ClientSetVersusSlot(LoginSlot);\n        Log(\"HPVersusGame: Login assigned player=\" $ string(H)\n            $ \" slot=\" $ string(H.VersusSlot)\n            $ \" playerObj=\" $ string(H.Player)\n            $ \" loc=\" $ string(H.Location));\n    }\n\n    return NewPlayer;\n}\n\nfunction NotifyVersusDeath(HPVersusHarry Victim, Pawn Killer, name DamageType)\n",
+          "new": "\n    NewPlayer = Super.Login(Portal, Options, Error, SpawnClass);\n\n    bHasPendingLoginSlot = False;\n\n    H = HPVersusHarry(NewPlayer);\n    if (H != None)\n    {\n        LoginCharacter = \"Harry\";\n        VPRI = HPVersusPRI(H.PlayerReplicationInfo);\n        if (VPRI != None)\n        {\n            VPRI.SetSelectedCharacter(ParseOption(Options, \"MPCharacter\"));\n            H.ApplyCharacterSkin(VPRI.SelectedCharacter);\n            LoginCharacter = VPRI.SelectedCharacter;\n        }\n        H.VersusSlot = LoginSlot;\n        H.bVersusRegistered = True;\n        H.ClientSetVersusSlot(LoginSlot);\n        Log(\"HPVersusGame: Login assigned player=\" $ string(H)\n            $ \" slot=\" $ string(H.VersusSlot)\n            $ \" character=\" $ LoginCharacter\n            $ \" playerObj=\" $ string(H.Player)\n            $ \" loc=\" $ string(H.Location));\n    }\n\n    return NewPlayer;\n}\n\nfunction NotifyVersusDeath(HPVersusHarry Victim, Pawn Killer, name DamageType)\n",
+          "old_sha256": "528b7b37012d36388d01886bd96a51589f792a1c677ed57fb160df3de5d88e2e",
+          "new_sha256": "0a4f9d11da919008d9cd4dad4304825cbe65213563d697f55706dfc43ad21350"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "b93c6e5173fab5b25c93a5c0cca62df1041eb8af5f8b5a69185e37925a8e5636",
+      "result_sha256": "975ce5a2d98e5c1b8fc84439dd462dad378d46669f2480a73259a4accb7845fa",
+      "replacements": [
+        {
+          "old": "    if (CharacterName ~= \"Ron\")\n    {\n        Mesh = SkeletalMesh'HPModels.skronMesh';\n    }\n    else if (CharacterName ~= \"Hermione\")\n    {\n        Mesh = SkeletalMesh'HPModels.skhermioneMesh';\n    }\n    else if (CharacterName ~= \"Hagrid\")\n    {\n        Mesh = SkeletalMesh'HPModels.skHagridMesh';\n        DrawScale = 1.15;\n        SetCollisionSize(20.00, 52.00);\n    }\n    else\n    {\n        Mesh = SkeletalMesh'HPModels.skharryMesh';\n    }\n}\n\nexec function SelectCharacter(string CharacterName)\n{\n",
+          "new": "    if (CharacterName ~= \"Ron\")\n    {\n        Mesh = SkeletalMesh'HPModels.skronMesh';\n    }\n    else if (CharacterName ~= \"Hermione\")\n    {\n        Mesh = SkeletalMesh'HPModels.skhermioneMesh';\n    }\n    else\n    {\n        Mesh = SkeletalMesh'HPModels.skharryMesh';\n    }\n}\n\nexec function SelectCharacter(string CharacterName)\n{\n",
+          "old_sha256": "d72bb3cf35cf90444c002c2def4cd97689008a904a662c38416e1218ea7d3b42",
+          "new_sha256": "bbd86f38df6204cbcd460ad806a9183deffb026bc01ec09d8a82f77a1d566c3d"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusPRI.uc",
+      "source_sha256": "b2dc0ef7a5c86e879fc1ef088ced460f5aadd3cbca0a5af6f1b36e6782def0bf",
+      "result_sha256": "f96aae9185ed9c2a3e9daa32db27cced7f874e27775441d9aee55a66fdd33d20",
+      "replacements": [
+        {
+          "old": "    if (NewCharacter ~= \"Ron\")\n    {\n        SelectedCharacter = \"Ron\";\n    }\n    else if (NewCharacter ~= \"Hermione\")\n    {\n        SelectedCharacter = \"Hermione\";\n    }\n    else if (NewCharacter ~= \"Hagrid\")\n    {\n        SelectedCharacter = \"Hagrid\";\n    }\n    else\n    {\n        SelectedCharacter = \"Harry\";\n    }\n}\n\ndefaultproperties\n{\n",
+          "new": "    if (NewCharacter ~= \"Ron\")\n    {\n        SelectedCharacter = \"Ron\";\n    }\n    else if (NewCharacter ~= \"Hermione\")\n    {\n        SelectedCharacter = \"Hermione\";\n    }\n    else\n    {\n        SelectedCharacter = \"Harry\";\n    }\n}\n\ndefaultproperties\n{\n",
+          "old_sha256": "d58439df71a18ad06994e719b72a4ecc6dc97e4af3c38136ea9f4d1c6deacb49",
+          "new_sha256": "8a27059b376caa1eb06214002f57112966cfc9e59340919d503ea18106837e92"
+        }
+      ]
+    }
+  ]
+}

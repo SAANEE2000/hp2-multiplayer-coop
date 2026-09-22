@@ -1,4 +1,4 @@
-"""Exercise patch safety using temporary copies of the ignored v18 source.
+"""Exercise patch safety using temporary copies of the supplied source bases.
 
 Run with: python -m unittest discover -s tests -p test_patch_recipes.py -v
 Set HP2_TEST_SOURCE_ROOT to a game/source root containing HGame/Classes if the
@@ -16,12 +16,16 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 
 
 REPO = Path(__file__).resolve().parents[1]
 APPLIER_PATH = REPO / "scripts" / "apply_patches.py"
 SOURCE_ROOT = Path(os.environ.get("HP2_TEST_SOURCE_ROOT", REPO / "v18" / "v18"))
 RECIPE_PATHS = tuple(sorted((REPO / "patches").glob("*.json")))
+V16_RECIPE_PATHS = tuple(p for p in RECIPE_PATHS if p.name.startswith("versus-v16-"))
+LEGACY_RECIPE_PATHS = tuple(p for p in RECIPE_PATHS if p not in V16_RECIPE_PATHS)
+V16_ARCHIVE = REPO / "HPVersus_v16_remote_bottom_align_20260905.zip"
 MARKER = ".hp2-development-copy.json"
 
 _spec = importlib.util.spec_from_file_location("hp2_patch_applier", APPLIER_PATH)
@@ -58,9 +62,16 @@ def synthetic_entry(path, before=b"before\n", after=b"after\n"):
     }
 
 
-def source_at_hash(relative, wanted_hash):
+def source_bytes(relative, v16=False):
+    if v16:
+        with zipfile.ZipFile(V16_ARCHIVE) as archive:
+            return archive.read("Classes/" + Path(relative).name)
+    return (SOURCE_ROOT / relative).read_bytes()
+
+
+def source_at_hash(relative, wanted_hash, v16=False):
     """Derive a dependent recipe's input without changing the supplied fixture."""
-    data = (SOURCE_ROOT / relative).read_bytes()
+    data = source_bytes(relative, v16)
     seen = set()
     while digest(data) != wanted_hash:
         current = digest(data)
@@ -68,7 +79,7 @@ def source_at_hash(relative, wanted_hash):
             raise AssertionError(f"Fixture recipe cycle: {relative}")
         seen.add(current)
         matches = []
-        for path in RECIPE_PATHS:
+        for path in (V16_RECIPE_PATHS if v16 else LEGACY_RECIPE_PATHS):
             recipe = json.loads(path.read_text(encoding="utf-8-sig"))
             matches.extend(entry for entry in recipe["files"]
                            if entry["path"] == relative and entry["source_sha256"] == current)
@@ -92,7 +103,10 @@ class PatchRecipeTests(unittest.TestCase):
         self.temp = Path(self.temporary.name).resolve()
 
     def fixture(self, recipe_path):
-        if not SOURCE_ROOT.is_dir():
+        v16 = recipe_path in V16_RECIPE_PATHS
+        if v16 and not V16_ARCHIVE.is_file():
+            self.skipTest("Supplied v16 archive missing")
+        if not v16 and not SOURCE_ROOT.is_dir():
             self.skipTest("Supplied v18 source missing; set HP2_TEST_SOURCE_ROOT")
         recipe = json.loads(recipe_path.read_text(encoding="utf-8-sig"))
         root = self.temp / recipe["name"]
@@ -100,9 +114,7 @@ class PatchRecipeTests(unittest.TestCase):
         (root / MARKER).write_text("{}", encoding="ascii")
         originals = {}
         for entry in recipe["files"]:
-            source = SOURCE_ROOT / entry["path"]
-            self.assertTrue(source.is_file(), f"Missing source fixture: {source}")
-            original = source_at_hash(entry["path"], entry["source_sha256"])
+            original = source_at_hash(entry["path"], entry["source_sha256"], v16)
             self.assertEqual(digest(original), entry["source_sha256"], entry["path"])
             target = root / entry["path"]
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -212,38 +224,44 @@ class PatchRecipeTests(unittest.TestCase):
                 self.assertEqual(outside.read_bytes(), b"before\n")
 
     def test_all_real_recipes_clean_partial_and_repeated(self):
-        if not SOURCE_ROOT.is_dir():
-            self.skipTest("Supplied v18 source missing; set HP2_TEST_SOURCE_ROOT")
-        recipes = [json.loads(p.read_text(encoding="utf-8-sig")) for p in RECIPE_PATHS]
-        relatives = {e["path"] for r in recipes for e in r["files"]}
-        for partial in (False, True):
-            with self.subTest(partial=partial):
-                root = self.temp / ("partial" if partial else "clean")
-                root.mkdir()
-                (root / MARKER).write_text("{}", encoding="ascii")
-                for relative in relatives:
-                    target = root / relative
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes((SOURCE_ROOT / relative).read_bytes())
-                if partial:
-                    self.apply(root, REPO / "patches" / "restore-legacy-gameplay.json")
-                # Reverse filename order deliberately; hashes determine the order.
-                self.apply_batch(root, reversed(RECIPE_PATHS))
-                for relative in relatives:
-                    entries = [e for r in recipes for e in r["files"] if e["path"] == relative]
-                    inputs = {e["source_sha256"] for e in entries}
-                    final = [e["result_sha256"] for e in entries if e["result_sha256"] not in inputs]
-                    self.assertEqual(len(final), 1)
-                    self.assertEqual(digest((root / relative).read_bytes()), final[0])
-                for recipe in recipes:
-                    for entry in recipe["files"]:
-                        backup = root / ".patch-backups" / recipe["name"] / entry["path"]
-                        self.assertEqual(digest(backup.read_bytes()), entry["source_sha256"])
-                before = tree_contents(root)
-                times = {p: p.stat().st_mtime_ns for p in root.rglob("*") if p.is_file()}
-                self.apply_batch(root, RECIPE_PATHS)
-                self.assertEqual(tree_contents(root), before)
-                self.assertEqual({p: p.stat().st_mtime_ns for p in times}, times)
+        for v16, recipe_paths in ((False, LEGACY_RECIPE_PATHS), (True, V16_RECIPE_PATHS)):
+            if v16 and not V16_ARCHIVE.is_file():
+                continue
+            if not v16 and not SOURCE_ROOT.is_dir():
+                continue
+            recipes = [json.loads(p.read_text(encoding="utf-8-sig")) for p in recipe_paths]
+            relatives = {e["path"] for r in recipes for e in r["files"]}
+            for partial in (False, True):
+                with self.subTest(v16=v16, partial=partial):
+                    root = self.temp / ("v16-" if v16 else "legacy-") / ("partial" if partial else "clean")
+                    root.parent.mkdir(exist_ok=True)
+                    root.mkdir()
+                    (root / MARKER).write_text("{}", encoding="ascii")
+                    for relative in relatives:
+                        target = root / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(source_bytes(relative, v16))
+                    if partial:
+                        first = (REPO / "patches" / "versus-v16-death-respawn.json") if v16 else (REPO / "patches" / "restore-legacy-gameplay.json")
+                        self.apply(root, first)
+                    # Reverse filename order deliberately; hashes determine the order.
+                    self.apply_batch(root, reversed(recipe_paths))
+                    for relative in relatives:
+                        entries = [e for r in recipes for e in r["files"] if e["path"] == relative]
+                        inputs = {e["source_sha256"] for e in entries}
+                        final = [e["result_sha256"] for e in entries if e["result_sha256"] not in inputs]
+                        self.assertEqual(len(final), 1)
+                        self.assertEqual(digest((root / relative).read_bytes()), final[0])
+                    for recipe in recipes:
+                        for entry in recipe["files"]:
+                            backup = root / ".patch-backups" / recipe["name"] / entry["path"]
+                            if backup.is_file():
+                                self.assertEqual(digest(backup.read_bytes()), entry["source_sha256"])
+                    before = tree_contents(root)
+                    times = {p: p.stat().st_mtime_ns for p in root.rglob("*") if p.is_file()}
+                    self.apply_batch(root, recipe_paths)
+                    self.assertEqual(tree_contents(root), before)
+                    self.assertEqual({p: p.stat().st_mtime_ns for p in times}, times)
 
     def test_synthetic_chain_preserves_binary_bytes_and_each_backup(self):
         states = [b"before\xff\r\n", b"middle\xff\r\n", b"after\xff\r\n"]

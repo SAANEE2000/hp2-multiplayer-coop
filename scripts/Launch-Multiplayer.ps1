@@ -8,6 +8,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$')][string]$Server = '127.0.0.1',
     [ValidateRange(1024,65532)][int]$Port = 7777,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$')][string]$PlayerName = 'Harry',
+    [ValidateSet('Harry','Ron','Hermione')][string]$Character = 'Harry',
     [ValidateRange(2,8)][int]$MaxPlayers = 2,
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
     [ValidateSet('None','RictusempraLessonComplete')][string]$TestStage = 'None',
@@ -169,7 +170,10 @@ if (!$PrepareOnly) {
         }
         if (!$knownServer) { throw "Unrecognized UCC process $($uccProcess.Id) may be building this copy. Wait for it to finish." }
     }
-    $buildFile = Join-Path $repo '.local\last-build.json'
+    $modeBuild = Join-Path $repo $(if ($Mode -eq 'Versus' -and (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json'))) {
+        '.local\last-build-v16.json'
+    } else { '.local\last-build-coop.json' })
+    $buildFile = if (Test-Path -LiteralPath $modeBuild) { $modeBuild } else { Join-Path $repo '.local\last-build.json' }
     if (!(Test-Path -LiteralPath $buildFile)) { throw 'No recorded clean build. Run Build.ps1 first.' }
     $build = Get-Content -LiteralPath $buildFile -Raw -Encoding UTF8 | ConvertFrom-Json
     if (!$build.passed -or ![string]::Equals($build.workRoot, $WorkRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -274,9 +278,8 @@ if ($Mode -eq 'Coop') {
     }
 } elseif (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json')) {
     # The supplied v16 DefUser.ini combines the direct buttons with native
-    # MoveForward/StrafeLeft/etc. Keep those binds so the documented
-    # VersusUseNativeMovement command remains playable on both clients.
-    $bindings = $null
+    # MoveForward/StrafeLeft/etc. Keep them and add only the score-table key.
+    $bindings = [ordered]@{ F3='VersusScores' }
 } else {
     # v18's proven direct bridge consumes these buttons. Do not add a second axis.
     $bindings = [ordered]@{
@@ -310,6 +313,7 @@ if ($Role -eq 'Host') {
     # force a network pawn before a connection exists. Both server modes force
     # the correct pawn in Login, so the join URL needs no Class/game override.
     $url = 'unreal://{0}:{1}/?Name={2}' -f $Server,$Port,$PlayerName
+    if ($Mode -eq 'Versus') { $url += "?MPCharacter=$Character" }
     # M212 Game.exe's NewWindow command-line branch skips forwarding this
     # connection to an existing client window, allowing local two-client tests.
     $launchArgs = @($url, '-windowed', '-NOFRONTEND', '-NewWindow')
@@ -327,7 +331,7 @@ $manifest = [ordered]@{
     workRoot=$WorkRoot; executable=$executable; arguments=$launchArgs; map=$mapName; server=$Server; port=$Port;
     connectUrl=$(if ($Role -eq 'Join') { $url } else { $null });
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
-    playerName=$PlayerName; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
+    playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
     maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit;
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;
     runRoot=$runRoot; profileRoot=$profileRoot; userFolder="HP2-MP-$session"; processId=$null;

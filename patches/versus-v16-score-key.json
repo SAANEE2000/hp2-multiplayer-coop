@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-score-key",
+  "description": "Route the scoreboard key through the owning player pawn to the local Versus HUD.",
+  "source_snapshot": "HPVersus_v16_remote_bottom_align_20260905 plus prior v16 patches",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "7a9a2249a7b1844d645c405ee50604f784c4400062a9cdbdb411bac8c9943c73",
+      "result_sha256": "b2261a6faeabc80e20832ae16aeb3db2ff701120196811c3147b3fd96df97711",
+      "replacements": [
+        {
+          "old": "    }\n}\n\nexec function SelectCharacter(string CharacterName)\n{\n    ServerSelectCharacter(CharacterName);\n}\n\nfunction ServerSelectCharacter(string CharacterName)\n{\n    local HPVersusPRI VPRI;\n\n    if (Role < ROLE_Authority)\n        return;\n\n    VPRI = HPVersusPRI(PlayerReplicationInfo);\n",
+          "new": "    }\n}\n\nexec function SelectCharacter(string CharacterName)\n{\n    ServerSelectCharacter(CharacterName);\n}\n\nexec function VersusScores()\n{\n    local HPVersusHUD ScoresHUD;\n\n    ScoresHUD = HPVersusHUD(myHUD);\n    if (ScoresHUD != None)\n        ScoresHUD.bShowVersusScores = !ScoresHUD.bShowVersusScores;\n}\n\nfunction ServerSelectCharacter(string CharacterName)\n{\n    local HPVersusPRI VPRI;\n\n    if (Role < ROLE_Authority)\n        return;\n\n    VPRI = HPVersusPRI(PlayerReplicationInfo);\n",
+          "old_sha256": "585edabfa311a5e64d50895f85b2dd4899783562bf769673963dc5fe93ce5051",
+          "new_sha256": "6b938b7d0e9fffb1a0f85d36cea2956f2d5d2a021b3a7ea8c8be0de0c5fb5a52"
+        }
+      ]
+    }
+  ]
+}

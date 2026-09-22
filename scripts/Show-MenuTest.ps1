@@ -2,7 +2,7 @@
 param(
     [switch]$RenderPreview,
     [switch]$SelfTest,
-    [ValidateSet('Main','Coop','Versus','CoopStart','CoopLevels','CoopLoad','CoopHost','CoopJoin','VersusHost','VersusJoin')]
+    [ValidateSet('Main','Coop','Versus','VersusCharacters','CoopStart','CoopLevels','CoopLoad','CoopHost','CoopJoin','VersusHost','VersusJoin')]
     [string]$PreviewPage = 'Main'
 )
 $ErrorActionPreference = 'Stop'
@@ -11,6 +11,28 @@ Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $repo = Split-Path $PSScriptRoot -Parent
+$script:versusProfilePath = Join-Path $repo '.local\versus-menu-player.json'
+$script:versusName = 'Harry'
+$script:versusCharacter = 'Harry'
+if (Test-Path -LiteralPath $script:versusProfilePath) {
+    try {
+        $savedProfile = Get-Content -LiteralPath $script:versusProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($savedProfile.name -match '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') { $script:versusName = $savedProfile.name }
+        if ($savedProfile.character -in @('Harry','Ron','Hermione')) { $script:versusCharacter = $savedProfile.character }
+    } catch { Write-Verbose 'Ignoring unreadable local Versus menu profile.' }
+}
+function Save-VersusProfile {
+    if ($SelfTest) { return }
+    if ($script:versusName -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') { return }
+    @{name=$script:versusName; character=$script:versusCharacter} | ConvertTo-Json |
+        Set-Content -LiteralPath $script:versusProfilePath -Encoding UTF8
+}
+function Remember-VersusName {
+    if ($script:currentMode -eq 'Versus' -and $script:nameBox -and !$script:nameBox.IsDisposed) {
+        $script:versusName = $script:nameBox.Text
+        Save-VersusProfile
+    }
+}
 $help = Join-Path $repo '.local\game\Help'
 foreach ($file in @('Background.bmp','buttonUp.bmp','buttonDown.bmp')) {
     if (!(Test-Path -LiteralPath (Join-Path $help $file) -PathType Leaf)) {
@@ -94,18 +116,19 @@ function Add-MenuInput {
 
 function Invoke-MenuGame {
     param([string]$Mode, [string]$Address, [int]$PortNumber, [string]$Name,
-          [string]$CoopMap = 'Ch1Rictusempra')
+          [string]$CoopMap = 'Ch1Rictusempra', [int]$MaxPlayers = 8, [int]$ScoreLimit = 3)
     try {
+        if ($Mode -like 'Versus*') { $script:versusName = $Name; Save-VersusProfile }
         if ($SelfTest) {
             $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') `
                 -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name `
-                -CoopMap $CoopMap -DryRun
+                -CoopMap $CoopMap -Character $script:versusCharacter -MaxPlayers $MaxPlayers -ScoreLimit $ScoreLimit -DryRun
             $script:lastTestLaunch = $result
             return
         }
         $result = & (Join-Path $PSScriptRoot 'Start-MenuTest.ps1') `
             -LaunchMode $Mode -Server $Address -Port $PortNumber -PlayerName $Name `
-            -CoopMap $CoopMap
+            -CoopMap $CoopMap -Character $script:versusCharacter -MaxPlayers $MaxPlayers -ScoreLimit $ScoreLimit
         if (!$result) { throw 'The game did not report a successful launch.' }
         $script:form.Close()
     } catch {
@@ -129,20 +152,45 @@ function Show-MainMenu {
 
 function Show-ModeMenu {
     param([ValidateSet('Coop','Versus')][string]$Mode)
+    Remember-VersusName
     Clear-MenuPage
     $script:page = 'Mode'
     $script:currentMode = $Mode
     $title = if ($Mode -eq 'Coop') { 'Кооператив' } else { 'Версус' }
     [void](Add-MenuLabel $title 275 35 19)
-    [void](Add-MenuButton 'Создать сервер' 355 {
-        if ($script:currentMode -eq 'Coop') { Show-CoopStartMenu }
-        else { Show-HostMenu }
-    })
-    [void](Add-MenuButton 'Подключиться' 445 { Show-JoinMenu })
-    [void](Add-MenuButton 'Назад' 555 { Show-MainMenu })
     if ($Mode -eq 'Coop') {
+        [void](Add-MenuButton 'Создать сервер' 355 { Show-CoopStartMenu })
+        [void](Add-MenuButton 'Подключиться' 445 { Show-JoinMenu })
+        [void](Add-MenuButton 'Назад' 555 { Show-MainMenu })
         [void](Add-MenuLabel 'Кооперативная кампания пока экспериментальная.' 668 30 10)
+    } else {
+        $script:nameBox = Add-MenuInput 'Имя игрока' $script:versusName 333 300
+        [void](Add-MenuLabel ("Персонаж: " + $(switch ($script:versusCharacter) {
+            Ron { 'Рон' }; Hermione { 'Гермиона' }; default { 'Гарри' }
+        })) 372 27 11)
+        [void](Add-MenuButton 'Выбрать персонажа' 400 { Remember-VersusName; Show-VersusCharacters })
+        [void](Add-MenuButton 'Создать сервер' 478 { Remember-VersusName; Show-HostMenu })
+        [void](Add-MenuButton 'Подключиться' 556 { Remember-VersusName; Show-JoinMenu })
+        [void](Add-MenuButton 'Назад' 634 { Remember-VersusName; Show-MainMenu })
     }
+}
+
+function Show-VersusCharacters {
+    Clear-MenuPage
+    $script:page = 'VersusCharacters'
+    [void](Add-MenuLabel 'Выбор персонажа' 275 38 18)
+    [void](Add-MenuLabel ("Выбран: " + $(switch ($script:versusCharacter) {
+        Ron { 'Рон' }; Hermione { 'Гермиона' }; default { 'Гарри' }
+    })) 314 25 11)
+    $harryButton = Add-MenuButton 'Гарри' 349 { $script:versusCharacter='Harry'; Save-VersusProfile; Show-ModeMenu 'Versus' }
+    $ronButton = Add-MenuButton 'Рон' 428 { $script:versusCharacter='Ron'; Save-VersusProfile; Show-ModeMenu 'Versus' }
+    $hermioneButton = Add-MenuButton 'Гермиона' 507 { $script:versusCharacter='Hermione'; Save-VersusProfile; Show-ModeMenu 'Versus' }
+    switch ($script:versusCharacter) {
+        Ron { $ronButton.ForeColor = [System.Drawing.Color]::Gold }
+        Hermione { $hermioneButton.ForeColor = [System.Drawing.Color]::Gold }
+        default { $harryButton.ForeColor = [System.Drawing.Color]::Gold }
+    }
+    [void](Add-MenuButton 'Назад' 617 { Show-ModeMenu 'Versus' })
 }
 
 function Show-CoopStartMenu {
@@ -202,13 +250,28 @@ function Show-HostMenu {
         }
         [void](Add-MenuLabel ("Уровень: " + $mapLabel) 318 30 11)
     }
-    $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry' 385 300
-    [void](Add-MenuLabel 'Порт сервера: 7777  •  Максимум: 2 игрока' 440 30 11)
-    [void](Add-MenuButton 'Запустить сервер' 500 {
-        Invoke-MenuGame ($script:currentMode + 'Host') '127.0.0.1' 7777 `
-            $script:nameBox.Text $script:coopMap
-    })
-    [void](Add-MenuButton 'Назад' 595 {
+    if ($script:currentMode -eq 'Versus') {
+        $script:nameBox = Add-MenuInput 'Имя игрока' $script:versusName 358 300
+        $script:slotsBox = Add-MenuInput 'Игроков (2–8)' '8' 420 110
+        $script:scoreBox = Add-MenuInput 'Фрагов до победы (1–99)' '3' 482 110
+        [void](Add-MenuButton 'Запустить сервер' 531 {
+            $slots = 0; $score = 0
+            if (![int]::TryParse($script:slotsBox.Text, [ref]$slots) -or $slots -lt 2 -or $slots -gt 8 -or
+                ![int]::TryParse($script:scoreBox.Text, [ref]$score) -or $score -lt 1 -or $score -gt 99) {
+                [void][System.Windows.Forms.MessageBox]::Show('Укажите 2–8 игроков и 1–99 фрагов.', 'Параметры матча',
+                    [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+                return
+            }
+            Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:nameBox.Text $script:coopMap $slots $score
+        })
+    } else {
+        $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry' 385 300
+        [void](Add-MenuLabel 'Порт сервера: 7777  •  Максимум: 2 игрока' 440 30 11)
+        [void](Add-MenuButton 'Запустить сервер' 500 {
+            Invoke-MenuGame 'CoopHost' '127.0.0.1' 7777 $script:nameBox.Text $script:coopMap
+        })
+    }
+    [void](Add-MenuButton 'Назад' 615 {
         if ($script:currentMode -eq 'Coop') { Show-CoopStartMenu }
         else { Show-ModeMenu $script:currentMode }
     })
@@ -219,6 +282,8 @@ function Show-HostMenu {
             'Экспериментальный старт; сервер откроет ваше окно игры.'
         }
         [void](Add-MenuLabel $hint 674 28 9)
+    } else {
+        [void](Add-MenuLabel 'Арена: Startup. Порт: 7777. Вы тоже входите в матч.' 691 22 9)
     }
 }
 
@@ -229,7 +294,7 @@ function Show-JoinMenu {
     [void](Add-MenuLabel $title 266 35 17)
     $script:addressBox = Add-MenuInput 'IP-адрес или имя сервера' '127.0.0.1' 338 330
     $script:portBox = Add-MenuInput 'Порт' '7777' 414 130
-    $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry2' 490 300
+    $script:nameBox = Add-MenuInput 'Имя игрока' $(if ($script:currentMode -eq 'Versus') { $script:versusName } else { 'Harry2' }) 490 300
     [void](Add-MenuButton 'Подключиться' 548 {
         $portNumber = 0
         if (![int]::TryParse($script:portBox.Text, [ref]$portNumber) -or
@@ -248,6 +313,7 @@ $script:form.Add_KeyDown({
     param($sender, $eventArgs)
     if ($eventArgs.KeyCode -ne [System.Windows.Forms.Keys]::Escape) { return }
     if ($script:page -eq 'Host' -and $script:currentMode -eq 'Coop') { Show-CoopStartMenu }
+    elseif ($script:page -eq 'VersusCharacters') { Show-ModeMenu 'Versus' }
     elseif ($script:page -eq 'CoopLevels' -or $script:page -eq 'CoopLoad') { Show-CoopStartMenu }
     elseif ($script:page -eq 'CoopStart') { Show-ModeMenu 'Coop' }
     elseif ($script:page -in @('Host','Join')) { Show-ModeMenu $script:currentMode }
@@ -321,13 +387,34 @@ try {
             throw 'Co-op level-selection route failed.'
         }
         Show-ModeMenu 'Versus'
+        $chooseButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Выбрать персонажа'
+        }) | Select-Object -First 1
+        $chooseButton.PerformClick()
+        $ronButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Рон'
+        }) | Select-Object -First 1
+        $ronButton.PerformClick()
+        if ($script:versusCharacter -ne 'Ron' -or $script:page -ne 'Mode') { throw 'Versus character selection failed.' }
+        Show-HostMenu
+        $hostButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Запустить сервер'
+        }) | Select-Object -First 1
+        $hostButton.PerformClick()
+        if ($script:lastTestLaunch.LaunchMode -ne 'VersusHost' -or
+            $script:lastTestLaunch.URL -ne 'startup.unr?game=HGame.HPVersusGame?MaxPlayers=8?ScoreLimit=3' -or
+            $script:lastTestLaunch.Arguments[0] -ne 'server' -or
+            $script:lastTestLaunch.Character -ne 'Ron') {
+            throw 'Versus host menu route failed.'
+        }
         Show-JoinMenu
         $joinButton = @($script:form.Controls | Where-Object {
             $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Подключиться'
         }) | Select-Object -First 1
         $joinButton.PerformClick()
         if ($script:lastTestLaunch.LaunchMode -ne 'VersusJoin' -or
-            $script:lastTestLaunch.URL -notmatch 'MPMode=Versus') {
+            $script:lastTestLaunch.URL -notmatch 'MPMode=Versus' -or
+            $script:lastTestLaunch.URL -notmatch 'MPCharacter=Ron') {
             throw 'Versus join menu route failed.'
         }
         Write-Output 'Menu navigation self-test passed.'
@@ -335,6 +422,7 @@ try {
         switch ($PreviewPage) {
             Coop       { Show-ModeMenu 'Coop' }
             Versus     { Show-ModeMenu 'Versus' }
+            VersusCharacters { Show-ModeMenu 'Versus'; Show-VersusCharacters }
             CoopStart  { Show-ModeMenu 'Coop'; Show-CoopStartMenu }
             CoopLevels { Show-ModeMenu 'Coop'; Show-CoopLevelsMenu }
             CoopLoad   { Show-ModeMenu 'Coop'; Show-CoopLoadMenu }

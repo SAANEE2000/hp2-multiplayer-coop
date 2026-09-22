@@ -102,9 +102,11 @@ Player-модели действительно предназначены для
 
 - UCC: `Success - 0 error(s), 273 warnings` (предсуществующие предупреждения).
 - `HGame.u` SHA-256:
-  `CC45A9C5AAF3CA0C7EFEDB6FE81890089ACAF8D2CD044D5898B5996F3574B483`.
+  `D6F6D1A4CD893CC795DCD71BFCC375740F7E097EE0705F281D711FC7C595CCF8`.
 - `M212Share.u` SHA-256:
-  `FEDC8F87AB93750FD4CBEDEA8E783E3C5295A122E7A7C65B42692A290686E502`.
+  `AE7111965761195AC01661E69D5AD5AAEC059D3138595E68169CAD9EE1868F59`.
+- Переносимый compiled payload SHA-256:
+  `81EDFA4644858C5DFAD25066609B40A87E113219E90EEE0AB954C3A74756E5CF`.
 - Все 19 тестов цепочек patch-рецептов прошли; один системный symlink-тест
   пропущен из-за отсутствия Windows-привилегии создания symlink.
 - Все 9 тестов экспорта/импорта тестового пакета прошли.

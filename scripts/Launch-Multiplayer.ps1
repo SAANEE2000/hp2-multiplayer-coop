@@ -224,6 +224,7 @@ function Set-ProcessWindowPosition {
         [Parameter(Mandatory=$true)][System.Diagnostics.Process]$Process,
         [Parameter(Mandatory=$true)][int]$X,
         [Parameter(Mandatory=$true)][int]$Y,
+        [string]$Title = 'Harry Potter 2 Multiplayer',
         [int]$TimeoutMilliseconds = 12000
     )
 
@@ -244,10 +245,30 @@ namespace HP2MP {
         private static extern bool IsWindowVisible(IntPtr hWnd);
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hWnd, int index);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool SetWindowText(IntPtr hWnd, string text);
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetWindowPos(
             IntPtr hWnd, IntPtr hWndInsertAfter,
             int X, int Y, int cx, int cy, uint uFlags);
+
+        public static bool MakeMovable(IntPtr hWnd, string title) {
+            const int GWL_STYLE = -16;
+            const int WS_POPUP = unchecked((int)0x80000000);
+            const int WS_OVERLAPPEDWINDOW = 0x00CF0000;
+            const uint FRAME_CHANGED_NO_MOVE = 0x0037;
+            int style = GetWindowLong(hWnd, GWL_STYLE);
+            style = (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW;
+            SetWindowLong(hWnd, GWL_STYLE, style);
+            if (!String.IsNullOrEmpty(title)) SetWindowText(hWnd, title);
+            bool refreshed = SetWindowPos(
+                hWnd, IntPtr.Zero, 0, 0, 0, 0, FRAME_CHANGED_NO_MOVE);
+            return refreshed && (GetWindowLong(hWnd, GWL_STYLE) & 0x00C00000) != 0;
+        }
 
         public static IntPtr FindLargestVisibleWindow(int processId) {
             IntPtr best = IntPtr.Zero;
@@ -272,30 +293,32 @@ namespace HP2MP {
     }
 
     $deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
-    $firstAppliedAt = $null
-    $positionApplied = $false
+    $stableHandle = [IntPtr]::Zero
+    $stableSince = $null
     do {
         $Process.Refresh()
         if ($Process.HasExited) { return $false }
         $windowHandle = [HP2MP.NativeWindow]::FindLargestVisibleWindow($Process.Id)
         if ($windowHandle -ne [IntPtr]::Zero) {
-            # Preserve size and Z-order and do not steal focus while arranging
-            # two local clients. HP2 replaces/repositions its early bootstrap
-            # window, so keep applying the requested position until the final
-            # render window has stayed up for five seconds.
-            $moved = [HP2MP.NativeWindow]::SetWindowPos(
-                $windowHandle, [IntPtr]::Zero,
-                $X, $Y, 0, 0, 0x0015)
-            if ($moved) {
-                $positionApplied = $true
-                if ($null -eq $firstAppliedAt) { $firstAppliedAt = [DateTime]::UtcNow }
-                if (([DateTime]::UtcNow - $firstAppliedAt).TotalSeconds -ge 5) { return $true }
+            if ($windowHandle -ne $stableHandle) {
+                $stableHandle = $windowHandle
+                $stableSince = [DateTime]::UtcNow
+            } elseif (([DateTime]::UtcNow - $stableSince).TotalSeconds -ge 3) {
+                # HP2 first creates a bootstrap window and later applies its own
+                # borderless style. Wait for that step, then add a standard
+                # resizable caption and position the final render window once.
+                # With no positioning loop left behind, the user can drag it.
+                $movable = [HP2MP.NativeWindow]::MakeMovable($windowHandle, $Title)
+                $moved = [HP2MP.NativeWindow]::SetWindowPos(
+                    $windowHandle, [IntPtr]::Zero,
+                    $X, $Y, 0, 0, 0x0015)
+                return $movable -and $moved
             }
         }
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
 
-    return $positionApplied
+    return $false
 }
 
 $session = '{0}-{1}-{2}-{3}' -f $Mode.ToLowerInvariant(),$Role.ToLowerInvariant(),(Get-Date -Format 'yyyyMMdd-HHmmss-fff'),([Guid]::NewGuid().ToString('N').Substring(0,6))
@@ -446,7 +469,8 @@ if (!$PrepareOnly) {
         $manifest.processId = $process.Id
         $manifest.started = Get-Date -Format o
         if ($Role -eq 'Join' -and !$Unattended) {
-            $manifest.windowPositionApplied = Set-ProcessWindowPosition -Process $process -X $WindowX -Y $WindowY
+            $windowTitle = "HP2 $Mode - $PlayerName"
+            $manifest.windowPositionApplied = Set-ProcessWindowPosition -Process $process -X $WindowX -Y $WindowY -Title $windowTitle
             if (!$manifest.windowPositionApplied) {
                 $manifest.windowPositionError = 'The game window handle did not become available within 12 seconds.'
                 Write-Warning $manifest.windowPositionError

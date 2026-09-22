@@ -17,7 +17,9 @@ open a start menu using the original menu art. Versus launches the isolated
 `.local/versus-v16-game` build; Single Player and Co-op retain `.local/game`.
 The Versus host and join pages expose window X/Y coordinates for same-PC
 testing (defaults: host `20,40`, second client `840,40`). Direct launches accept
-the same values, for example `JoinVersus.cmd -WindowX 840 -WindowY 40`.
+the same values, for example `JoinVersus.cmd -WindowX 840 -WindowY 40`. After
+startup each client receives a normal resizable Windows frame and can be moved
+freely; the coordinates only select its initial position.
 The native three-button
 Game.exe front-end is preserved for save loading and settings. See
 `docs/MENU_TEST_QUICKSTART.md` for setup on another PC.

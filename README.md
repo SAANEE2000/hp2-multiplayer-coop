@@ -19,7 +19,9 @@ The Versus host and join pages expose window X/Y coordinates for same-PC
 testing (defaults: host `20,40`, second client `840,40`). Direct launches accept
 the same values, for example `JoinVersus.cmd -WindowX 840 -WindowY 40`. After
 startup each client receives a normal resizable Windows frame and can be moved
-freely; the coordinates only select its initial position.
+freely; the coordinates only select its initial position. A per-client watcher
+restores the frame if the legacy renderer later switches the window back to
+popup style, without moving the window again.
 The native three-button
 Game.exe front-end is preserved for save loading and settings. See
 `docs/MENU_TEST_QUICKSTART.md` for setup on another PC.

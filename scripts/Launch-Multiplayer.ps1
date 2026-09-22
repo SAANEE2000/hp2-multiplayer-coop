@@ -438,6 +438,7 @@ $manifest = [ordered]@{
     playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
     maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit;
     windowed=$true; windowX=$WindowX; windowY=$WindowY; windowPositionApplied=$false;
+    windowFrameWatcherProcessId=$null; windowFrameWatcherLog=$null;
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;
     runRoot=$runRoot; profileRoot=$profileRoot; userFolder="HP2-MP-$session"; processId=$null;
     profileIsolation='UNVERIFIED: M212 bootstrap may select UserFolder/SavePath from Default.ini before the custom INI.';
@@ -475,6 +476,20 @@ if (!$PrepareOnly) {
                 $manifest.windowPositionError = 'The game window handle did not become available within 12 seconds.'
                 Write-Warning $manifest.windowPositionError
             }
+            $frameWatcherScript = Join-Path $PSScriptRoot 'Watch-GameWindowFrame.ps1'
+            $frameWatcherOutput = Join-Path $runRoot 'window-frame-watch.log'
+            $frameWatcherError = Join-Path $runRoot 'window-frame-watch-error.log'
+            $frameWatcherArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $frameWatcherScript +
+                '" -GameProcessId ' + $process.Id +
+                ' -GameStartTicks ' + $process.StartTime.Ticks +
+                ' -ExpectedExecutable "' + $executable +
+                '" -Title "' + $windowTitle + '"'
+            $frameWatcher = Start-Process -FilePath 'powershell.exe' -ArgumentList $frameWatcherArgs `
+                -WindowStyle Hidden -PassThru `
+                -RedirectStandardOutput $frameWatcherOutput `
+                -RedirectStandardError $frameWatcherError
+            $manifest.windowFrameWatcherProcessId = $frameWatcher.Id
+            $manifest.windowFrameWatcherLog = $frameWatcherOutput
         }
     } catch {
         $manifest.status = 'LAUNCH_FAILED'

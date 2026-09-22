@@ -286,7 +286,20 @@ $windowPositionApplied = Set-ProcessWindowPosition -Process $process -X $WindowX
 if (!$windowPositionApplied) {
     Write-Warning 'The game is windowed, but its window handle was not available for positioning within 12 seconds.'
 }
+$frameWatcherScript = Join-Path $PSScriptRoot 'Watch-GameWindowFrame.ps1'
+$frameWatcherOutput = Join-Path $runRoot 'window-frame-watch.log'
+$frameWatcherError = Join-Path $runRoot 'window-frame-watch-error.log'
+$frameWatcherArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $frameWatcherScript +
+    '" -GameProcessId ' + $process.Id +
+    ' -GameStartTicks ' + $process.StartTime.Ticks +
+    ' -ExpectedExecutable "' + $exe +
+    '" -Title "' + $windowTitle + '"'
+$frameWatcher = Start-Process -FilePath 'powershell.exe' -ArgumentList $frameWatcherArgs `
+    -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput $frameWatcherOutput `
+    -RedirectStandardError $frameWatcherError
 $documents = [Environment]::GetFolderPath('MyDocuments')
 Write-Output "Test game is running (PID $($process.Id), mode $LaunchMode): $exe"
 Write-Output "Windowed position requested: X=$WindowX, Y=$WindowY; applied=$windowPositionApplied"
+Write-Output "Movable-frame watcher running (PID $($frameWatcher.Id)): $frameWatcherOutput"
 Write-Output "Expected log: $(Join-Path (Join-Path $documents 'HP2-Multiplayer-Development') $logName)"

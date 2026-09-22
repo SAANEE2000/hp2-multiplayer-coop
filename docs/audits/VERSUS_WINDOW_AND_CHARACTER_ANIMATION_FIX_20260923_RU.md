@@ -90,8 +90,10 @@ character=Hermione mesh=HPModels.skhermionePlayerMesh animSet=HPModels.skHarryAn
 ## Сборка и проверки
 
 - UCC: `Success - 0 error(s), 273 warnings`.
-- `HGame.u`: `EA035320241F120D6C3FFF36F2D54E4C68F4ABD59747567E8D1F3D5668F5640B`.
-- `M212Share.u`: `889B4F281F80F85FCA3A67115641177DC2FD68A302C7B60ACC2093727E79E23C`.
+- Код исправления: commit `251b913262ddc35970a6cf018031c2aa17798950`.
+- `HGame.u`: `9B939A630A60832B20B42221B302807EBEC139BDBAB71F4C727FA3013672D570`.
+- `M212Share.u`: `C3AF56AB7725DE82A5168F7D6798E64B30153A1F43F5E78C47E77D11BCF65FA8`.
+- Переносимый compiled payload: `7F5358D5CC303680E5EF0846FBB9DE2AEE7980FA9DEE193B445A3FFE85D1ABD3`.
 - Рецепты патчей: 18 успешных тестов, один платформенный тест симлинков пропущен Windows без соответствующей привилегии.
 - Передача тестовой сборки: 9 успешных тестов.
 - Навигация нового меню: self-test пройден полностью для обычной игры, кооператива и Versus.

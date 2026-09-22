@@ -13,6 +13,8 @@ param(
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
     [ValidateRange(-32768,32767)][int]$WindowX = 20,
     [ValidateRange(-32768,32767)][int]$WindowY = 40,
+    [ValidateRange(320,7680)][int]$WindowWidth = 800,
+    [ValidateRange(240,4320)][int]$WindowHeight = 600,
     [ValidateSet('None','RictusempraLessonComplete')][string]$TestStage = 'None',
     [ValidateSet('None','Health','Lumos','Pickup','PickupNet','AIInspect','AICombat','AICombatDeath','AISnail','Travel','MountRootB0','MountRootB1')][string]$RuntimeProbe = 'None',
     [switch]$CapturedAuthorityDiagnostic,
@@ -224,6 +226,8 @@ function Set-ProcessWindowPosition {
         [Parameter(Mandatory=$true)][System.Diagnostics.Process]$Process,
         [Parameter(Mandatory=$true)][int]$X,
         [Parameter(Mandatory=$true)][int]$Y,
+        [Parameter(Mandatory=$true)][int]$Width,
+        [Parameter(Mandatory=$true)][int]$Height,
         [string]$Title = 'Harry Potter 2 Multiplayer',
         [int]$TimeoutMilliseconds = 12000
     )
@@ -247,8 +251,6 @@ namespace HP2MP {
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
         [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
         private static extern int GetWindowLong(IntPtr hWnd, int index);
-        [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
-        private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool SetWindowText(IntPtr hWnd, string text);
         [DllImport("user32.dll", SetLastError = true)]
@@ -256,18 +258,15 @@ namespace HP2MP {
             IntPtr hWnd, IntPtr hWndInsertAfter,
             int X, int Y, int cx, int cy, uint uFlags);
 
-        public static bool MakeMovable(IntPtr hWnd, string title) {
+        public static bool HasResizableFrame(IntPtr hWnd) {
             const int GWL_STYLE = -16;
-            const int WS_POPUP = unchecked((int)0x80000000);
-            const int WS_OVERLAPPEDWINDOW = 0x00CF0000;
-            const uint FRAME_CHANGED_NO_MOVE = 0x0037;
             int style = GetWindowLong(hWnd, GWL_STYLE);
-            style = (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW;
-            SetWindowLong(hWnd, GWL_STYLE, style);
+            return (style & 0x00C00000) != 0 && (style & 0x00040000) != 0;
+        }
+
+        public static bool SetTitleAndPlace(IntPtr hWnd, string title, int x, int y, int width, int height) {
             if (!String.IsNullOrEmpty(title)) SetWindowText(hWnd, title);
-            bool refreshed = SetWindowPos(
-                hWnd, IntPtr.Zero, 0, 0, 0, 0, FRAME_CHANGED_NO_MOVE);
-            return refreshed && (GetWindowLong(hWnd, GWL_STYLE) & 0x00C00000) != 0;
+            return SetWindowPos(hWnd, IntPtr.Zero, x, y, width, height, 0x0014);
         }
 
         public static IntPtr FindLargestVisibleWindow(int processId) {
@@ -303,16 +302,14 @@ namespace HP2MP {
             if ($windowHandle -ne $stableHandle) {
                 $stableHandle = $windowHandle
                 $stableSince = [DateTime]::UtcNow
-            } elseif (([DateTime]::UtcNow - $stableSince).TotalSeconds -ge 3) {
-                # HP2 first creates a bootstrap window and later applies its own
-                # borderless style. Wait for that step, then add a standard
-                # resizable caption and position the final render window once.
-                # With no positioning loop left behind, the user can drag it.
-                $movable = [HP2MP.NativeWindow]::MakeMovable($windowHandle, $Title)
-                $moved = [HP2MP.NativeWindow]::SetWindowPos(
-                    $windowHandle, [IntPtr]::Zero,
-                    $X, $Y, 0, 0, 0x0015)
-                return $movable -and $moved
+            } elseif (([DateTime]::UtcNow - $stableSince).TotalSeconds -ge 2 -and
+                      [HP2MP.NativeWindow]::HasResizableFrame($windowHandle)) {
+                # The renderer now creates the final framed window itself.
+                # Only set its title and initial position; changing the native
+                # style after DirectX initialization desynchronizes the client
+                # viewport and produces black margins/clipped HUD output.
+                return [HP2MP.NativeWindow]::SetTitleAndPlace(
+                    $windowHandle, $Title, $X, $Y, $Width, $Height)
             }
         }
         Start-Sleep -Milliseconds 100
@@ -360,7 +357,10 @@ if ($Mode -eq 'Versus') { $config = Set-IniValues $config $gameClass ([ordered]@
 $config = Set-IniValues $config 'IpDrv.UdpBeacon' ([ordered]@{DoBeacon='False'})
 $config = Set-IniValues $config 'IpServer.UdpServerUplink' ([ordered]@{DoUplink='False'})
 $config = Set-IniValues $config 'UWeb.WebServer' ([ordered]@{bEnabled='False'})
-$config = Set-IniValues $config 'WinDrv.WindowsClient' ([ordered]@{StartupFullscreen='False'; WindowedViewportX=800; WindowedViewportY=600})
+$config = Set-IniValues $config 'WinDrv.WindowsClient' ([ordered]@{
+    StartupFullscreen='False'; WindowedViewportX=$WindowWidth; WindowedViewportY=$WindowHeight;
+    BorderlessFullscreen='False'; CenterBorderlessWindow='False'; UseFullscreenCursorInBorderless='False'
+})
 
 $userConfig = Get-Content -LiteralPath (Join-Path $system 'DefUser.ini') -Raw
 $userConfig = Set-IniValues $userConfig 'DefaultPlayer' ([ordered]@{Name=$PlayerName; Class=$localPawnClass})
@@ -437,8 +437,8 @@ $manifest = [ordered]@{
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
     playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
     maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit;
-    windowed=$true; windowX=$WindowX; windowY=$WindowY; windowPositionApplied=$false;
-    windowFrameWatcherProcessId=$null; windowFrameWatcherLog=$null;
+    windowed=$true; windowX=$WindowX; windowY=$WindowY; windowWidth=$WindowWidth; windowHeight=$WindowHeight;
+    windowPositionApplied=$false; windowFrameMode='native-resizable';
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;
     runRoot=$runRoot; profileRoot=$profileRoot; userFolder="HP2-MP-$session"; processId=$null;
     profileIsolation='UNVERIFIED: M212 bootstrap may select UserFolder/SavePath from Default.ini before the custom INI.';
@@ -471,25 +471,12 @@ if (!$PrepareOnly) {
         $manifest.started = Get-Date -Format o
         if ($Role -eq 'Join' -and !$Unattended) {
             $windowTitle = "HP2 $Mode - $PlayerName"
-            $manifest.windowPositionApplied = Set-ProcessWindowPosition -Process $process -X $WindowX -Y $WindowY -Title $windowTitle
+            $manifest.windowPositionApplied = Set-ProcessWindowPosition -Process $process `
+                -X $WindowX -Y $WindowY -Width $WindowWidth -Height $WindowHeight -Title $windowTitle
             if (!$manifest.windowPositionApplied) {
                 $manifest.windowPositionError = 'The game window handle did not become available within 12 seconds.'
                 Write-Warning $manifest.windowPositionError
             }
-            $frameWatcherScript = Join-Path $PSScriptRoot 'Watch-GameWindowFrame.ps1'
-            $frameWatcherOutput = Join-Path $runRoot 'window-frame-watch.log'
-            $frameWatcherError = Join-Path $runRoot 'window-frame-watch-error.log'
-            $frameWatcherArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $frameWatcherScript +
-                '" -GameProcessId ' + $process.Id +
-                ' -GameStartTicks ' + $process.StartTime.Ticks +
-                ' -ExpectedExecutable "' + $executable +
-                '" -Title "' + $windowTitle + '"'
-            $frameWatcher = Start-Process -FilePath 'powershell.exe' -ArgumentList $frameWatcherArgs `
-                -WindowStyle Hidden -PassThru `
-                -RedirectStandardOutput $frameWatcherOutput `
-                -RedirectStandardError $frameWatcherError
-            $manifest.windowFrameWatcherProcessId = $frameWatcher.Id
-            $manifest.windowFrameWatcherLog = $frameWatcherOutput
         }
     } catch {
         $manifest.status = 'LAUNCH_FAILED'

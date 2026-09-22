@@ -16,8 +16,12 @@ $script:versusName = 'Harry'
 $script:versusCharacter = 'Harry'
 $script:versusHostWindowX = 20
 $script:versusHostWindowY = 40
+$script:versusHostWindowWidth = 800
+$script:versusHostWindowHeight = 600
 $script:versusJoinWindowX = 840
 $script:versusJoinWindowY = 40
+$script:versusJoinWindowWidth = 800
+$script:versusJoinWindowHeight = 600
 if (Test-Path -LiteralPath $script:versusProfilePath) {
     try {
         $savedProfile = Get-Content -LiteralPath $script:versusProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -30,6 +34,15 @@ if (Test-Path -LiteralPath $script:versusProfilePath) {
                 Set-Variable -Scope Script -Name ('versus' + $setting.Substring(0,1).ToUpperInvariant() + $setting.Substring(1)) -Value $value
             }
         }
+        foreach ($setting in @('hostWindowWidth','hostWindowHeight','joinWindowWidth','joinWindowHeight')) {
+            $value = 0
+            $minimum = if ($setting -like '*Width') { 320 } else { 240 }
+            $maximum = if ($setting -like '*Width') { 7680 } else { 4320 }
+            if ([int]::TryParse([string]$savedProfile.$setting, [ref]$value) -and
+                $value -ge $minimum -and $value -le $maximum) {
+                Set-Variable -Scope Script -Name ('versus' + $setting.Substring(0,1).ToUpperInvariant() + $setting.Substring(1)) -Value $value
+            }
+        }
     } catch { Write-Verbose 'Ignoring unreadable local Versus menu profile.' }
 }
 function Save-VersusProfile {
@@ -38,7 +51,9 @@ function Save-VersusProfile {
     @{
         name=$script:versusName; character=$script:versusCharacter
         hostWindowX=$script:versusHostWindowX; hostWindowY=$script:versusHostWindowY
+        hostWindowWidth=$script:versusHostWindowWidth; hostWindowHeight=$script:versusHostWindowHeight
         joinWindowX=$script:versusJoinWindowX; joinWindowY=$script:versusJoinWindowY
+        joinWindowWidth=$script:versusJoinWindowWidth; joinWindowHeight=$script:versusJoinWindowHeight
     } | ConvertTo-Json |
         Set-Content -LiteralPath $script:versusProfilePath -Encoding UTF8
 }
@@ -173,16 +188,37 @@ function Read-WindowPosition {
     return $true
 }
 
+function Read-WindowSize {
+    param([System.Windows.Forms.TextBox]$WidthBox, [System.Windows.Forms.TextBox]$HeightBox,
+          [ref]$Width, [ref]$Height)
+    $widthValue = 0
+    $heightValue = 0
+    if (![int]::TryParse($WidthBox.Text, [ref]$widthValue) -or
+        ![int]::TryParse($HeightBox.Text, [ref]$heightValue) -or
+        $widthValue -lt 320 -or $widthValue -gt 7680 -or
+        $heightValue -lt 240 -or $heightValue -gt 4320) {
+        [void][System.Windows.Forms.MessageBox]::Show(
+            'Ширина должна быть 320–7680, высота — 240–4320 пикселей.',
+            'Размер окна', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning)
+        return $false
+    }
+    $Width.Value = $widthValue
+    $Height.Value = $heightValue
+    return $true
+}
+
 function Invoke-MenuGame {
     param([string]$Mode, [string]$Address, [int]$PortNumber, [string]$Name,
           [string]$CoopMap = 'Ch1Rictusempra', [int]$MaxPlayers = 8, [int]$ScoreLimit = 3,
-          [int]$WindowX = 20, [int]$WindowY = 40)
+          [int]$WindowX = 20, [int]$WindowY = 40,
+          [int]$WindowWidth = 800, [int]$WindowHeight = 600)
     try {
         if ($Mode -like 'Versus*') { $script:versusName = $Name; Save-VersusProfile }
         $launchParameters = @{
             LaunchMode=$Mode; Server=$Address; Port=$PortNumber; PlayerName=$Name
             Character=$script:versusCharacter; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit
-            WindowX=$WindowX; WindowY=$WindowY
+            WindowX=$WindowX; WindowY=$WindowY; WindowWidth=$WindowWidth; WindowHeight=$WindowHeight
         }
         # Versus has its own fixed arena. Do not pass the unrelated co-op map
         # field: on a fresh menu session $script:coopMap has not been set yet.
@@ -321,8 +357,10 @@ function Show-HostMenu {
         $script:scoreBox = Add-MenuSideInput 'Фрагов (1–99)' '3' 370 374 110
         $script:windowXBox = Add-MenuSideInput 'Окно X' ([string]$script:versusHostWindowX) 220 442 90
         $script:windowYBox = Add-MenuSideInput 'Окно Y' ([string]$script:versusHostWindowY) 330 442 90
-        [void](Add-MenuButton 'Запустить сервер' 493 {
-            $slots = 0; $score = 0; $windowX = 0; $windowY = 0
+        $script:windowWidthBox = Add-MenuSideInput 'Ширина' ([string]$script:versusHostWindowWidth) 220 496 90
+        $script:windowHeightBox = Add-MenuSideInput 'Высота' ([string]$script:versusHostWindowHeight) 330 496 90
+        [void](Add-MenuButton 'Запустить сервер' 535 {
+            $slots = 0; $score = 0; $windowX = 0; $windowY = 0; $windowWidth = 0; $windowHeight = 0
             if (![int]::TryParse($script:slotsBox.Text, [ref]$slots) -or $slots -lt 2 -or $slots -gt 8 -or
                 ![int]::TryParse($script:scoreBox.Text, [ref]$score) -or $score -lt 1 -or $score -gt 99) {
                 [void][System.Windows.Forms.MessageBox]::Show('Укажите 2–8 игроков и 1–99 фрагов.', 'Параметры матча',
@@ -330,10 +368,13 @@ function Show-HostMenu {
                 return
             }
             if (!(Read-WindowPosition $script:windowXBox $script:windowYBox ([ref]$windowX) ([ref]$windowY))) { return }
+            if (!(Read-WindowSize $script:windowWidthBox $script:windowHeightBox ([ref]$windowWidth) ([ref]$windowHeight))) { return }
             $script:versusHostWindowX = $windowX
             $script:versusHostWindowY = $windowY
+            $script:versusHostWindowWidth = $windowWidth
+            $script:versusHostWindowHeight = $windowHeight
             Save-VersusProfile
-            Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $script:coopMap $slots $score $windowX $windowY
+            Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $script:coopMap $slots $score $windowX $windowY $windowWidth $windowHeight
         })
     } else {
         $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry' 385 300
@@ -369,8 +410,10 @@ function Show-JoinMenu {
         $script:portBox = Add-MenuSideInput 'Порт' '7777' 145 428 100
         $script:windowXBox = Add-MenuSideInput 'Окно X' ([string]$script:versusJoinWindowX) 270 428 100
         $script:windowYBox = Add-MenuSideInput 'Окно Y' ([string]$script:versusJoinWindowY) 395 428 100
-        $joinTop = 490
-        $backTop = 590
+        $script:windowWidthBox = Add-MenuSideInput 'Ширина' ([string]$script:versusJoinWindowWidth) 220 486 90
+        $script:windowHeightBox = Add-MenuSideInput 'Высота' ([string]$script:versusJoinWindowHeight) 345 486 90
+        $joinTop = 525
+        $backTop = 615
     } else {
         $script:addressBox = Add-MenuInput 'IP-адрес или имя сервера' '127.0.0.1' 338 330
         $script:portBox = Add-MenuInput 'Порт' '7777' 414 130
@@ -379,7 +422,7 @@ function Show-JoinMenu {
         $backTop = 634
     }
     [void](Add-MenuButton 'Подключиться' $joinTop {
-        $portNumber = 0; $windowX = 20; $windowY = 40
+        $portNumber = 0; $windowX = 20; $windowY = 40; $windowWidth = 800; $windowHeight = 600
         if (![int]::TryParse($script:portBox.Text, [ref]$portNumber) -or
             $portNumber -lt 1024 -or $portNumber -gt 65535) {
             [void][System.Windows.Forms.MessageBox]::Show('Порт должен быть числом от 1024 до 65535.',
@@ -389,14 +432,17 @@ function Show-JoinMenu {
         }
         if ($script:currentMode -eq 'Versus') {
             if (!(Read-WindowPosition $script:windowXBox $script:windowYBox ([ref]$windowX) ([ref]$windowY))) { return }
+            if (!(Read-WindowSize $script:windowWidthBox $script:windowHeightBox ([ref]$windowWidth) ([ref]$windowHeight))) { return }
             $script:versusJoinWindowX = $windowX
             $script:versusJoinWindowY = $windowY
+            $script:versusJoinWindowWidth = $windowWidth
+            $script:versusJoinWindowHeight = $windowHeight
             Save-VersusProfile
             $joinName = $script:versusName
         } else {
             $joinName = $script:nameBox.Text
         }
-        Invoke-MenuGame ($script:currentMode + 'Join') $script:addressBox.Text $portNumber $joinName 'Ch1Rictusempra' 8 3 $windowX $windowY
+        Invoke-MenuGame ($script:currentMode + 'Join') $script:addressBox.Text $portNumber $joinName 'Ch1Rictusempra' 8 3 $windowX $windowY $windowWidth $windowHeight
     })
     [void](Add-MenuButton 'Назад' $backTop { Show-ModeMenu $script:currentMode })
 }
@@ -482,20 +528,24 @@ try {
         $ronButton.PerformClick()
         if ($script:versusCharacter -ne 'Ron' -or $script:page -ne 'Mode') { throw 'Versus character selection failed.' }
         Show-HostMenu
-        Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $null 8 3 $script:versusHostWindowX $script:versusHostWindowY
+        Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $null 8 3 $script:versusHostWindowX $script:versusHostWindowY $script:versusHostWindowWidth $script:versusHostWindowHeight
         if ($script:lastTestLaunch.LaunchMode -ne 'VersusHost' -or
             $script:lastTestLaunch.URL -ne 'startup.unr?game=HGame.HPVersusGame?MaxPlayers=8?ScoreLimit=3' -or
             $script:lastTestLaunch.Arguments[0] -ne 'server' -or
             $script:lastTestLaunch.Character -ne 'Ron' -or
             $script:lastTestLaunch.WindowX -ne $script:versusHostWindowX -or
-            $script:lastTestLaunch.WindowY -ne $script:versusHostWindowY) {
+            $script:lastTestLaunch.WindowY -ne $script:versusHostWindowY -or
+            $script:lastTestLaunch.WindowWidth -ne $script:versusHostWindowWidth -or
+            $script:lastTestLaunch.WindowHeight -ne $script:versusHostWindowHeight) {
             throw 'Versus host menu route failed.'
         }
         Show-JoinMenu
         if ($script:addressBox.Text -ne '127.0.0.1' -or
             $script:portBox.Text -ne '7777' -or
             $script:windowXBox.Text -ne ([string]$script:versusJoinWindowX) -or
-            $script:windowYBox.Text -ne ([string]$script:versusJoinWindowY)) {
+            $script:windowYBox.Text -ne ([string]$script:versusJoinWindowY) -or
+            $script:windowWidthBox.Text -ne ([string]$script:versusJoinWindowWidth) -or
+            $script:windowHeightBox.Text -ne ([string]$script:versusJoinWindowHeight)) {
             throw 'Versus join menu fields failed.'
         }
         Write-Output 'Menu navigation self-test passed.'

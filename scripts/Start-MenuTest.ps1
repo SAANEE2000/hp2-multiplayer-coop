@@ -10,6 +10,8 @@ param(
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
     [ValidateRange(-32768,32767)][int]$WindowX = 20,
     [ValidateRange(-32768,32767)][int]$WindowY = 40,
+    [ValidateRange(320,7680)][int]$WindowWidth = 800,
+    [ValidateRange(240,4320)][int]$WindowHeight = 600,
     [ValidateSet('Ch1Rictusempra','Ch2Skurge','Ch3Diffindo','Ch4Spongify')]
     [string]$CoopMap = 'Ch1Rictusempra',
     [switch]$DryRun
@@ -21,6 +23,8 @@ function Set-ProcessWindowPosition {
         [Parameter(Mandatory=$true)][System.Diagnostics.Process]$Process,
         [Parameter(Mandatory=$true)][int]$X,
         [Parameter(Mandatory=$true)][int]$Y,
+        [Parameter(Mandatory=$true)][int]$Width,
+        [Parameter(Mandatory=$true)][int]$Height,
         [string]$Title = 'Harry Potter 2 Multiplayer',
         [int]$TimeoutMilliseconds = 12000
     )
@@ -44,8 +48,6 @@ namespace HP2MP {
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
         [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
         private static extern int GetWindowLong(IntPtr hWnd, int index);
-        [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
-        private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool SetWindowText(IntPtr hWnd, string text);
         [DllImport("user32.dll", SetLastError = true)]
@@ -53,18 +55,15 @@ namespace HP2MP {
             IntPtr hWnd, IntPtr hWndInsertAfter,
             int X, int Y, int cx, int cy, uint uFlags);
 
-        public static bool MakeMovable(IntPtr hWnd, string title) {
+        public static bool HasResizableFrame(IntPtr hWnd) {
             const int GWL_STYLE = -16;
-            const int WS_POPUP = unchecked((int)0x80000000);
-            const int WS_OVERLAPPEDWINDOW = 0x00CF0000;
-            const uint FRAME_CHANGED_NO_MOVE = 0x0037;
             int style = GetWindowLong(hWnd, GWL_STYLE);
-            style = (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW;
-            SetWindowLong(hWnd, GWL_STYLE, style);
+            return (style & 0x00C00000) != 0 && (style & 0x00040000) != 0;
+        }
+
+        public static bool SetTitleAndPlace(IntPtr hWnd, string title, int x, int y, int width, int height) {
             if (!String.IsNullOrEmpty(title)) SetWindowText(hWnd, title);
-            bool refreshed = SetWindowPos(
-                hWnd, IntPtr.Zero, 0, 0, 0, 0, FRAME_CHANGED_NO_MOVE);
-            return refreshed && (GetWindowLong(hWnd, GWL_STYLE) & 0x00C00000) != 0;
+            return SetWindowPos(hWnd, IntPtr.Zero, x, y, width, height, 0x0014);
         }
 
         public static IntPtr FindLargestVisibleWindow(int processId) {
@@ -100,12 +99,10 @@ namespace HP2MP {
             if ($windowHandle -ne $stableHandle) {
                 $stableHandle = $windowHandle
                 $stableSince = [DateTime]::UtcNow
-            } elseif (([DateTime]::UtcNow - $stableSince).TotalSeconds -ge 3) {
-                $movable = [HP2MP.NativeWindow]::MakeMovable($windowHandle, $Title)
-                $moved = [HP2MP.NativeWindow]::SetWindowPos(
-                    $windowHandle, [IntPtr]::Zero,
-                    $X, $Y, 0, 0, 0x0015)
-                return $movable -and $moved
+            } elseif (([DateTime]::UtcNow - $stableSince).TotalSeconds -ge 2 -and
+                      [HP2MP.NativeWindow]::HasResizableFrame($windowHandle)) {
+                return [HP2MP.NativeWindow]::SetTitleAndPlace(
+                    $windowHandle, $Title, $X, $Y, $Width, $Height)
             }
         }
         Start-Sleep -Milliseconds 100
@@ -165,7 +162,7 @@ $prepared = $null
 if ($LaunchMode -notin @('CoopHost','VersusHost')) {
     $prepared = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
         -Mode $profileMode -Role Join -WorkRoot $gameRoot -PrepareOnly -PlayerName $PlayerName `
-        -WindowX $WindowX -WindowY $WindowY
+        -WindowX $WindowX -WindowY $WindowY -WindowWidth $WindowWidth -WindowHeight $WindowHeight
     if ($prepared.status -ne 'PREPARED') { throw 'Could not prepare the isolated menu profile.' }
     $runRoot = $prepared.runRoot
 }
@@ -196,7 +193,7 @@ $arguments = if ($LaunchMode -in @('CoopHost','VersusHost')) {
 }
 if ($DryRun) {
     [PSCustomObject]@{LaunchMode=$LaunchMode; CoopMap=$CoopMap; Character=$Character; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit; URL=$url; Arguments=$arguments;
-        Windowed=$true; WindowX=$WindowX; WindowY=$WindowY;
+        Windowed=$true; WindowX=$WindowX; WindowY=$WindowY; WindowWidth=$WindowWidth; WindowHeight=$WindowHeight;
         EngineIni=$prepared.engineIni; UserIni=$prepared.userIni;
         Executable=$(if ($LaunchMode -in @('CoopHost','VersusHost')) { Join-Path $system 'UCC.exe' } else { $exe });
         LocalClientExecutable=$exe}
@@ -230,7 +227,7 @@ if ($LaunchMode -in @('CoopHost','VersusHost')) {
         if (!$serverReady) { throw 'The server did not become ready within 20 seconds.' }
         $localRun = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
             -Mode $profileMode -Role Join -WorkRoot $gameRoot -Server '127.0.0.1' -Port $Port -PlayerName $PlayerName -Character $Character `
-            -WindowX $WindowX -WindowY $WindowY
+            -WindowX $WindowX -WindowY $WindowY -WindowWidth $WindowWidth -WindowHeight $WindowHeight
         if ($localRun.status -ne 'STARTED') { throw 'The local client did not start.' }
         Start-Sleep -Seconds 3
         $serverProcess = Get-Process -Id $hostRun.processId -ErrorAction SilentlyContinue
@@ -282,24 +279,12 @@ Start-Sleep -Seconds 3
 $process.Refresh()
 if ($process.HasExited) { throw "Game.exe exited immediately with code $($process.ExitCode)." }
 $windowTitle = "HP2 $profileMode - $PlayerName"
-$windowPositionApplied = Set-ProcessWindowPosition -Process $process -X $WindowX -Y $WindowY -Title $windowTitle
+$windowPositionApplied = Set-ProcessWindowPosition -Process $process `
+    -X $WindowX -Y $WindowY -Width $WindowWidth -Height $WindowHeight -Title $windowTitle
 if (!$windowPositionApplied) {
     Write-Warning 'The game is windowed, but its window handle was not available for positioning within 12 seconds.'
 }
-$frameWatcherScript = Join-Path $PSScriptRoot 'Watch-GameWindowFrame.ps1'
-$frameWatcherOutput = Join-Path $runRoot 'window-frame-watch.log'
-$frameWatcherError = Join-Path $runRoot 'window-frame-watch-error.log'
-$frameWatcherArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $frameWatcherScript +
-    '" -GameProcessId ' + $process.Id +
-    ' -GameStartTicks ' + $process.StartTime.Ticks +
-    ' -ExpectedExecutable "' + $exe +
-    '" -Title "' + $windowTitle + '"'
-$frameWatcher = Start-Process -FilePath 'powershell.exe' -ArgumentList $frameWatcherArgs `
-    -WindowStyle Hidden -PassThru `
-    -RedirectStandardOutput $frameWatcherOutput `
-    -RedirectStandardError $frameWatcherError
 $documents = [Environment]::GetFolderPath('MyDocuments')
 Write-Output "Test game is running (PID $($process.Id), mode $LaunchMode): $exe"
-Write-Output "Windowed position requested: X=$WindowX, Y=$WindowY; applied=$windowPositionApplied"
-Write-Output "Movable-frame watcher running (PID $($frameWatcher.Id)): $frameWatcherOutput"
+Write-Output "Native resizable window requested: ${WindowWidth}x${WindowHeight} at X=$WindowX, Y=$WindowY; applied=$windowPositionApplied"
 Write-Output "Expected log: $(Join-Path (Join-Path $documents 'HP2-Multiplayer-Development') $logName)"

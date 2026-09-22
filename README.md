@@ -15,13 +15,13 @@ does not establish campaign or two-physical-PC compatibility.
 On the prepared Windows development PC, double-click `Play-Menu-Test.cmd` to
 open a start menu using the original menu art. Versus launches the isolated
 `.local/versus-v16-game` build; Single Player and Co-op retain `.local/game`.
-The Versus host and join pages expose window X/Y coordinates for same-PC
-testing (defaults: host `20,40`, second client `840,40`). Direct launches accept
-the same values, for example `JoinVersus.cmd -WindowX 840 -WindowY 40`. After
-startup each client receives a normal resizable Windows frame and can be moved
-freely; the coordinates only select its initial position. A per-client watcher
-restores the frame if the legacy renderer later switches the window back to
-popup style, without moving the window again.
+The Versus host and join pages expose window X/Y coordinates and width/height
+for same-PC testing (defaults: host `20,40`, second client `840,40`, size
+`800x600`). Direct launches accept the same values, for example
+`JoinVersus.cmd -WindowX 840 -WindowY 40 -WindowWidth 800 -WindowHeight 600`.
+Each client is created by the renderer as a native framed, resizable window.
+The launcher sets the requested initial rectangle once; the user can then move
+or resize it freely. No background process rewrites the window style.
 The native three-button
 Game.exe front-end is preserved for save loading and settings. See
 `docs/MENU_TEST_QUICKSTART.md` for setup on another PC.

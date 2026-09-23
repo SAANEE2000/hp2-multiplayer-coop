@@ -9,6 +9,8 @@
 
 class HPVersusCloakAnimChannel extends AnimChannel;
 
+var bool bConfigured;
+
 simulated function Configure(bool bFemale)
 {
     if (bFemale)
@@ -17,6 +19,22 @@ simulated function Configure(bool bFemale)
         LinkSkelAnim(Animation'HPModels.skGenMaleAnims');
 
     bAnimNotReplaceable = True;
+    bConfigured = True;
+}
+
+simulated event Tick(float DeltaTime)
+{
+    local HPVersusHarry H;
+
+    // HPVersusHarry's inherited player tick is not a reliable presentation
+    // hook in every net role. Once the channel exists, keep its cloak branch
+    // synchronized from the channel actor itself.
+    if (!bConfigured)
+        return;
+
+    H = HPVersusHarry(Owner);
+    if (H != None)
+        H.UpdateVersusCloakAnimation();
 }
 
 simulated function bool PlayCloakAnimation(name SequenceName, bool bLooping)

@@ -136,6 +136,14 @@ SHA-256
 Внутри `HGame.u`, `M212Share.u`, compile log и manifest; оригинальные файлы
 игры и карта в комплект не входят.
 
+Готовый комплект для установки другу:
+`.local/distribution/hp2-versus-v18-mechanics-FULL-TEST-11d11e2.zip`,
+SHA-256
+`9a208342412a5930e01724e8a48e00fe4b8917525c6be9bf75309a8ca513c5f4`.
+Он содержит исходники коммита `11d11e2`, donor v16, проверенный бинарный
+комплект и `startup.unr`. Внутренний binary ZIP дополнительно прошёл
+`Import-TestBuild.ps1 -ValidateOnly`.
+
 Известные шесть `Accessed None` при создании legacy `harry`/
 `HPVersusHarry` происходят в исходном `harry.PreBeginPlay` до привязки
 сетевого Player. Flipendo probe дополнительно воспроизводит три прежних

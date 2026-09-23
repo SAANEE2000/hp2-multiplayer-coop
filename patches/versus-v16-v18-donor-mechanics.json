@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-v18-donor-mechanics",
+  "description": "Adapt selected v18 spells and pickups to the current authoritative 2-8 player Versus branch without importing unrelated v18 modes.",
+  "source_snapshot": "current v16 patch chain at 6d4eca0",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "4340c8185a4d01fdb8321cd463afe22f2245bbfb48b7704b15da1d756a2baf1e",
+      "result_sha256": "247e79126b364c3c3d97cb9b2068e1c79ec10d9e4ea47fee3ccef0be709a9532",
+      "replacements": [
+        {
+          "old": "var float VersusMuzzleHeightOffset;\nvar Weapon LastLoggedVersusWeapon;\nvar SpellCursor LastLoggedVersusCursor;\n\nreplication\n{\n    reliable if (Role == ROLE_Authority)\n        bVersusDead, VersusSlot, VersusRespawnSeconds, SelectedVersusSpell, VersusCastSerial,\n        ClientSetVersusSlot, ClientVersusDeath, ClientVersusRespawn;\n\n    reliable if (Role < ROLE_Authority)\n        ServerSelectCharacter, ServerRequestCast, ServerVersusNudge,\n",
+          "new": "var float VersusMuzzleHeightOffset;\nvar Weapon LastLoggedVersusWeapon;\nvar SpellCursor LastLoggedVersusCursor;\nvar float VersusCooldownEndTime;\nvar float VersusSpellLockEndTime;\nvar float VersusSpeedMultiplier;\nvar float VersusSpeedBoostEndTime;\nvar float VersusSavedGroundSpeed;\nvar float VersusSavedGroundRunSpeed;\nvar float VersusSavedDirectMoveSpeed;\nvar bool bVersusSpeedBaseCaptured;\n\nreplication\n{\n    reliable if (Role == ROLE_Authority)\n        bVersusDead, VersusSlot, VersusRespawnSeconds, SelectedVersusSpell, VersusCastSerial,\n        VersusCooldownEndTime, VersusSpellLockEndTime, VersusSpeedMultiplier,\n        VersusSpeedBoostEndTime, ClientSetVersusSlot, ClientVersusDeath,\n        ClientVersusRespawn, ClientSyncHealth, ClientApplyVersusSpeed,\n        ClientResetVersusCombatEffects, ClientVersusImpulse;\n\n    reliable if (Role < ROLE_Authority)\n        ServerSelectCharacter, ServerRequestCast, ServerVersusNudge,\n",
+          "old_sha256": "4902f6509ec6c36715b1fedacbba7997d2134088323a1ca44e98c8f68e278316",
+          "new_sha256": "92226a057c0821a118ad690b4336e1c8b18f4d288eb9a3842291afe8c6b600dd"
+        },
+        {
+          "old": "\nfunction Class<baseSpell> GetVersusSpellClass(byte SpellSlot)\n{\n    // v11 intentionally exposes only the network-safe versus projectile.\n    // Additional spells belong here only after their hit/damage path has been\n    // made authoritative; never accept Class<baseSpell> from a client RPC.\n    switch (SpellSlot)\n    {\n        case 0:\n            return Class'HPVersusSpell';\n        default:\n            return None;\n    }\n}\n\nfunction HPVersusWand FindVersusWand()\n",
+          "new": "\nfunction Class<baseSpell> GetVersusSpellClass(byte SpellSlot)\n{\n    // Clients send only a slot. The server maps it through this fixed whitelist.\n    switch (SpellSlot)\n    {\n        case 0:\n            return Class'HPVersusSpell';\n        case 1:\n            return Class'HPVersusMimblewimble';\n        case 2:\n            return Class'HPVersusExpelliarmus';\n        case 3:\n            return Class'HPVersusFlipendo';\n        default:\n            return None;\n    }\n}\n\nsimulated function string GetVersusSpellName(byte SpellSlot)\n{\n    switch (SpellSlot)\n    {\n        case 0: return \"Rictusempra\";\n        case 1: return \"Mimblewimble\";\n        case 2: return \"Expelliarmus\";\n        case 3: return \"Flipendo\";\n    }\n    return \"Unknown\";\n}\n\nsimulated function float GetVersusSpellCooldown(byte SpellSlot)\n{\n    switch (SpellSlot)\n    {\n        case 0: return 0.35;\n        case 1: return 0.70;\n        case 2: return 1.00;\n        case 3: return 0.60;\n    }\n    return VersusCastCooldown;\n}\n\nfunction HPVersusWand FindVersusWand()\n",
+          "old_sha256": "48a867dfcdf1e60f822b2bf3ed5907d907527ea79246f32ae11d265f96b5374b",
+          "new_sha256": "f371de1ccb16f5e9c9cb878e359b0d51dc2f3d0fb8238f2e2fe6cc1ad6eedc8d"
+        },
+        {
+          "old": "\n    OldHealth = Health;\n    AddHealth(-Damage);\n    LastVersusHitTime = Level.TimeSeconds;\n\n    Log(\"HPVersusDamage victim=\" $ string(self)\n        $ \" victimSlot=\" $ string(VersusSlot)\n",
+          "new": "\n    OldHealth = Health;\n    AddHealth(-Damage);\n    if (Health > 100)\n        Health = 100;\n    LastVersusHitTime = Level.TimeSeconds;\n    ClientSyncHealth(Health);\n\n    Log(\"HPVersusDamage victim=\" $ string(self)\n        $ \" victimSlot=\" $ string(VersusSlot)\n",
+          "old_sha256": "185b02e0373b47d12386129cff63a28ee6442120cc37eb22b9f98f38b26e6cda",
+          "new_sha256": "eed743386942464afabc52d7f4b04bb15bf58cc144db362912361e445ca9fa30"
+        },
+        {
+          "old": "function bool HandleSpellDuelMimblewimble(optional baseSpell spell, optional Vector vHitLocation)\n{\n    local int Damage;\n\n    if (Role != ROLE_Authority)\n        return False;\n\n    if (spell == None)\n        TakeDamage(10, None, Location, vect(0.00,0.00,0.00), 'DuelMimblewimble');\n    else {\n        Damage = VersusDamage(3, int(10 * spell.SpellCharge));\n        TakeDamage(Damage, Pawn(spell.Owner), vHitLocation, vect(0.00,0.00,0.00), 'DuelMimblewimble');\n    }\n\n    return True;\n}\n",
+          "new": "function bool HandleSpellDuelMimblewimble(optional baseSpell spell, optional Vector vHitLocation)\n{\n    local int Damage;\n    local float Charge;\n    local Pawn Attacker;\n\n    if (Role != ROLE_Authority)\n        return False;\n\n    Charge = 1.0;\n    if (spell != None)\n    {\n        Charge = FClamp(spell.SpellCharge, 0.0, 1.0);\n        Attacker = Pawn(spell.Owner);\n    }\n    Damage = VersusDamage(3, int(8 * Charge));\n    TakeDamage(Damage, Attacker, vHitLocation,\n        vect(0.00,0.00,0.00), 'DuelMimblewimble');\n    if (!bVersusDead)\n        ApplyVersusSpellLock(0.75 + 0.75 * Charge);\n\n    return True;\n}\n",
+          "old_sha256": "c8806c0213ddbe247a7415d92885ae8c9ac92c2f71b16aecf29dff6d8fc1937e",
+          "new_sha256": "d0972bdad821a151a1e02b7017c2c44f2627ca1e7504356f95f8d1e3e88ce7c7"
+        },
+        {
+          "old": "    bVersusDead = True;\n    Health = 0;\n    SetHealth(0);\n    ClearVersusInput();\n    GotoState('VersusDead');\n    ClientVersusDeath();\n",
+          "new": "    bVersusDead = True;\n    Health = 0;\n    SetHealth(0);\n    ResetVersusCombatEffects();\n    ClearVersusInput();\n    GotoState('VersusDead');\n    ClientVersusDeath();\n",
+          "old_sha256": "fa3b2e3e614c9cf387d27cc1a86440a933aeb35723aa9abe72a9cbe9c561e1b3",
+          "new_sha256": "cfc0e1f38bd5ba81efa04fa6f0fe860229f727d73516610c251730649d3605ad"
+        },
+        {
+          "old": "{\n    bVersusDead = True;\n    Health = 0;\n    ClearVersusInput();\n    GotoState('VersusDead');\n}\n",
+          "new": "{\n    bVersusDead = True;\n    Health = 0;\n    ResetVersusCombatEffects();\n    ClearVersusInput();\n    GotoState('VersusDead');\n}\n",
+          "old_sha256": "33cb1258b0196b74beda7e0830ae8ac90e3c51277ec78842350e1e4732d7d711",
+          "new_sha256": "4032e9dc92e8ebefcae82fe42f92ceb053f29b3bd1148a3879de64fb3a022aa2"
+        },
+        {
+          "old": "{\n    bVersusDead = False;\n    SetupVersusPlayer();\n}\n\nstate VersusDead\n",
+          "new": "{\n    bVersusDead = False;\n    SetupVersusPlayer();\n}\n\nfunction ClientSyncHealth(int NewHealth)\n{\n    local StatusItem HealthItem;\n\n    Health = Clamp(NewHealth, 0, 100);\n    HealthItem = GetHealthStatusItem();\n    if (HealthItem != None)\n        HealthItem.SetCount(Health);\n}\n\nfunction bool HealVersus(int Amount)\n{\n    local int NewHealth;\n\n    if (Role != ROLE_Authority || bVersusDead || Health <= 0 || Health >= 100)\n        return False;\n    if (Amount <= 0)\n        return False;\n    NewHealth = Min(100, Health + Amount);\n    if (NewHealth <= Health)\n        return False;\n    Health = NewHealth;\n    SetHealth(NewHealth);\n    ClientSyncHealth(NewHealth);\n    Log(\"HPVersusHeal pawn=\" $ string(self) $ \" health=\" $ string(NewHealth));\n    return True;\n}\n\nfunction ApplyVersusSpellLock(float Duration)\n{\n    if (Role != ROLE_Authority || Duration <= 0.0 || bVersusDead)\n        return;\n    VersusSpellLockEndTime = FMax(\n        VersusSpellLockEndTime,\n        Level.TimeSeconds + Duration);\n    Log(\"HPVersusSpellLock pawn=\" $ string(self)\n        $ \" end=\" $ string(VersusSpellLockEndTime));\n}\n\nsimulated function bool IsVersusSpellLocked()\n{\n    return VersusSpellLockEndTime > Level.TimeSeconds;\n}\n\nfunction ApplyVersusSpeedBoost(float Multiplier, float Duration)\n{\n    if (Role != ROLE_Authority || bVersusDead)\n        return;\n    Multiplier = FClamp(Multiplier, 1.0, 2.0);\n    Duration = FClamp(Duration, 0.1, 30.0);\n    VersusSpeedMultiplier = Multiplier;\n    VersusSpeedBoostEndTime = Level.TimeSeconds + Duration;\n    ApplyVersusSpeedLocally(Multiplier);\n    ClientApplyVersusSpeed(Multiplier, VersusSpeedBoostEndTime);\n    Log(\"HPVersusSpeedBoost ON pawn=\" $ string(self)\n        $ \" multiplier=\" $ string(Multiplier)\n        $ \" end=\" $ string(VersusSpeedBoostEndTime));\n}\n\nsimulated function bool IsVersusSpeedBoosted()\n{\n    if (VersusSpeedBoostEndTime > 0.0\n        && VersusSpeedBoostEndTime <= Level.TimeSeconds)\n    {\n        if (Role == ROLE_Authority)\n            ClearVersusSpeedBoost(\"ExpiredQuery\");\n        else\n        {\n            VersusSpeedMultiplier = 1.0;\n            VersusSpeedBoostEndTime = 0.0;\n            ApplyVersusSpeedLocally(1.0);\n        }\n        return False;\n    }\n    return VersusSpeedMultiplier > 1.01\n        && VersusSpeedBoostEndTime > Level.TimeSeconds;\n}\n\nfunction ClearVersusSpeedBoost(string Reason)\n{\n    if (Role != ROLE_Authority)\n        return;\n    VersusSpeedMultiplier = 1.0;\n    VersusSpeedBoostEndTime = 0.0;\n    ApplyVersusSpeedLocally(1.0);\n    ClientApplyVersusSpeed(1.0, 0.0);\n    Log(\"HPVersusSpeedBoost OFF pawn=\" $ string(self) $ \" reason=\" $ Reason);\n}\n\nsimulated function ApplyVersusSpeedLocally(float Multiplier)\n{\n    if (Multiplier > 1.01)\n    {\n        if (!bVersusSpeedBaseCaptured)\n        {\n            VersusSavedGroundSpeed = GroundSpeed;\n            VersusSavedGroundRunSpeed = GroundRunSpeed;\n            VersusSavedDirectMoveSpeed = VersusDirectMoveSpeed;\n            bVersusSpeedBaseCaptured = True;\n        }\n        GroundSpeed = VersusSavedGroundSpeed * Multiplier;\n        GroundRunSpeed = VersusSavedGroundRunSpeed * Multiplier;\n        VersusDirectMoveSpeed = VersusSavedDirectMoveSpeed * Multiplier;\n    }\n    else if (bVersusSpeedBaseCaptured)\n    {\n        GroundSpeed = VersusSavedGroundSpeed;\n        GroundRunSpeed = VersusSavedGroundRunSpeed;\n        VersusDirectMoveSpeed = VersusSavedDirectMoveSpeed;\n        bVersusSpeedBaseCaptured = False;\n    }\n}\n\nfunction ClientApplyVersusSpeed(float Multiplier, float EndTime)\n{\n    VersusSpeedMultiplier = Multiplier;\n    VersusSpeedBoostEndTime = EndTime;\n    ApplyVersusSpeedLocally(Multiplier);\n}\n\nsimulated function ResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;\n    VersusSpellLockEndTime = 0.0;\n    VersusSpeedMultiplier = 1.0;\n    VersusSpeedBoostEndTime = 0.0;\n    NextVersusClientCastTime = 0.0;\n    NextVersusServerCastTime = 0.0;\n    ApplyVersusSpeedLocally(1.0);\n    if (Role == ROLE_Authority)\n        ClientResetVersusCombatEffects();\n}\n\nfunction ClientResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;\n    VersusSpellLockEndTime = 0.0;\n    VersusSpeedMultiplier = 1.0;\n    VersusSpeedBoostEndTime = 0.0;\n    NextVersusClientCastTime = 0.0;\n    NextVersusServerCastTime = 0.0;\n    ApplyVersusSpeedLocally(1.0);\n}\n\nfunction ApplyVersusImpulse(Vector Impulse)\n{\n    if (Role != ROLE_Authority || bVersusDead)\n        return;\n    Velocity += Impulse;\n    SetPhysics(PHYS_Falling);\n    ClientVersusImpulse(Impulse);\n    Log(\"HPVersusImpulse pawn=\" $ string(self) $ \" impulse=\" $ string(Impulse));\n}\n\nfunction ClientVersusImpulse(Vector Impulse)\n{\n    Velocity += Impulse;\n    SetPhysics(PHYS_Falling);\n}\n\nstate VersusDead\n",
+          "old_sha256": "15afe433c63c8fa5ebd8cf53800a9b60bd46ffea36176a92183339cd8da4d379",
+          "new_sha256": "23ec3e047755face217681d018c00791bb33e9582b1bba62f13fd07ed2117584"
+        },
+        {
+          "old": "        return;\n    }\n\n    if (Level.TimeSeconds < NextVersusClientCastTime)\n        return;\n\n    NextVersusClientCastTime = Level.TimeSeconds + VersusCastCooldown;\n    AimRot = GetVersusAimRotation();\n    ClientMuzzle = GetVersusClientMuzzle(AimRot);\n    Charge = FClamp(Charge, 0.0, 1.0);\n",
+          "new": "        return;\n    }\n\n    if (Level.TimeSeconds < NextVersusClientCastTime || IsVersusSpellLocked())\n        return;\n\n    NextVersusClientCastTime = Level.TimeSeconds\n        + GetVersusSpellCooldown(SelectedVersusSpell);\n    AimRot = GetVersusAimRotation();\n    ClientMuzzle = GetVersusClientMuzzle(AimRot);\n    Charge = FClamp(Charge, 0.0, 1.0);\n",
+          "old_sha256": "82ce434824d3f37ebaf5c8ab503814ee4d783412929ecc1ad97b0641558a7742",
+          "new_sha256": "e539d88403e07516ef374c2148a8d12393b47def66da0570c9da43237ced7ded"
+        },
+        {
+          "old": "\n    SelectedVersusSpell = NewSpellSlot;\n    W = EnsureServerVersusWand();\n\n    Log(\"HPVersusSpellSelect pawn=\" $ string(self)\n        $ \" slot=\" $ string(VersusSlot)\n",
+          "new": "\n    SelectedVersusSpell = NewSpellSlot;\n    W = EnsureServerVersusWand();\n    ApplyVersusSpellSelection(W);\n\n    Log(\"HPVersusSpellSelect pawn=\" $ string(self)\n        $ \" slot=\" $ string(VersusSlot)\n",
+          "old_sha256": "32108ff5d4b8e4f30073a709ddbaf8dccfe497cc75be0832a7929b7a886b7205",
+          "new_sha256": "1ae687aa834d8ff677b72686309736c561117758d42810492946e67c885ec39e"
+        },
+        {
+          "old": "{\n    ServerSelectVersusSpell(NewSpellSlot);\n    ClientMessage(\"Versus spell slot requested: \" $ string(NewSpellSlot));\n}\n\nfunction ServerRequestCast(float Charge, Rotator AimRot, Vector ClientMuzzle)\n",
+          "new": "{\n    ServerSelectVersusSpell(NewSpellSlot);\n    ClientMessage(\"Versus spell slot requested: \" $ string(NewSpellSlot));\n}\n\nexec function VersusSpell1()\n{\n    VersusSelectSpell(0);\n}\n\nexec function VersusSpell2()\n{\n    VersusSelectSpell(1);\n}\n\nexec function VersusSpell3()\n{\n    VersusSelectSpell(2);\n}\n\nexec function VersusSpell4()\n{\n    VersusSelectSpell(3);\n}\n\nexec function VersusSpell5()\n{\n    ClientMessage(\"Alohomora is not enabled for FFA combat.\");\n}\n\nexec function VersusSpell6()\n{\n    ClientMessage(\"Spongify is not enabled for FFA combat.\");\n}\n\nfunction ServerRequestCast(float Charge, Rotator AimRot, Vector ClientMuzzle)\n",
+          "old_sha256": "ee3cb937561a10e6e1ab3b08ad2f4282405f713539b82f58848e023822235fe7",
+          "new_sha256": "c7c69ac348ddeb3435f39eb0b12a048d9d527cd5c4fc7346374bdd549e672d3a"
+        },
+        {
+          "old": "        return;\n    }\n\n    W = HPVersusWand(Weapon);\n    if (W == None || W.Owner != self)\n        W = EnsureServerVersusWand();\n",
+          "new": "        return;\n    }\n\n    if (VersusSpellLockEndTime > Level.TimeSeconds)\n    {\n        Log(\"HPVersusCastReject reason=spell-lock pawn=\" $ string(self)\n            $ \" until=\" $ string(VersusSpellLockEndTime));\n        return;\n    }\n\n    W = HPVersusWand(Weapon);\n    if (W == None || W.Owner != self)\n        W = EnsureServerVersusWand();\n",
+          "old_sha256": "3d79b7a03a7c4d7dfc58706d42042fe9199544c24d2006c0e66dd5f95c62a037",
+          "new_sha256": "15344b4b62cb56eaa5896316823e73516a059b8fb5efc722cb0b298c0d61a81f"
+        },
+        {
+          "old": "        return;\n    }\n\n    NextVersusServerCastTime = Level.TimeSeconds + VersusCastCooldown;\n    Charge = FClamp(Charge, 0.0, 1.0);\n    AimRot = ValidateVersusAim(AimRot);\n    ServerMuzzle = GetVersusFallbackMuzzle(AimRot);\n",
+          "new": "        return;\n    }\n\n    NextVersusServerCastTime = Level.TimeSeconds\n        + GetVersusSpellCooldown(SelectedVersusSpell);\n    VersusCooldownEndTime = NextVersusServerCastTime;\n    Charge = FClamp(Charge, 0.0, 1.0);\n    AimRot = ValidateVersusAim(AimRot);\n    ServerMuzzle = GetVersusFallbackMuzzle(AimRot);\n",
+          "old_sha256": "548ed6d1dfd6d9979abe4d34508c590611ff4d1cbc8a245c1123aca38f5f8c08",
+          "new_sha256": "44e0d81acadaa13bc6236f50c84b890d7b3360f0e2944b548c267dc3ae3cb01f"
+        },
+        {
+          "old": "    HUDType=Class'HPVersusHUD'\n    bAllowHarryToDie=True\n    bCanMoveInSpecialPause=True\n    bUseEngineNetworkMovement=False\n    Health=100\n    VersusDirectMoveSpeed=260.000000\n    VersusDirectAirScale=0.450000\n    SelectedVersusSpell=0\n    VersusAimStartTime=-1.000000\n",
+          "new": "    HUDType=Class'HPVersusHUD'\n    bAllowHarryToDie=True\n    bCanMoveInSpecialPause=True\n    bUseEngineNetworkMovement=False\n    Health=100\n    VersusDirectMoveSpeed=260.000000\n    VersusSpeedMultiplier=1.000000\n    VersusDirectAirScale=0.450000\n    SelectedVersusSpell=0\n    VersusAimStartTime=-1.000000\n",
+          "old_sha256": "de24a680c34a1f8e70e43fd5e69627b4f2043771a18b158ec3f4c4d14d2f4433",
+          "new_sha256": "6329908d4cf14d862f8f2ab30f7f9d594bd1344b5db511375985b0c03eb9f165"
+        },
+        {
+          "old": "function TurnOffSpellCursor()\n{\n",
+          "new": "function StopAiming()\n{\n    // cHarryAnimChannel.stateIdle calls PlayIdle immediately on state entry.\n    // Select full-body replacement before that callback so the cast layer\n    // releases the wand arm even while the player remains stationary.\n    if (CarryingActor == None)\n    {\n        HarryAnimType = AT_Replace;\n        if (HarryAnimChannel != None)\n            HarryAnimChannel.GotoState('stateIdle');\n        TurnOffCastingVars();\n        TurnOffSpellCursor();\n        if (bHarryUsingSword)\n            StopSound(Sound'sword_buildup', SLOT_Interact);\n    }\n}\n\nfunction TurnOffSpellCursor()\n{\n",
+          "old_sha256": "f16bf0d7dcbe43dd85774639ad2a6df878e9cd073d33366a148e57c567b7c77b",
+          "new_sha256": "5643a7b1297a3da5a55f7085fa80202ef6052d8cff2e19a46e6b79bc87bc4196"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusWand.uc",
+      "source_sha256": "a79ad4a87be36ffa1f652f1cfb121b25cdd5aa590b40e776ce99f19d127ea73b",
+      "result_sha256": "7f464ba767c90ede1a803fcb6010cc5e5896b57bb79becec56d74400c9509b1e",
+      "replacements": [
+        {
+          "old": "        case 0:\n            CurrentSpell = Class'HPVersusSpell';\n            break;\n        default:\n            break;\n    }\n}\n",
+          "new": "        case 0:\n            CurrentSpell = Class'HPVersusSpell';\n            break;\n        case 1:\n            CurrentSpell = Class'HPVersusMimblewimble';\n            break;\n        case 2:\n            CurrentSpell = Class'HPVersusExpelliarmus';\n            break;\n        case 3:\n            CurrentSpell = Class'HPVersusFlipendo';\n            break;\n        default:\n            CurrentSpell = Class'HPVersusSpell';\n            break;\n    }\n}\n",
+          "old_sha256": "babe9282bac21e989fd2d0b4e0efab6dcaca6086c336a955ee1aee87b6f3b86a",
+          "new_sha256": "2e34b9e8ee2dd4afe509fb5a3a51b917308cc1281c63322463e0718e09322314"
+        },
+        {
+          "old": "    optional bool in_bHarryUsingSword,\n    optional Class<baseSpell> ChargeSpellClass)\n{\n    bSpellCharges = bChargeSpell;\n\n    if (in_bHarryUsingSword)\n",
+          "new": "    optional bool in_bHarryUsingSword,\n    optional Class<baseSpell> ChargeSpellClass)\n{\n    local Class<ParticleFX> ChargeFXClass;\n\n    bSpellCharges = bChargeSpell;\n\n    if (in_bHarryUsingSword)\n",
+          "old_sha256": "d06c3522f93726846fd6a60b1ff246ef224bc7c17102b10eea77ecbd2124991c",
+          "new_sha256": "ba657a79c504ffd7ed5aaa38f319c6f82196422ba708774bc9c32eb3add8c2b1"
+        },
+        {
+          "old": "    {\n        DestroyVersusChargeEffect(\"NextCharge\");\n\n        // HPVersusSpell is the only v11 whitelist entry, so its original duel\n        // Rictusempra effect is also the owner-local charge effect.\n        fxChargeParticles = Spawn(\n            Class'HPParticle.duelRictusempra_fly',\n            self,\n            ,\n            GetWandEndPoint());\n",
+          "new": "    {\n        DestroyVersusChargeEffect(\"NextCharge\");\n\n        if (ChargeSpellClass == None)\n            ChargeSpellClass = CurrentSpell;\n        if (ChargeSpellClass != None)\n            ChargeFXClass = ChargeSpellClass.default.fxFlyParticleEffectClass;\n        if (ChargeFXClass == None)\n            ChargeFXClass = Class'HPParticle.duelRictusempra_fly';\n\n        fxChargeParticles = Spawn(\n            ChargeFXClass,\n            self,\n            ,\n            GetWandEndPoint());\n",
+          "old_sha256": "45f7119dffe05574803b15dddfcccb3299217b328fd998f75568cba10a0bc061",
+          "new_sha256": "d3b67db6f1ddb5e15acd6f9c225ebbd1f8e0c9d7f9d2902d4d7d2221f2f2b9e7"
+        },
+        {
+          "old": "\n    // Final class whitelist boundary. Add a class here only after its hit and\n    // damage path is authoritative in Versus.\n    if (SpellClass != Class'HPVersusSpell')\n    {\n        Log(\"HPVersusSpellSpawn REJECT class=\" $ string(SpellClass)\n            $ \" caster=\" $ string(Caster));\n",
+          "new": "\n    // Final class whitelist boundary. Add a class here only after its hit and\n    // damage path is authoritative in Versus.\n    if (SpellClass != Class'HPVersusSpell'\n        && SpellClass != Class'HPVersusMimblewimble'\n        && SpellClass != Class'HPVersusExpelliarmus'\n        && SpellClass != Class'HPVersusFlipendo')\n    {\n        Log(\"HPVersusSpellSpawn REJECT class=\" $ string(SpellClass)\n            $ \" caster=\" $ string(Caster));\n",
+          "old_sha256": "b0de3ef6258e9510653136c3e5f5973231748b1beab50ddc91e8a68618dd5e9a",
+          "new_sha256": "679b7429290acc63b5656ca26097e23f9a34987083ea2bafd9044664e89ead71"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "962d6ae1733144258ea9ef49996c6a5a58876bedb43d3394d956336cc6d5cc5e",
+      "result_sha256": "e9c41ffbe42d158b1733bc472e81bb9cf4f2eec897b614d4c4948bde21aa1d4e",
+      "replacements": [
+        {
+          "old": "var float MatchOverDuration;\nvar byte PendingLoginSlot;       // slot being used by the Login currently inside Super.Login()\nvar bool bHasPendingLoginSlot;\n\nfunction InitGame(string Options, out string Error)\n{\n",
+          "new": "var float MatchOverDuration;\nvar byte PendingLoginSlot;       // slot being used by the Login currently inside Super.Login()\nvar bool bHasPendingLoginSlot;\nvar HPVersusHealthPickup VersusHealthPickupA;\nvar HPVersusHealthPickup VersusHealthPickupB;\nvar HPVersusSpeedPickup VersusSpeedPickup;\nvar bool bVersusMechanicsProbe;\nvar bool bVersusMechanicsProbeComplete;\nvar byte VersusMechanicsProbeStage;\nvar float VersusMechanicsProbeNextTime;\n\nfunction InitGame(string Options, out string Error)\n{\n",
+          "old_sha256": "0054203d2daa22429e3b72ce8811c87f11bbc423569150ba645ad6b29fda5ddc",
+          "new_sha256": "2393c878466da20de1791d0bc31155a3dde6c61e09dda8b26ee560d4f8c22de5"
+        },
+        {
+          "old": "    if (ScoreLimit < 1)\n        ScoreLimit = 3;\n\n    Log(\"=== HPVersusGame loaded. ScoreLimit=\" $ ScoreLimit $ \" ===\");\n}\n\nevent PostBeginPlay()\n",
+          "new": "    if (ScoreLimit < 1)\n        ScoreLimit = 3;\n\n    bVersusMechanicsProbe = ParseOption(Options, \"VersusMechanicsProbe\") ~= \"1\";\n\n    Log(\"=== HPVersusGame loaded. ScoreLimit=\" $ ScoreLimit\n        $ \" MechanicsProbe=\" $ string(bVersusMechanicsProbe) $ \" ===\");\n}\n\nevent PostBeginPlay()\n",
+          "old_sha256": "298e215741421557a54196813df44ba52be8e093061b82baf82df366d62774ff",
+          "new_sha256": "ac4d30c3bc1e8489e2f7f21e4aefad549bea7444e74a41aa43e55c053f2029c9"
+        },
+        {
+          "old": "    SetTimer(0.20, True);\n    CleanupLegacyHarryActors();\n    SpawnVersusDirector();\n    UpdateVersusGRI();\n}\n\n\n",
+          "new": "    SetTimer(0.20, True);\n    CleanupLegacyHarryActors();\n    SpawnVersusDirector();\n    SpawnVersusPickups();\n    UpdateVersusGRI();\n}\n\nfunction Vector GetVersusPickupCenter()\n{\n    local HPVersusStart S;\n    local Vector Center;\n    local int Count;\n\n    foreach AllActors(Class'HPVersusStart', S)\n    {\n        if (!S.bEnabled)\n            continue;\n        Center += S.Location;\n        Count++;\n    }\n    if (Count > 0)\n        Center = Center / float(Count);\n    return Center;\n}\n\nfunction SpawnVersusPickups()\n{\n    local Vector Center;\n    local Vector Offset;\n\n    if (Role != ROLE_Authority)\n        return;\n    Center = GetVersusPickupCenter();\n\n    Offset.X = -120.0;\n    if (VersusHealthPickupA == None)\n        VersusHealthPickupA = Spawn(\n            Class'HPVersusHealthPickup',,, Center + Offset, rot(0,0,0));\n    Offset.X = 120.0;\n    if (VersusHealthPickupB == None)\n        VersusHealthPickupB = Spawn(\n            Class'HPVersusHealthPickup',,, Center + Offset, rot(0,0,0));\n    Offset.X = 0.0;\n    Offset.Y = 150.0;\n    if (VersusSpeedPickup == None)\n        VersusSpeedPickup = Spawn(\n            Class'HPVersusSpeedPickup',,, Center + Offset, rot(0,0,0));\n\n    Log(\"HPVersusPickups spawned healthA=\" $ string(VersusHealthPickupA)\n        $ \" healthB=\" $ string(VersusHealthPickupB)\n        $ \" speed=\" $ string(VersusSpeedPickup)\n        $ \" center=\" $ string(Center));\n}\n\nfunction ResetVersusPickups()\n{\n    if (VersusHealthPickupA == None\n        || VersusHealthPickupB == None\n        || VersusSpeedPickup == None)\n        SpawnVersusPickups();\n    if (VersusHealthPickupA != None)\n        VersusHealthPickupA.ResetVersusPickup();\n    if (VersusHealthPickupB != None)\n        VersusHealthPickupB.ResetVersusPickup();\n    if (VersusSpeedPickup != None)\n        VersusSpeedPickup.ResetVersusPickup();\n}\n\nfunction bool GetVersusProbePlayers(out HPVersusHarry A, out HPVersusHarry B)\n{\n    local Pawn P;\n    local HPVersusHarry H;\n\n    for (P = Level.PawnList; P != None; P = P.NextPawn)\n    {\n        H = HPVersusHarry(P);\n        if (H == None || H.Player == None)\n            continue;\n        if (A == None)\n            A = H;\n        else if (H != A)\n        {\n            B = H;\n            return True;\n        }\n    }\n    return False;\n}\n\nfunction VersusProbeResult(bool bPassed, string CheckName)\n{\n    if (bPassed)\n        Log(\"HPVersusMechanicsProbe PASS check=\" $ CheckName);\n    else\n        Log(\"HPVersusMechanicsProbe FAIL check=\" $ CheckName);\n}\n\nfunction RunVersusMechanicsProbe()\n{\n    local HPVersusHarry A;\n    local HPVersusHarry B;\n    local HPVersusFlipendo Flipendo;\n    local Vector ProbeLocation;\n    local float RemainingCooldown;\n\n    if (!bVersusMechanicsProbe || bVersusMechanicsProbeComplete\n        || VersusPhase != 'InProgress'\n        || Level.TimeSeconds < VersusMechanicsProbeNextTime\n        || !GetVersusProbePlayers(A, B))\n        return;\n\n    if (VersusMechanicsProbeStage == 0)\n    {\n        Log(\"HPVersusMechanicsProbe START A=\" $ string(A) $ \" B=\" $ string(B));\n        A.ServerSelectVersusSpell(1);\n        B.ServerSelectVersusSpell(3);\n        VersusProbeResult(\n            A.GetVersusSpellClass(A.SelectedVersusSpell) == Class'HPVersusMimblewimble'\n            && B.GetVersusSpellClass(B.SelectedVersusSpell) == Class'HPVersusFlipendo',\n            \"server-whitelist-selection\");\n\n        A.NextVersusServerCastTime = 0.0;\n        A.ServerRequestCast(1.0, A.Rotation, A.GetVersusFallbackMuzzle(A.Rotation));\n        RemainingCooldown = A.NextVersusServerCastTime - Level.TimeSeconds;\n        VersusProbeResult(RemainingCooldown > 0.60 && RemainingCooldown < 0.80,\n            \"per-spell-server-cooldown\");\n\n        B.Health = 50;\n        B.SetHealth(50);\n        B.ClientSyncHealth(50);\n        VersusHealthPickupA.RespawnTime = 0.50;\n        VersusHealthPickupA.ResetVersusPickup();\n        VersusHealthPickupA.TryPickup(B);\n        VersusProbeResult(B.Health == 75 && !VersusHealthPickupA.bAvailable,\n            \"health-pickup-clamp-and-consume\");\n\n        VersusSpeedPickup.BoostDuration = 0.50;\n        VersusSpeedPickup.ResetVersusPickup();\n        VersusSpeedPickup.TryPickup(A);\n        VersusProbeResult(A.IsVersusSpeedBoosted()\n            && A.VersusSpeedMultiplier > 1.49,\n            \"speed-pickup-authority\");\n\n        B.HandleSpellDuelMimblewimble(None, B.Location);\n        VersusProbeResult(B.Health == 67 && B.IsVersusSpellLocked(),\n            \"mimblewimble-damage-and-mute\");\n        B.HandleSpellDuelExpelliarmus(None, B.Location);\n        VersusProbeResult(B.Health == 47, \"expelliarmus-damage\");\n\n        ProbeLocation = B.Location;\n        ProbeLocation.Z += 100.0;\n        Flipendo = Spawn(Class'HPVersusFlipendo', A,, ProbeLocation, B.Rotation);\n        if (Flipendo != None)\n        {\n            Flipendo.Instigator = A;\n            Flipendo.SpellCharge = 1.0;\n            Flipendo.Velocity = Normal(B.Location - A.Location) * Flipendo.Speed;\n            Flipendo.OnSpellHitHarry(B, B.Location);\n            Flipendo.Destroy();\n        }\n        VersusProbeResult(Flipendo != None && B.Health == 39\n            && B.Physics == PHYS_Falling, \"flipendo-damage-and-impulse\");\n\n        VersusMechanicsProbeStage = 1;\n        VersusMechanicsProbeNextTime = Level.TimeSeconds + 1.0;\n        return;\n    }\n\n    if (VersusMechanicsProbeStage == 1)\n    {\n        VersusProbeResult(VersusHealthPickupA.bAvailable,\n            \"health-pickup-respawn-timer\");\n        VersusProbeResult(!A.IsVersusSpeedBoosted()\n            && A.VersusSpeedMultiplier <= 1.01,\n            \"speed-expiry-reset\");\n        A.ApplyVersusSpeedBoost(1.5, 10.0);\n        A.VersusKilledBy(B, 'MechanicsProbe');\n        VersusProbeResult(A.bVersusDead && !A.IsVersusSpeedBoosted(),\n            \"death-clears-speed\");\n        VersusMechanicsProbeStage = 2;\n        VersusMechanicsProbeNextTime = Level.TimeSeconds + RespawnDelay + 0.5;\n        return;\n    }\n\n    VersusProbeResult(!A.bVersusDead && A.Health == 100\n        && !A.IsVersusSpeedBoosted(), \"respawn-restores-clean-state\");\n    B.ApplyVersusSpeedBoost(1.5, 10.0);\n    BeginVersusMatch();\n    VersusProbeResult(!B.IsVersusSpeedBoosted() && B.Health == 100,\n        \"new-match-clears-speed\");\n    bVersusMechanicsProbeComplete = True;\n    Log(\"HPVersusMechanicsProbe COMPLETE\");\n}\n\n\n",
+          "old_sha256": "578c62506ae3488712730dcad4b451de74baab53ea0bafcaef1bf1c4ee150a18",
+          "new_sha256": "9b314fe6e079ce124fb15eec54e6b3ce1811d243d1461efa73d142a47fc28f33"
+        },
+        {
+          "old": "\nfunction Timer()\n{\n    if (CountVersusPlayers() < 2)\n    {\n        if (VersusPhase != 'WaitingForPlayers')\n",
+          "new": "\nfunction Timer()\n{\n    local Pawn P;\n    local HPVersusHarry H;\n\n    for (P = Level.PawnList; P != None; P = P.NextPawn)\n    {\n        H = HPVersusHarry(P);\n        if (H == None)\n            continue;\n        if (H.VersusSpeedBoostEndTime > 0.0\n            && Level.TimeSeconds >= H.VersusSpeedBoostEndTime)\n            H.ClearVersusSpeedBoost(\"GameTimerExpired\");\n        if (H.VersusSpellLockEndTime > 0.0\n            && Level.TimeSeconds >= H.VersusSpellLockEndTime)\n            H.VersusSpellLockEndTime = 0.0;\n    }\n\n    if (CountVersusPlayers() < 2)\n    {\n        if (VersusPhase != 'WaitingForPlayers')\n",
+          "old_sha256": "9b42f3d9c0544178f09369c7216093b6d2ad8f3b50021a997b56eac52c4a9701",
+          "new_sha256": "6438b08501519f9913acf3abbbdda29ce8883dd646d2152c5728add706db7e5d"
+        },
+        {
+          "old": "    if (VersusPhase != 'MatchOver')\n        RespawnDeadPlayers();\n    UpdateVersusGRI();\n}\n\nfunction int CountVersusPlayers()\n",
+          "new": "    if (VersusPhase != 'MatchOver')\n        RespawnDeadPlayers();\n    UpdateVersusGRI();\n    RunVersusMechanicsProbe();\n}\n\nfunction int CountVersusPlayers()\n",
+          "old_sha256": "8ba534527c222c20ae402763bc5f0a87ad098cfa5cadb3b4346274ebec8724e5",
+          "new_sha256": "a7260893994f1b412b5cef02746e4d05e32dd8f925260c9f82b1375d22e0bc61"
+        },
+        {
+          "old": "    bMatchInProgress = False;\n    foreach AllActors(Class'HPVersusSpell', Spell)\n        Spell.Destroy();\n\n    for (P = Level.PawnList; P != None; P = P.NextPawn)\n    {\n",
+          "new": "    bMatchInProgress = False;\n    foreach AllActors(Class'HPVersusSpell', Spell)\n        Spell.Destroy();\n    ResetVersusPickups();\n\n    for (P = Level.PawnList; P != None; P = P.NextPawn)\n    {\n",
+          "old_sha256": "498dc09b4fce4a37b6266a1d90e65fb4b4920d73bd03c11d319b354ad86e5ad7",
+          "new_sha256": "5822abe19f2f1334dd768167f24468b0d59c5d072f3639465595d21b20a23a42"
+        },
+        {
+          "old": "        if (RestartPlayer(H))\n        {\n            H.SetupVersusPlayer();\n",
+          "new": "        H.ResetVersusCombatEffects();\n        if (RestartPlayer(H))\n        {\n            H.SetupVersusPlayer();\n",
+          "old_sha256": "1f069d407c92545beb7eeea7a990f6b2170c1c7a35fd96cfb0854a4cc5528907",
+          "new_sha256": "e23a1edaf9f1a6a5689c622c80ac04f0d96131a6a142aa992c474a12c68e6895"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusDirector.uc",
+      "source_sha256": "e4315415a44ea35c1ff11bd6667086a137f35873ab04cbf9a93318445e6184cf",
+      "result_sha256": "ed18c30193be027b4ec1bfc78fc7af22cdd933b99048fb05c9b189e91725c09f",
+      "replacements": [
+        {
+          "old": "{\n}\n\ndefaultproperties\n{\n    bHidden=True\n",
+          "new": "{\n}\n\nfunction OnTakeDamage(Pawn Subject, int Damage, Pawn InstigatedBy, name DamageType)\n{\n    // Director.PlayerHarry is a single-player global and is intentionally\n    // unset in FFA. Combat reporting belongs to HPVersusGame/HUD.\n}\n\ndefaultproperties\n{\n    bHidden=True\n",
+          "old_sha256": "bcd6dab3d66a53925266fbac56b0b4838040d472f18fbb276d03a7b941d84c4e",
+          "new_sha256": "a9e29aa337ab2a03ec3b22fb1cf710f906ca9aac2b3a3a61926f5def3faa8c1a"
+        }
+      ]
+    }
+  ]
+}

@@ -53,8 +53,9 @@ simulated function PostRender(Canvas C)
     local Font SavedFont;
     local Color SavedColor;
     local string PhaseText;
+    local string CombatText;
     local int Count, I;
-    local float X, Y;
+    local float X, Y, SpeedLeft, LockLeft;
 
     Super.PostRender(C);
     if (bHideHud)
@@ -73,8 +74,23 @@ simulated function PostRender(Canvas C)
     C.Font = C.MedFont;
     X = 20;
     Y = 22;
-    DrawVersusText(C, X, Y, "HP " $ H.Health $ "   Frags " $ OwnPRI.RoundScore
+    DrawVersusText(C, X, Y, "HP " $ H.Health $ "/100   Frags " $ OwnPRI.RoundScore
         $ "/" $ G.ScoreLimit $ "   Deaths " $ int(OwnPRI.Deaths));
+
+    CombatText = "[" $ string(int(H.SelectedVersusSpell) + 1) $ "] "
+        $ H.GetVersusSpellName(H.SelectedVersusSpell);
+    LockLeft = H.VersusSpellLockEndTime - Level.TimeSeconds;
+    if (LockLeft > 0.0)
+        CombatText = CombatText $ "   MUTED " $ string(int(LockLeft + 0.99)) $ "s";
+    else if (H.VersusCooldownEndTime > Level.TimeSeconds)
+        CombatText = CombatText $ "   COOLDOWN";
+    else
+        CombatText = CombatText $ "   READY";
+    SpeedLeft = H.VersusSpeedBoostEndTime - Level.TimeSeconds;
+    if (H.VersusSpeedMultiplier > 1.01 && SpeedLeft > 0.0)
+        CombatText = CombatText $ "   SPEED x" $ string(H.VersusSpeedMultiplier)
+            $ " " $ string(int(SpeedLeft + 0.99)) $ "s";
+    DrawVersusText(C, X, Y + 22, CombatText);
 
     if (G.MatchState == 'WaitingForPlayers')
         PhaseText = "Waiting for players";
@@ -92,14 +108,14 @@ simulated function PostRender(Canvas C)
         else
             PhaseText = "Waiting for a free spawn";
     }
-    DrawVersusText(C, X, Y + 22, PhaseText);
+    DrawVersusText(C, X, Y + 44, PhaseText);
 
     Count = GetSortedPlayers(Rows);
     if (Count > 0 && G.MatchState == 'InProgress')
-        DrawVersusText(C, X, Y + 44, "Leader: " $ Rows[0].PlayerName
+        DrawVersusText(C, X, Y + 66, "Leader: " $ Rows[0].PlayerName
             $ " (" $ Rows[0].RoundScore $ ")   F3: scores");
     else
-        DrawVersusText(C, X, Y + 44, "F3: scores");
+        DrawVersusText(C, X, Y + 66, "F3: scores");
 
     if (bShowVersusScores || G.MatchState == 'MatchOver')
     {

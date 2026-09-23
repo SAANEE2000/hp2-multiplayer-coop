@@ -20,6 +20,7 @@ param(
     [switch]$CapturedAuthorityDiagnostic,
     [switch]$FirstIntroPreflight,
     [ValidateSet('None','MissingAck0','MissingAck1','DuplicateCallbacks','DeathWalk0','DeathWalk1')][string]$IntroFault = 'None',
+    [switch]$VersusMechanicsProbe,
     [switch]$PrepareOnly,
     [switch]$Unattended
 )
@@ -116,6 +117,9 @@ if ($FirstIntroPreflight -and !$CapturedAuthorityDiagnostic) {
 }
 if ($IntroFault -ne 'None' -and !$FirstIntroPreflight) {
     throw 'IntroFault requires explicit FirstIntroPreflight.'
+}
+if ($VersusMechanicsProbe -and ($Mode -ne 'Versus' -or $Role -ne 'Host')) {
+    throw 'VersusMechanicsProbe is an explicit Versus Host test fixture.'
 }
 if ($RuntimeProbe -in @('MountRootB0','MountRootB1','Travel') -and (!$FirstIntroPreflight -or $IntroFault -ne 'None')) {
     throw 'MountRootB0/B1/Travel requires normal FirstIntroPreflight without an injected fault.'
@@ -406,6 +410,7 @@ Copy-Item -LiteralPath $userIni -Destination (Join-Path $runRoot 'User.ini')
 if ($Role -eq 'Host') {
     $url = '{0}.unr?game={1}?MaxPlayers={2}' -f $mapName,$gameClass,$MaxPlayers
     if ($Mode -eq 'Versus') { $url += "?ScoreLimit=$ScoreLimit" }
+    if ($VersusMechanicsProbe) { $url += '?VersusMechanicsProbe=1' }
     if ($TestStage -ne 'None') { $url += "?CoopTestStage=$TestStage" }
     if ($RuntimeProbe -ne 'None') { $url += "?CoopProbe=$RuntimeProbe" }
     if ($CapturedAuthorityDiagnostic) { $url += '?CoopCapturedAuthority=1' }
@@ -435,7 +440,7 @@ $manifest = [ordered]@{
     workRoot=$WorkRoot; executable=$executable; arguments=$launchArgs; map=$mapName; server=$Server; port=$Port;
     connectUrl=$(if ($Role -eq 'Join') { $url } else { $null });
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
-    playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
+    playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; versusMechanicsProbe=[bool]$VersusMechanicsProbe; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
     maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit;
     windowed=$true; windowX=$WindowX; windowY=$WindowY; windowWidth=$WindowWidth; windowHeight=$WindowHeight;
     windowPositionApplied=$false; windowFrameMode='native-resizable';

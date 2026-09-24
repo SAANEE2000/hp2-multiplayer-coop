@@ -102,3 +102,5 @@ NPC AI-классы, ghost physics/no-collision и HagridPlayer не испол�
 Отдельный шестиклиентный запуск `versus-host-20260924-231612-680-5dbbda` подтвердил реальные подключения Snape, Hagrid, Dobby и Moaning Myrtle наряду с двумя контрольными клиентами; у каждого сервер увидел правильный mesh, полный набор animations, wand bone и capsule `15x42`.
 
 Инструмент Windows Computer Use дважды вернул пустой список приложений, хотя четыре `Game.exe` отвечали и имели ненулевые window handles. Поэтому я не выдаю структурный server audit за визуальное подтверждение. Ручной визуальный checklist остаётся для Hagrid/Dobby/ghosts и для одежных каналов со статусом `NEEDS`; это конкретное ограничение текущего прогона, а не скрытый PASS.
+
+Экспортирован приватный бинарный payload `hp2-test-build-20260924-233148-815-6b52f8cc.zip`, SHA-256 `be345065756e157085a5322dc71692a9197ea3d2d5320a44fa50fcbec5862b13`. Он содержит только собранные `HGame.u`, `M212Share.u`, manifest и compile log; публичный Git по-прежнему не распространяет игровые assets. `Setup-VersusTestKit.ps1` обновлён на этот точный hash.

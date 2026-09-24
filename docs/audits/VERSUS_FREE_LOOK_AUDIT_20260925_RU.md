@@ -1,58 +1,75 @@
 # HP2 Versus FFA: аудит Alt Free Look
 
-Дата проверки: 25 сентября 2026 года.
+Дата повторной проверки: 25 сентября 2026 года.
 
-## Итоговое поведение
+## Статус прежней проверки
 
-- Удержание левого `Alt` фиксирует yaw локального персонажа.
-- Штатная `BaseCam.StateStandardCam` продолжает принимать мышь и рассчитывать позицию вокруг прикреплённого к персонажу `CamTarget`. Отдельной free-fly камеры и второго расчёта позиции нет.
-- Pitch остаётся в штатных пределах `BaseCam.ApplyMouseYToDestPitch`.
-- Движение, прыжок, физика и Native movement не перенастраиваются при нажатии `Alt`.
-- Направление сетевого pawn и направление заклинания фиксируются на значениях момента входа в Free Look. Камерный yaw не отправляется как новый игровой aim.
-- При отпускании `Alt` камера ставится за прежний yaw персонажа, после чего восстанавливается обычная связь камеры и тела. Персонаж не разворачивается к временному углу обзора.
-- Состояние сбрасывается при смерти и `SetupVersusPlayer`, поэтому оно не переносится в respawn или новый матч.
+Runtime-проверка сборки `985f094` была недостаточной. Она фиксировала изменение `Cam.Rotation`, но не проверяла `Cam.Location` и фактические выходные параметры `PlayerCalcView`. Визуальная проверка пользователем показала, что ожидаемой орбиты вокруг персонажа нет. Поэтому прежний вывод о работоспособной орбите отозван.
 
-## Изменённые файлы
+## Фактический render path
 
-- `patches/versus-v16-free-look.json`
-  - добавляет виртуальный guard `ShouldCouplePawnRotationToCamera()` в `harry.uc`;
-  - добавляет локальное состояние Free Look в `HPVersusHarry.uc`;
-  - перехватывает `IK_Alt`/`IK_LAlt` в `Internal/HPConsole.uc` только при наличии локального `HPVersusHarry`.
-- `scripts/Launch-Multiplayer.ps1`
-  - не записывает нестабильный alias `Alt` в runtime `User.ini`; M212 удалял такой alias при старте;
-  - Alt обрабатывается напрямую игровым console key event.
-- `tests/test_versus_freelook_contract.py`
-  - проверяет локальность состояния, фиксацию pawn/aim, использование штатной орбиты, выход, death/setup reset и Alt key path.
-- `tests/test_patch_recipes.py`
-  - корректно загружает вложенные исходники v16, включая `Classes/Internal/HPConsole.uc`.
+В штатном `BaseCam.StateStandardCam.Tick()` камера проходит цепочку:
 
-`HPVersusCamera.uc` в итоговый патч не входит: ручной `UpdateFreeLookOrbit` удалён. Это исключает двойное применение mouse delta и оставляет одну систему позиционирования камеры.
+1. `ApplyMouseXToDestYaw()` / `ApplyMouseYToDestPitch()` меняют `rDestRotation`.
+2. `UpdateRotation()` сглаживает значение в `rCurrRotation` и вызывает `SetFinalRotation()`.
+3. `UpdatePosition()` вычисляет `Cam.Location` из `CamTarget.Location`, дистанции и `rCurrRotation`.
+4. `harry.PlayerCalcView()` отдаёт viewport значения `ViewTarget.Location` и `ViewTarget.Rotation`. В Versus `ViewTarget` должен быть тем же объектом, что и `Cam`.
 
-## Локальность и authority
+Ручного `UpdateFreeLookOrbit()` в реализации нет: положение камеры по окружности рассчитывает только штатный `StateStandardCam`.
 
-`bVersusFreeLook`, зафиксированные rotator и флаг активности не входят в replication block. Новых RPC нет. На клиенте guard запрещает `harry.PlayerTick` и `PlayerWalking` копировать временный camera yaw в `ViewRotation`/`DesiredRotation`. Перед native `ReplicateMove` локальные `Rotation`, `DesiredRotation` и `ViewRotation` остаются зафиксированными, поэтому сервер не получает временное вращение обзорной камеры как поворот pawn.
+## Причина визуального сбоя
 
-`GetVersusAimRotation()` во время удержания возвращает сохранённый aim rotator. `GetVersusMoveRotation()` для direct fallback возвращает сохранённый pawn rotator. Основной Native movement и значения `bScreenRelativeMovement` не переключаются.
+`harry.PlayerTick()` после обработки камеры записывал:
+
+`BaseCam(ViewTarget).rExtraRotation = ViewRotation - BaseCam(ViewTarget).rCurrRotation`.
+
+Во время Alt `ViewRotation` намеренно оставался направлением персонажа/прицеливания. Затем `BaseCam.SetFinalRotation()` прибавлял этот `rExtraRotation` к `rCurrRotation`. Поэтому штатные `rDestRotation` и `rCurrRotation` могли меняться, но итоговая видимая `Cam.Rotation` каждый кадр возвращалась к замороженному направлению персонажа. Это и давало странное перемещение вместо нормальной орбиты.
+
+Исправление: когда локальный Versus pawn находится в Free Look, `harry.PlayerTick()` записывает нулевой `rExtraRotation`. В обычном режиме исходное поведение HP2 сохранено.
+
+## Реализация
+
+- Alt фиксирует `Rotation`, `DesiredRotation` и отдельное направление прицеливания локального pawn.
+- Штатный `StateStandardCam` продолжает принимать mouse delta и выполнять `rDestRotation -> rCurrRotation -> UpdatePosition()`.
+- `bSyncPositionWithTarget=True`, `bSyncRotationWithTarget=False`; камера остаётся привязана позицией к `CamTarget`, но её yaw не берётся из pawn.
+- `ApplyStandardCam()` не вызывается в кадрах, где Alt удерживается или ещё завершается. Значит его `InitTarget()`/стабилизация не вмешиваются в орбиту.
+- `ForceStandardCam()` остаётся только в одноразовом `SetupVersusPlayer()` и в явно вызываемой диагностической команде `VersusFixView`.
+- `InitPositionAndRotation(True)` во Free Look вызывается один раз при отпускании Alt: сначала восстанавливается сохранённый yaw pawn, затем штатная камера ставится за него. Сам pawn не разворачивается к временному yaw камеры.
+- При `bScreenRelativeMovement=True` движение во время Alt использует сохранённый yaw pawn через `GetScreenRelativeMovementRotation()`, а не временный `Cam.Rotation`. Native movement и его replication pipeline не заменены.
+- Состояние Free Look локальное, не входит в replication block и сбрасывается при смерти/setup.
+
+## Временная диагностика viewport
+
+Пока Alt активен, `HPVersusHarry.PlayerCalcView()` раз в 0,20 секунды после вызова `Super.PlayerCalcView()` пишет:
+
+- `ViewTarget`, `Cam`, `ViewTargetEqualsCam`, `CamState`;
+- `PlayerCalcView.CameraLocation`, `PlayerCalcView.CameraRotation`, расстояние между выходной `CameraLocation` и `Cam.Location`;
+- `Cam.Location`, её изменение с предыдущего замера, `Cam.Rotation`, `rDestRotation`, `rCurrRotation`;
+- `CamTarget`, его `Location`/`Rotation`, расстояние от камеры до target;
+- `bSyncPositionWithTarget`, pawn `Rotation`, `DesiredRotation`, `ViewRotation`, `bScreenRelativeMovement`.
+
+Эта диагностика позволяет считать runtime PASS только если неподвижный pawn сохраняет yaw, `CamTarget.Location` остаётся постоянным, `Cam.Location` меняется по окружности с примерно постоянным радиусом, а `PlayerCalcView.CameraLocation` совпадает с `Cam.Location`.
 
 ## Сборка и автоматические проверки
 
-- Полный `python -m unittest discover -s tests -p 'test_*.py' -v`: 44 теста успешно, 1 platform-dependent symlink test пропущен Windows без права создания symlink.
+- Полный `python -m unittest discover -s tests -p 'test_*.py' -v`: 45 тестов успешно, 1 platform-dependent symlink test пропущен.
 - `Build.ps1 -VersusV16`: `Success - 0 error(s), 276 warnings`.
-- Build log: `.local/builds/20260925-000612-171/ucc-output.log`.
-- Собранный `HGame.u`: SHA-256 `FC64F249F489D84D30D54692E1DD0E33AFDAA18E1B3EA1F5E223F7EE36772817`.
+- Build log: `.local/builds/20260925-002559-034/ucc-output.log`.
+- Собранный `HGame.u`: SHA-256 `451BDB6F6F3EB6368BCC37B2131B6BF2999387060C5E68F90929A2285E06E7D6`.
+- `harry.uc`: SHA-256 `97246040BA9E7A7B9A6679DD52617E4466294E6C3BD9CA17192AAF04E1695F4D`.
+- `HPVersusHarry.uc`: SHA-256 `26F79B46D92F3DF240D3105E931887773EAFE782BABFB256EDACFC293215467D`.
 
-## Runtime smoke
+## Runtime acceptance: PASS
 
-Запущены dedicated server и два настоящих `Game.exe` клиента Harry/Ron на порту 7794. Сервер увидел обе сетевые pawn (`TcpipConnection0` и `TcpipConnection1`), процессы клиентов оставались responsive.
+Проверена сессия `versus-join-20260925-002649-244-982e33` на настоящем `Game.exe` клиенте с dedicated server.
 
-Дополнительно меню запустило host/join сессию `20260925-000722`. Клиентский журнал:
+- Пользователь визуально подтвердил ожидаемую орбиту вокруг неподвижного персонажа и корректный возврат камеры после отпускания Alt.
+- `ViewTargetEqualsCam=True`, `CamState=StateStandardCam`.
+- `PlayerCalcView.CameraLocation` во всех приведённых замерах совпадает с `Cam.Location`: `CameraLocationMinusCam=0.000000`.
+- При постоянном `CamTarget.Location=7.956156,515.098755,179.600006` камера прошла, например, через `102.948318,600.830444,176.348312`, `135.156097,528.514038,174.680206`, `26.874943,396.577087,135.117462` и `-92.475517,449.925110,134.324463`.
+- Расстояние `Cam.Location` до `CamTarget.Location` во всех этих точках остаётся примерно `128.0`, то есть это реальная орбита, рассчитанная `UpdatePosition()`, а не изменение одного rotator.
+- Yaw `Rotation`, `DesiredRotation` и `ViewRotation` pawn во время прохода оставался `43729`, тогда как `Cam.rCurrRotation.Yaw` изменялся от `43729` до `6004` и обратно.
+- После отпускания `HPV FREELOOK EXIT` зафиксировал возврат камеры в `71.548332,626.184448,179.600006`, соответствующий сохранённому yaw pawn.
+- В клиентском журнале: 0 `Critical`, 0 `Error`, 0 `ScriptWarning`, 0 `Accessed None`.
 
-`C:\Users\user\Documents\HP2-Multiplayer-Development\HP2MP-versus-join-20260925-000722-894-93cbcd.log`
-
-зафиксировал три полных цикла `HPV FREELOOK ENTER` / `HPV FREELOOK EXIT`. В первом интервале `Cam.Rotation.Yaw` менялся, включая переход через границу 65535, а `Rotation.Yaw`, `DesiredRotation.Yaw` и `ViewRotation.Yaw` персонажа оставались `0`. В следующем интервале pawn оставался на yaw `430`, пока камера меняла pitch/yaw. Это подтверждает отделение штатной орбитальной камеры от pawn rotation. После выхода обычная связь восстанавливалась.
-
-В этом клиентском журнале: 0 `Critical`, 0 `Error`, 0 `ScriptWarning`, 0 `Accessed None`.
-
-## Ограничение проверки
-
-Лог подтверждает key path, изменение camera rotator и неизменность pawn/aim rotator. Субъективную плавность орбиты и композицию кадра нужно оценивать глазами в игровом окне; они не выводятся движком в журнал как готовый критерий.
+Acceptance выполнен по двум независимым признакам: координатам фактического viewport и визуальной проверке пользователя.

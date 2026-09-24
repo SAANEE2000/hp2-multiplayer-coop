@@ -1,0 +1,33 @@
+# HP2 Versus FFA: аудит world interactions и ростера
+
+Дата: 2026-09-24. База: рабочая цепочка v16 после `11d11e2`; последующие коммиты меняли только отчёт/упаковку. v18 рассмотрен исключительно как donor/reference.
+
+## Найденная штатная цепочка заклинаний
+
+| Механика | Stock/v16 | v18 | Решение для Versus |
+|---|---|---|---|
+| Alohomora | `spellAlohomora.OnSpellHitHPawn -> HPawn.HandleSpellAlohomora`; `HAlohomora` вызывает `TriggerEvent` и уничтожается; `Padlock` наследует этот путь; `spellTrigger.Touch` фильтрует `SpellType` | `HPVersusAlohomora` дублирует большой projectile-код | Оставить штатные callbacks. Новый тонкий authoritative projectile не наносит PvP damage и передаёт попадание в `HandleSpellAlohomora`; `spellTrigger` получает оригинальный `Touch` |
+| Flipendo | `spellFlipendo.OnSpellHitHPawn -> HPawn.HandleSpellFlipendo`; `Boulder`, `HChar`, `GenericSpawner` и другие классы имеют собственные state machine; `spellTrigger` фильтрует `SPELL_Flipendo` | Versus-вариант сохранил только PvP damage/push | Сохранить принятую PvP-ветку и добавить отдельную ветку для любого не-player `HPawn`, вызывающую его штатный `HandleSpellFlipendo` |
+| Expelliarmus | В дуэли Duellist заряжает `spellDuelExpelliarmus` при приближении летящего заклинания и переходит в `stateDefence`; сам hit-handler возвращает `False`. Это защитное окно, а не обычный damage bolt | Эксперимент v18 смешивал damage и shield state | Убрать damage. Успешное попадание серверно срывает текущую зарядку и даёт короткий disarm/cast lock; Mimblewimble остаётся более долгим mute с damage |
+| Spongify | `HandleSpellSpongify -> SpongifyPad.stateGoingToEnabled -> stateEnabled`; `harry.Landed` запоминает pad, затем `OnBounce` вычисляет траекторию к `SpongifyTarget` | Versus donor вызывает `Trigger()` напрямую, что у штатного pad означает переход в disabled | Прямо не переносить. Отдельно адаптировать исходный `HandleSpellSpongify` и bounce transaction, не заменяя её вертикальным импульсом |
+
+`baseSpell.ProcessTouch` уже различает `harry`, `HPawn` и `spellTrigger`. Поэтому новый слой не требует собственной универсальной interaction framework. Projectile существует на authority; не-simulated callbacks и map events исполняются на dedicated server.
+
+## Риски donor-кода v18
+
+- `HPVersusSpongify.TryActivateSpongifyTarget` вызывает `SpongifyPad.Trigger()`, но штатный `Trigger()` переводит pad в `stateDisabled`; это семантически обратный путь.
+- v18 содержит повторённый projectile/FX boilerplate вместо наследования принятого `HPVersusSpell`.
+- shield-поля Expelliarmus не следуют исходному дуэльному поведению и пересекаются с cast/cooldown state.
+- Hagrid-player/HideSeek и AI-player классы не относятся к текущей архитектуре и не используются.
+
+## Предварительный аудит ростера
+
+Ростер будет представлен одним `HPVersusHarry` и replicated profile. До включения каждого профиля проверяются mesh/skeleton, полный locomotion/cast/hit/death набор, wand bone, robe/cloak channels, масштаб, floor/camera offsets и единая gameplay capsule. NPC AI-классы PlayerPawn-ами не становятся.
+
+Статусы совместимости будут выставлены после инвентаризации пакетов и runtime smoke: `PASS`, `NEEDS EXTRA CHANNEL`, `NEEDS CUSTOM ANIM PROFILE`, `NEEDS VISUAL FIX`, `BLOCKED`. Harry/Ron/Hermione остаются принятой контрольной группой.
+
+## Этап 1: реализация и проверка
+
+Добавлены слот 5/Alohomora, серверный whitelist и HUD-имя; Flipendo направляет не-player `HPawn` в его исходный handler. Expelliarmus теперь не наносит урон: authority выставляет короткое окно disarm, owning client прекращает зарядку и возвращает wand animation в idle. Disarm очищается по таймеру, при смерти, respawn и начале нового матча.
+
+Сборка `20260924-223337-044`: `Success - 0 error(s), 273 warnings`. Двухклиентный dedicated-прогон `versus-host-20260924-223436-370-87e338` завершил 12 проверок `HPVersusMechanicsProbe` без `FAIL`, включая `expelliarmus-disarm-without-damage`. Оба участника были настоящими `Game.exe`; server process — `UCC.exe`.

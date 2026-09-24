@@ -55,7 +55,7 @@ simulated function PostRender(Canvas C)
     local string PhaseText;
     local string CombatText;
     local int Count, I;
-    local float X, Y, SpeedLeft, LockLeft;
+    local float X, Y, SpeedLeft, LockLeft, DisarmLeft;
 
     Super.PostRender(C);
     if (bHideHud)
@@ -80,7 +80,11 @@ simulated function PostRender(Canvas C)
     CombatText = "[" $ string(int(H.SelectedVersusSpell) + 1) $ "] "
         $ H.GetVersusSpellName(H.SelectedVersusSpell);
     LockLeft = H.VersusSpellLockEndTime - Level.TimeSeconds;
-    if (LockLeft > 0.0)
+    DisarmLeft = H.VersusDisarmEndTime - Level.TimeSeconds;
+    if (DisarmLeft > 0.0)
+        CombatText = CombatText $ "   DISARMED "
+            $ string(int(DisarmLeft + 0.99)) $ "s";
+    else if (LockLeft > 0.0)
         CombatText = CombatText $ "   MUTED " $ string(int(LockLeft + 0.99)) $ "s";
     else if (H.VersusCooldownEndTime > Level.TimeSeconds)
         CombatText = CombatText $ "   COOLDOWN";

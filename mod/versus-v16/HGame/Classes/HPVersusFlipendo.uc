@@ -4,6 +4,26 @@ class HPVersusFlipendo extends HPVersusSpell;
 var float VersusPushStrength;
 var float VersusPushUp;
 
+function bool OnSpellHitHPawn(Actor HitActor, Vector HitLocation)
+{
+    local HPawn WorldTarget;
+    local bool bAccepted;
+
+    if (Role != ROLE_Authority || HitActor == None)
+        return False;
+    if (HitActor.IsA('harry'))
+        return OnSpellHitHarry(HitActor, HitLocation);
+
+    WorldTarget = HPawn(HitActor);
+    if (WorldTarget == None)
+        return False;
+
+    bAccepted = WorldTarget.HandleSpellFlipendo(self, HitLocation);
+    Log("HPVersusWorldSpell spell=Flipendo target=" $ string(WorldTarget)
+        $ " accepted=" $ string(bAccepted));
+    return bAccepted;
+}
+
 function bool OnSpellHitHarry(Actor HitActor, Vector HitLocation)
 {
     local HPVersusHarry Victim;

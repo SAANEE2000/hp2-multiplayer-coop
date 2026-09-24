@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-world-interactions",
+  "description": "Add authoritative Alohomora and stock Flipendo world callback dispatch, and convert Expelliarmus from v18 damage into a stock-inspired cast interruption.",
+  "source_snapshot": "current v16 patch chain at 75903c6",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "247e79126b364c3c3d97cb9b2068e1c79ec10d9e4ea47fee3ccef0be709a9532",
+      "result_sha256": "aeac8ba53442dc2238f4b8669d238a766c29ab51b0ad702e67960e9f326d5e99",
+      "replacements": [
+        {
+          "old": "var float VersusCooldownEndTime;\nvar float VersusSpellLockEndTime;\nvar float VersusSpeedMultiplier;",
+          "new": "var float VersusCooldownEndTime;\nvar float VersusSpellLockEndTime;\nvar float VersusDisarmEndTime;\nvar float VersusSpeedMultiplier;",
+          "old_sha256": "6e980a83ca69160c2aea07c831fa22695ff6436847bf8f99cc488df509ba04ef",
+          "new_sha256": "db8c79bb642b173a8cb756d8af90d2357a1bc5bb34ecbf3dcc91b5194bf3a56b"
+        },
+        {
+          "old": "        VersusCooldownEndTime, VersusSpellLockEndTime, VersusSpeedMultiplier,\n        VersusSpeedBoostEndTime, ClientSetVersusSlot, ClientVersusDeath,\n        ClientVersusRespawn, ClientSyncHealth, ClientApplyVersusSpeed,\n        ClientResetVersusCombatEffects, ClientVersusImpulse;",
+          "new": "        VersusCooldownEndTime, VersusSpellLockEndTime, VersusDisarmEndTime,\n        VersusSpeedMultiplier, VersusSpeedBoostEndTime, ClientSetVersusSlot,\n        ClientVersusDeath, ClientVersusRespawn, ClientSyncHealth,\n        ClientApplyVersusSpeed, ClientResetVersusCombatEffects,\n        ClientVersusImpulse, ClientVersusDisarmed;",
+          "old_sha256": "add5a151a4710c31b96a6170c2767909ce45e88fd73e39ee0072e4a7234c68f3",
+          "new_sha256": "1835f2c582f52da50c7586834cd9c82127393e88059855a7640bdd007bb2c534"
+        },
+        {
+          "old": "        case 3:\n            return Class'HPVersusFlipendo';\n        default:",
+          "new": "        case 3:\n            return Class'HPVersusFlipendo';\n        case 4:\n            return Class'HPVersusAlohomora';\n        default:",
+          "old_sha256": "e3978b04eb35db0c7dd70cc27d5fbb7cdda8a42383edad616b88f76f1814d48a",
+          "new_sha256": "1d65cf67b8f132f2b2f43a58787905546a4a57ba120e83d6d423fa42ece8543b"
+        },
+        {
+          "old": "        case 3: return \"Flipendo\";\n    }",
+          "new": "        case 3: return \"Flipendo\";\n        case 4: return \"Alohomora\";\n    }",
+          "old_sha256": "ff00917872b7a60ae9fc1e8619c97e965943171ee736824716fadfd4adbc6073",
+          "new_sha256": "c8f8ccb3ece44c83114f8a7f4ebfb2fccf6ee4e71d52807e504f32c1d06a6f33"
+        },
+        {
+          "old": "        case 3: return 0.60;\n    }",
+          "new": "        case 3: return 0.60;\n        case 4: return 0.60;\n    }",
+          "old_sha256": "7f745e7009be95cf11138ea7f2fd735561df764f05c6825822f928a139033958",
+          "new_sha256": "2e3e2a84978a78d7c6b231a8d735016546e006eaa97e250d9e627457b56df12f"
+        },
+        {
+          "old": "function ApplyVersusSpellLock(float Duration)\n{\n    if (Role != ROLE_Authority || Duration <= 0.0 || bVersusDead)\n        return;\n    VersusSpellLockEndTime = FMax(\n        VersusSpellLockEndTime,\n        Level.TimeSeconds + Duration);\n    Log(\"HPVersusSpellLock pawn=\" $ string(self)\n        $ \" end=\" $ string(VersusSpellLockEndTime));\n}\n",
+          "new": "function ApplyVersusSpellLock(float Duration)\n{\n    if (Role != ROLE_Authority || Duration <= 0.0 || bVersusDead)\n        return;\n    VersusSpellLockEndTime = FMax(\n        VersusSpellLockEndTime,\n        Level.TimeSeconds + Duration);\n    Log(\"HPVersusSpellLock pawn=\" $ string(self)\n        $ \" end=\" $ string(VersusSpellLockEndTime));\n}\n\nfunction ApplyVersusDisarm(float Duration)\n{\n    if (Role != ROLE_Authority || Duration <= 0.0 || bVersusDead)\n        return;\n\n    VersusDisarmEndTime = FMax(\n        VersusDisarmEndTime,\n        Level.TimeSeconds + Duration);\n    ApplyVersusSpellLock(Duration);\n    ClientVersusDisarmed(VersusDisarmEndTime);\n    Log(\"HPVersusDisarm pawn=\" $ string(self)\n        $ \" end=\" $ string(VersusDisarmEndTime));\n}\n\nfunction ClientVersusDisarmed(float ServerEndTime)\n{\n    local HPVersusWand W;\n\n    VersusDisarmEndTime = FMax(VersusDisarmEndTime, ServerEndTime);\n    VersusSpellLockEndTime = FMax(VersusSpellLockEndTime, ServerEndTime);\n    W = HPVersusWand(Weapon);\n    if (W != None)\n        W.StopChargingSpell();\n    StopAiming();\n}\n",
+          "old_sha256": "78acb2648cac445717fc84cfc22ad482a3683f7d8f353e74f19deb127ed9263c",
+          "new_sha256": "93c07950a7917ece9d29e2d5e465469a7b5ac49db80ef14775f5f538cabd4941"
+        },
+        {
+          "old": "function ResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;\n    VersusSpellLockEndTime = 0.0;\n    VersusSpeedMultiplier = 1.0;",
+          "new": "function ResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;\n    VersusSpellLockEndTime = 0.0;\n    VersusDisarmEndTime = 0.0;\n    VersusSpeedMultiplier = 1.0;",
+          "old_sha256": "86c11235dd76f85ac4b1becf35955e02cc7c6f292ab16c21b8ae46073f709b28",
+          "new_sha256": "b713509c5f77d891450afa9352e923ef07c545d895aaf223e768af563db70eda"
+        },
+        {
+          "old": "function ClientResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;\n    VersusSpellLockEndTime = 0.0;\n    VersusSpeedMultiplier = 1.0;",
+          "new": "function ClientResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;\n    VersusSpellLockEndTime = 0.0;\n    VersusDisarmEndTime = 0.0;\n    VersusSpeedMultiplier = 1.0;",
+          "old_sha256": "09c7becd6b562d9df659a7988d686ba2ba85d8fc297a3ada18c0900c444f49a5",
+          "new_sha256": "d81dbc5ac675ac7d8ed83ef2df64b71b3d94f6c20182e8c324af5ed641b47e46"
+        },
+        {
+          "old": "function bool HandleSpellDuelExpelliarmus(optional baseSpell spell, optional Vector vHitLocation)\n{\n    local int Damage;\n\n    if (Role != ROLE_Authority)\n        return False;\n\n    if (spell == None)\n        TakeDamage(20, None, Location, vect(0.00,0.00,0.00), 'DuelExpelliarmus');\n    else {\n        Damage = VersusDamage(8, int(20 * spell.SpellCharge));\n        TakeDamage(Damage, Pawn(spell.Owner), vHitLocation, vect(0.00,0.00,0.00), 'DuelExpelliarmus');\n    }\n\n    return True;\n}\n",
+          "new": "function bool HandleSpellDuelExpelliarmus(optional baseSpell spell, optional Vector vHitLocation)\n{\n    local float Charge;\n\n    if (Role != ROLE_Authority || bVersusDead)\n        return False;\n\n    Charge = 1.0;\n    if (spell != None)\n        Charge = FClamp(spell.SpellCharge, 0.0, 1.0);\n\n    // Stock duelists cast Expelliarmus as a timed defence when an incoming\n    // spell is close. In FFA the corresponding minimal network mechanic is a\n    // non-damaging cast interruption plus a short authoritative disarm window.\n    ApplyVersusDisarm(0.45 + 0.45 * Charge);\n    return True;\n}\n",
+          "old_sha256": "cb378205b60fb50f967b44ec4b80306d95ad94aff7975bc309690897da75ca8d",
+          "new_sha256": "373ae3a1a5af3bd714eeb2a559aa6859f0c67702a4ee3f903fdab2c1a1110207"
+        },
+        {
+          "old": "exec function VersusSpell5()\n{\n    ClientMessage(\"Alohomora is not enabled for FFA combat.\");\n}",
+          "new": "exec function VersusSpell5()\n{\n    VersusSelectSpell(4);\n}",
+          "old_sha256": "c72f5d8ac8cb51bb69476537c60579b28ba2d2fa79e112f0acb505763419e1f5",
+          "new_sha256": "e21eef13c53d11aaa7a7fef7cfac6c2127c099f401f631ebdc6fa74c091fcd60"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusWand.uc",
+      "source_sha256": "7f464ba767c90ede1a803fcb6010cc5e5896b57bb79becec56d74400c9509b1e",
+      "result_sha256": "e3094cba6eacd02b1993f343b10b5b763c107d331f5e95e186b3f412d80afd97",
+      "replacements": [
+        {
+          "old": "        case 3:\n            CurrentSpell = Class'HPVersusFlipendo';\n            break;\n        default:",
+          "new": "        case 3:\n            CurrentSpell = Class'HPVersusFlipendo';\n            break;\n        case 4:\n            CurrentSpell = Class'HPVersusAlohomora';\n            break;\n        default:",
+          "old_sha256": "4d06fc2f3a0de49ccb3231340f9d232f247859b3561d31964c52fbe9bc0bfb11",
+          "new_sha256": "317fad888238faa3d9b4d1b0d34a7d2507a6bb5a782519ccb1a4821e535b70fd"
+        },
+        {
+          "old": "        && SpellClass != Class'HPVersusExpelliarmus'\n        && SpellClass != Class'HPVersusFlipendo')",
+          "new": "        && SpellClass != Class'HPVersusExpelliarmus'\n        && SpellClass != Class'HPVersusFlipendo'\n        && SpellClass != Class'HPVersusAlohomora')",
+          "old_sha256": "fd375d5571269b0b67c5c1a62c8a191118537c5252b65295bc6a6158ce1fae42",
+          "new_sha256": "7fc3385ea72f08ba3ac86e958ba5200055ab667423387d8f85c0b2bd9b4a4a5e"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "e9c41ffbe42d158b1733bc472e81bb9cf4f2eec897b614d4c4948bde21aa1d4e",
+      "result_sha256": "fefab3c7da68d2c5893bad36a026b3911d03b827f4c17624cfc2a9add064f19c",
+      "replacements": [
+        {
+          "old": "        if (H.VersusSpellLockEndTime > 0.0\n            && Level.TimeSeconds >= H.VersusSpellLockEndTime)\n            H.VersusSpellLockEndTime = 0.0;",
+          "new": "        if (H.VersusSpellLockEndTime > 0.0\n            && Level.TimeSeconds >= H.VersusSpellLockEndTime)\n            H.VersusSpellLockEndTime = 0.0;\n        if (H.VersusDisarmEndTime > 0.0\n            && Level.TimeSeconds >= H.VersusDisarmEndTime)\n            H.VersusDisarmEndTime = 0.0;",
+          "old_sha256": "7edbb1c379dfe8ecee982f8b4fa2dfc5cf93f63dee9e01631a04f2c6cb022cfa",
+          "new_sha256": "4baae8ea986ecb4b01a35979a53b6ce503b8b63bd67cf8959f42d7add7d72ddd"
+        },
+        {
+          "old": "            A.GetVersusSpellClass(A.SelectedVersusSpell) == Class'HPVersusMimblewimble'\n            && B.GetVersusSpellClass(B.SelectedVersusSpell) == Class'HPVersusFlipendo',",
+          "new": "            A.GetVersusSpellClass(A.SelectedVersusSpell) == Class'HPVersusMimblewimble'\n            && B.GetVersusSpellClass(B.SelectedVersusSpell) == Class'HPVersusFlipendo'\n            && A.GetVersusSpellClass(4) == Class'HPVersusAlohomora',",
+          "old_sha256": "a725899d3be278b097b9955277592bf64458f39d6da566a89d44cec3ae1d825c",
+          "new_sha256": "12a55b7319f71bea0d811fc24d1784298e9f785fae38feb166592566983c6c49"
+        },
+        {
+          "old": "        B.HandleSpellDuelExpelliarmus(None, B.Location);\n        VersusProbeResult(B.Health == 47, \"expelliarmus-damage\");",
+          "new": "        B.HandleSpellDuelExpelliarmus(None, B.Location);\n        VersusProbeResult(B.Health == 67 && B.VersusDisarmEndTime > Level.TimeSeconds,\n            \"expelliarmus-disarm-without-damage\");",
+          "old_sha256": "9b768fb6859c97a72af83b0f750429ddc67da283b79e3ef0886dd4baeee76181",
+          "new_sha256": "674e22b8178927af19540087b8a315667cdf47d9d432eb2225fa3a8de9737951"
+        },
+        {
+          "old": "        VersusProbeResult(Flipendo != None && B.Health == 39\n            && B.Physics == PHYS_Falling, \"flipendo-damage-and-impulse\");",
+          "new": "        VersusProbeResult(Flipendo != None && B.Health == 59\n            && B.Physics == PHYS_Falling, \"flipendo-damage-and-impulse\");",
+          "old_sha256": "302bd5adeb2a57895117a2817bf1f453374211a168879a9c5987aef140456926",
+          "new_sha256": "d6a4e191aef8328919434ae4591fe2a1560a2d7a33e85a769cbf156f71c09215"
+        }
+      ]
+    }
+  ]
+}

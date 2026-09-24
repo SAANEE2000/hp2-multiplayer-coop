@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-spongify-network",
+  "description": "Add an isolated server-authoritative Spongify pad transaction while preserving native Versus movement outside the bounce.",
+  "source_snapshot": "world interaction layer at 9899112",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "aeac8ba53442dc2238f4b8669d238a766c29ab51b0ad702e67960e9f326d5e99",
+      "result_sha256": "f618fa5de4c2e6ef3de37ec73aae5da61df6cf9e88fc930e9452eb01d72b320d",
+      "replacements": [
+        {
+          "old": "var bool bVersusSpeedBaseCaptured;\n\nreplication",
+          "new": "var bool bVersusSpeedBaseCaptured;\nvar bool bVersusSpongifyActive;\nvar vector VersusSpongifyTargetLocation;\n\nreplication",
+          "old_sha256": "4cce55c8cc1a814dc6ac8feaff76a4de77bcb26161e27b4b9f4abd8a57e7afab",
+          "new_sha256": "39890d46f040774e548ada58092f4f59dadd23e3b5c180664adafd10465c1408"
+        },
+        {
+          "old": "        ClientApplyVersusSpeed, ClientResetVersusCombatEffects,\n        ClientVersusImpulse, ClientVersusDisarmed;",
+          "new": "        ClientApplyVersusSpeed, ClientResetVersusCombatEffects,\n        ClientVersusImpulse, ClientVersusDisarmed,\n        bVersusSpongifyActive, VersusSpongifyTargetLocation,\n        ClientBeginVersusSpongify, ClientClearVersusSpongify;",
+          "old_sha256": "2c561ceec36b774c0ffcc5b691e408cc223de039b7585c6727195872d347a167",
+          "new_sha256": "aca72aa217684fa5d62860179d8cf4f8bd6db29c1a0a75fcead0fe260cf329a4"
+        },
+        {
+          "old": "function ResetVersusCombatEffects()\n{",
+          "new": "function BeginVersusSpongify(HPVersusSpongifyPad Pad,\n    vector LaunchVelocity, vector TargetLocation)\n{\n    if (Role != ROLE_Authority || bVersusDead || Pad == None\n        || !Pad.IsEnabled())\n        return;\n\n    bVersusSpongifyActive = True;\n    VersusSpongifyTargetLocation = TargetLocation;\n    HitSpongifyPad = None;\n    AnimFalling = SpongifyFallAnim;\n    fHighestZ = Location.Z;\n    SetPhysics(PHYS_Falling);\n    Acceleration = vect(0.00,0.00,0.00);\n    Velocity = LaunchVelocity;\n    ClientBeginVersusSpongify(LaunchVelocity, TargetLocation);\n    Log(\"HPVersusSpongify begin pawn=\" $ string(self)\n        $ \" pad=\" $ string(Pad)\n        $ \" velocity=\" $ string(LaunchVelocity)\n        $ \" target=\" $ string(TargetLocation));\n}\n\nfunction ClientBeginVersusSpongify(vector LaunchVelocity,\n    vector TargetLocation)\n{\n    bVersusSpongifyActive = True;\n    VersusSpongifyTargetLocation = TargetLocation;\n    HitSpongifyPad = None;\n    AnimFalling = SpongifyFallAnim;\n    SetPhysics(PHYS_Falling);\n    Acceleration = vect(0.00,0.00,0.00);\n    Velocity = LaunchVelocity;\n    PlayInAir();\n}\n\nfunction ClearVersusSpongify(string Reason)\n{\n    local bool bWasActive;\n\n    bWasActive = bVersusSpongifyActive;\n    bVersusSpongifyActive = False;\n    VersusSpongifyTargetLocation = vect(0.00,0.00,0.00);\n    HitSpongifyPad = None;\n    if (AnimFalling == SpongifyFallAnim)\n        AnimFalling = HarryAnims[HarryAnimSet].fall;\n    if (Role == ROLE_Authority && bWasActive)\n        ClientClearVersusSpongify();\n    if (bWasActive)\n        Log(\"HPVersusSpongify end pawn=\" $ string(self)\n            $ \" reason=\" $ Reason\n            $ \" location=\" $ string(Location));\n}\n\nfunction ClientClearVersusSpongify()\n{\n    bVersusSpongifyActive = False;\n    VersusSpongifyTargetLocation = vect(0.00,0.00,0.00);\n    HitSpongifyPad = None;\n    if (AnimFalling == SpongifyFallAnim)\n        AnimFalling = HarryAnims[HarryAnimSet].fall;\n}\n\nfunction ResetVersusCombatEffects()\n{",
+          "old_sha256": "27963ad5f69b0a14ebf18a06ffa2607949ac73311cb08498bc7e6f158b6567c2",
+          "new_sha256": "adcdfe536021ad2ada717a7a28c5c743de62debe1ea388a9b695e2f419414635"
+        },
+        {
+          "old": "function ResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;",
+          "new": "function ResetVersusCombatEffects()\n{\n    ClearVersusSpongify(\"CombatReset\");\n    VersusCooldownEndTime = 0.0;",
+          "old_sha256": "0103cad919148df128ff7c42f73c693eafe21ec606020c390d3aa4572602383c",
+          "new_sha256": "98fbf7bf7cd13f61192ea45a6b4c1feb1443b84893b4624dc351b90f83e27b80"
+        },
+        {
+          "old": "function ClientResetVersusCombatEffects()\n{\n    VersusCooldownEndTime = 0.0;",
+          "new": "function ClientResetVersusCombatEffects()\n{\n    ClientClearVersusSpongify();\n    VersusCooldownEndTime = 0.0;",
+          "old_sha256": "cfc7a2fbd25a5f86427397d22ea2aa180306d0c2c996fa68ba4032784f66a46f",
+          "new_sha256": "f94a739df14939cb558c75a88ef121c486daecb6f43c193c92d0c65e6567c130"
+        },
+        {
+          "old": "        case 4:\n            return Class'HPVersusAlohomora';\n        default:",
+          "new": "        case 4:\n            return Class'HPVersusAlohomora';\n        case 5:\n            return Class'HPVersusSpongify';\n        default:",
+          "old_sha256": "26b6dff2b65651c835daca689e4358597ee037d5a30c04cae590d5412fe150e4",
+          "new_sha256": "61fad85ecfba95ecf6cfefbb6516a723ab411cc830e3932da643c218b709ab71"
+        },
+        {
+          "old": "        case 4: return \"Alohomora\";\n    }",
+          "new": "        case 4: return \"Alohomora\";\n        case 5: return \"Spongify\";\n    }",
+          "old_sha256": "db0b64e163d43a79dc9856c5276b34218720a2e5398a5b555f4e313ee9c88e9b",
+          "new_sha256": "e89055804ce3727bc072c87d160af1cd0a7605fcce92a81bafdc0a006d26b863"
+        },
+        {
+          "old": "        case 4: return 0.60;\n    }",
+          "new": "        case 4: return 0.60;\n        case 5: return 0.80;\n    }",
+          "old_sha256": "cb69ee8857c6b6ebf00721264e18d6751696e231c04349d5886d0df253c76ac2",
+          "new_sha256": "3e37e6ac5e5c81f9b7562a9644287ebb773a540be98c60b09b82f88f637e140d"
+        },
+        {
+          "old": "exec function VersusSpell6()\n{\n    ClientMessage(\"Spongify is not enabled for FFA combat.\");\n}",
+          "new": "exec function VersusSpell6()\n{\n    VersusSelectSpell(5);\n}",
+          "old_sha256": "38eb1ef3e03a537923e2fd457b88d4e26c010e9afdbca665ba7f728a4f1d211c",
+          "new_sha256": "e9ce79c310894e744f7672b85073777c81662b5eb2f52524fe02f2101c6dbc63"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusWand.uc",
+      "source_sha256": "e3094cba6eacd02b1993f343b10b5b763c107d331f5e95e186b3f412d80afd97",
+      "result_sha256": "89261a4dcc4ce94c067859a512d39eef156cd482e013a9486ff6ac908897c117",
+      "replacements": [
+        {
+          "old": "        case 4:\n            CurrentSpell = Class'HPVersusAlohomora';\n            break;\n        default:",
+          "new": "        case 4:\n            CurrentSpell = Class'HPVersusAlohomora';\n            break;\n        case 5:\n            CurrentSpell = Class'HPVersusSpongify';\n            break;\n        default:",
+          "old_sha256": "fe0674ea5086c816cfbdaf6ff4ef70fecf388256d0a7adccad9f81d5ac8c4b90",
+          "new_sha256": "a2b9c7f7a0678c283f88d0b1d5eda1f7567b45246d5ab5be52c3645cd26c5177"
+        },
+        {
+          "old": "        && SpellClass != Class'HPVersusFlipendo'\n        && SpellClass != Class'HPVersusAlohomora')",
+          "new": "        && SpellClass != Class'HPVersusFlipendo'\n        && SpellClass != Class'HPVersusAlohomora'\n        && SpellClass != Class'HPVersusSpongify')",
+          "old_sha256": "d392f39f0a25fd2404a720f7a97be3de4c2e3a1dc0abf5a055b2b9380d3ead35",
+          "new_sha256": "53b1f2e55520a749cf237efcf3d18acc7e4205b55c6c8644d248e566990cd9b1"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "fefab3c7da68d2c5893bad36a026b3911d03b827f4c17624cfc2a9add064f19c",
+      "result_sha256": "1793abe89c3c8b1c8787b9e8b09722c2c314cea4a41ca8b77b0da8a49f14c888",
+      "replacements": [
+        {
+          "old": "var float VersusMechanicsProbeNextTime;\n\nfunction InitGame",
+          "new": "var float VersusMechanicsProbeNextTime;\nvar HPVersusSpongifyPad VersusProbeSpongifyPad;\nvar HPVersusSpongifyTarget VersusProbeSpongifyTarget;\n\nfunction InitGame",
+          "old_sha256": "e7f42cd8ad7cd8616dffce48850ce3ec6968d8aa0b421df85bfe19ff58bd1878",
+          "new_sha256": "3f2251642f2ca7760c9a3b00b1e286c661df6acf09876b77347cc5b96206ef1c"
+        },
+        {
+          "old": "        if (H.VersusDisarmEndTime > 0.0\n            && Level.TimeSeconds >= H.VersusDisarmEndTime)\n            H.VersusDisarmEndTime = 0.0;",
+          "new": "        if (H.VersusDisarmEndTime > 0.0\n            && Level.TimeSeconds >= H.VersusDisarmEndTime)\n            H.VersusDisarmEndTime = 0.0;\n        if (H.bVersusSpongifyActive && H.Physics != PHYS_Falling)\n            H.ClearVersusSpongify(\"ServerLanded\");",
+          "old_sha256": "d3ab3851679618c2c8647739dca3dd04cb527275f8676a6f2868525ef8ca76e7",
+          "new_sha256": "0bce1c799519844cbc76488d969adb25e04bec1388405b5382283f5483fe0414"
+        },
+        {
+          "old": "    local HPVersusFlipendo Flipendo;\n    local Vector ProbeLocation;",
+          "new": "    local HPVersusFlipendo Flipendo;\n    local HPVersusSpongify Spongify;\n    local Vector ProbeLocation;",
+          "old_sha256": "91dd306728b3f71d85783aef959f30f059d512cea8473d5857d79c2ad44e5702",
+          "new_sha256": "6eb8d116ea57dc27c5075013518e3657596bbacc79fee3e863a2a5150db7971f"
+        },
+        {
+          "old": "            && A.GetVersusSpellClass(4) == Class'HPVersusAlohomora',",
+          "new": "            && A.GetVersusSpellClass(4) == Class'HPVersusAlohomora'\n            && A.GetVersusSpellClass(5) == Class'HPVersusSpongify',",
+          "old_sha256": "392900c7d9b531b61f6ca053756f52eb5230fdb01509b2682db1302d61edc8d3",
+          "new_sha256": "1443000beae2cd655327b0352317f72cc3876e7ebedc4253b7cf6857dc28c9ce"
+        },
+        {
+          "old": "        VersusProbeResult(Flipendo != None && B.Health == 59\n            && B.Physics == PHYS_Falling, \"flipendo-damage-and-impulse\");\n\n        VersusMechanicsProbeStage = 1;",
+          "new": "        VersusProbeResult(Flipendo != None && B.Health == 59\n            && B.Physics == PHYS_Falling, \"flipendo-damage-and-impulse\");\n\n        ProbeLocation = A.Location;\n        ProbeLocation.Z += 8.0;\n        VersusProbeSpongifyPad = Spawn(\n            Class'HPVersusSpongifyPad',,, ProbeLocation, rot(0,0,0));\n        ProbeLocation = A.Location;\n        ProbeLocation.X += 180.0;\n        ProbeLocation.Z += 80.0;\n        VersusProbeSpongifyTarget = Spawn(\n            Class'HPVersusSpongifyTarget',,, ProbeLocation, rot(0,0,0));\n        if (VersusProbeSpongifyPad != None\n            && VersusProbeSpongifyTarget != None)\n        {\n            VersusProbeSpongifyPad.Target = VersusProbeSpongifyTarget;\n            VersusProbeSpongifyPad.fTimeToHitTarget = 2.0;\n            Spongify = Spawn(Class'HPVersusSpongify', A,,\n                VersusProbeSpongifyPad.Location, A.Rotation);\n            if (Spongify != None)\n            {\n                Spongify.Instigator = A;\n                Spongify.SpellCharge = 1.0;\n                Spongify.OnSpellHitHPawn(\n                    VersusProbeSpongifyPad,\n                    VersusProbeSpongifyPad.Location);\n                Spongify.Destroy();\n            }\n            VersusProbeSpongifyPad.OnBounce(A);\n        }\n        VersusProbeResult(Spongify != None\n            && VersusProbeSpongifyPad != None\n            && VersusProbeSpongifyPad.IsEnabled()\n            && A.bVersusSpongifyActive\n            && A.Physics == PHYS_Falling\n            && VSize(A.Velocity) > 1.0,\n            \"spongify-authoritative-activation-and-bounce\");\n\n        VersusMechanicsProbeStage = 1;",
+          "old_sha256": "1ebee608d740a44a9387ef1851c48c9d5e1fa37b2296360ee269952cc30f8606",
+          "new_sha256": "8d801acf433092a53744a368fa8247977edafae0e4eadd87e0540782b7106b2a"
+        },
+        {
+          "old": "        VersusProbeResult(A.bVersusDead && !A.IsVersusSpeedBoosted(),\n            \"death-clears-speed\");",
+          "new": "        VersusProbeResult(A.bVersusDead && !A.IsVersusSpeedBoosted(),\n            \"death-clears-speed\");\n        VersusProbeResult(!A.bVersusSpongifyActive,\n            \"death-clears-spongify\");",
+          "old_sha256": "e2496686ff896af0f50cf8a5acf168971d8ea12164d757eca457c6b01bf16e23",
+          "new_sha256": "50956fd1d2961a77ec0d28051ca5e6728eda0a1d63d285f36cfb6a6708c042cd"
+        },
+        {
+          "old": "    VersusProbeResult(!B.IsVersusSpeedBoosted() && B.Health == 100,\n        \"new-match-clears-speed\");\n    bVersusMechanicsProbeComplete = True;",
+          "new": "    VersusProbeResult(!B.IsVersusSpeedBoosted() && B.Health == 100,\n        \"new-match-clears-speed\");\n    if (VersusProbeSpongifyPad != None)\n        VersusProbeSpongifyPad.Destroy();\n    if (VersusProbeSpongifyTarget != None)\n        VersusProbeSpongifyTarget.Destroy();\n    bVersusMechanicsProbeComplete = True;",
+          "old_sha256": "89fafe59ab71bd3aa2baf938f237e16c4bad2cff28931f9b7824bb0902767adc",
+          "new_sha256": "28ac1c2c6d5e23c56db7961a09ecf1a85eff48a501062e9476aa5dae12ae4c62"
+        }
+      ]
+    }
+  ]
+}

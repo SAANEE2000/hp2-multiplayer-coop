@@ -31,3 +31,9 @@
 Добавлены слот 5/Alohomora, серверный whitelist и HUD-имя; Flipendo направляет не-player `HPawn` в его исходный handler. Expelliarmus теперь не наносит урон: authority выставляет короткое окно disarm, owning client прекращает зарядку и возвращает wand animation в idle. Disarm очищается по таймеру, при смерти, respawn и начале нового матча.
 
 Сборка `20260924-223337-044`: `Success - 0 error(s), 273 warnings`. Двухклиентный dedicated-прогон `versus-host-20260924-223436-370-87e338` завершил 12 проверок `HPVersusMechanicsProbe` без `FAIL`, включая `expelliarmus-disarm-without-damage`. Оба участника были настоящими `Game.exe`; server process — `UCC.exe`.
+
+## Этап 2: Spongify transaction
+
+Добавлен `HPVersusSpongify`, который вызывает исходный `HandleSpellSpongify`, и сетевой наследник `SpongifyPad`. Адаптер остаётся в отдельном нейтральном state, поскольку унаследованный `stateDisabled.HandleSpellSpongify` имеет более высокий приоритет, чем global override. Authority активирует pad, выбирает target и использует исходный `ComputeTrajectoryByTime`; owning client получает ту же стартовую скорость для presentation/prediction, а сервер остаётся источником physics и конечного положения. Обычный Native movement код не менялся.
+
+Сборка `20260924-224242-182`: `Success - 0 error(s), 274 warnings`. Dedicated-прогон с двумя `Game.exe` `versus-host-20260924-224314-867-de51ab` завершил 14 проверок без `FAIL`. Дополнительные PASS: `spongify-authoritative-activation-and-bounce` и `death-clears-spongify`; весь прежний combat/pickup/respawn набор также прошёл.

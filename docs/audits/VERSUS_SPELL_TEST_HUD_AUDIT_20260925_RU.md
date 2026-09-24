@@ -69,11 +69,12 @@ Runtime-журнал после исправления подтверждает 
 
 ## Проверки
 
-- UnrealScript build `20260925-014441-810`: 0 errors, 276 warnings.
+- Финальный UnrealScript build `20260925-015021-346` для code commit
+  `4baef71f55d508264e8c28bbda7cc3ba8f13883a`: 0 errors, 276 warnings.
 - `HGame.u` SHA-256:
-  `3F87CFA156730C7F28EEAFC92C9C1D2F2832607A15D59CDCD06F3767CAE31233`.
+  `8C4733C6288930C914E707D4C2B8F2D2A06C1B77956D572F4C0E79C95593644E`.
 - `M212Share.u` SHA-256:
-  `2A366B19803F7B2E5762B8BBB2A9B1A839ABFD4F1E2B05E40A8A0DE5C969758E`.
+  `7AC8A98F9A902F70DA64FA3C81CF979D939687D7E7070C9FACA31CE5572087DA`.
 - Полный репозиторный набор: 54 PASS, 1 SKIP. SKIP относится только к
   невозможности создать тестовый symlink без Windows privilege;
   функциональный тест не падал.

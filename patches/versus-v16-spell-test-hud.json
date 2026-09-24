@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-spell-test-hud",
+  "description": "Preview a validated 0-5 spell slot immediately on the owning client; the server and wand retain both authoritative whitelist boundaries.",
+  "source_snapshot": "known-good Alt Free Look at 24259b4",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "26f79b46d92f3df240d3105e931887773eafe782babfb256edacfc293215467d",
+      "result_sha256": "d6b953152f9cca019020b724dca1a2dccbecf54627eae5b3d036011d862f846f",
+      "replacements": [
+        {
+          "old": "exec function VersusSelectSpell(byte NewSpellSlot)\n{\n    ServerSelectVersusSpell(NewSpellSlot);\n    ClientMessage(\"Versus spell slot requested: \" $ string(NewSpellSlot));\n}\n",
+          "new": "exec function VersusSelectSpell(byte NewSpellSlot)\n{\n    local HPVersusWand W;\n\n    // Immediate owner-local UI/charge preview. The server still maps the\n    // byte through GetVersusSpellClass and the wand repeats its class\n    // whitelist before an authoritative projectile can exist.\n    if (NewSpellSlot > 5)\n    {\n        ClientMessage(\"Unknown Versus spell slot: \" $ string(NewSpellSlot));\n        return;\n    }\n\n    SelectedVersusSpell = NewSpellSlot;\n    W = HPVersusWand(Weapon);\n    if (W != None)\n        W.ApplyVersusVisualSpell(NewSpellSlot);\n\n    ServerSelectVersusSpell(NewSpellSlot);\n    ClientMessage(\"Selected spell: \" $ GetVersusSpellName(NewSpellSlot));\n}\n",
+          "old_sha256": "abbc56dd7d65b439553c72c9bb9ceaa6eeddcf58cc1833c34a73b3fa8ce008f2",
+          "new_sha256": "826197ba9a6778fe02db86fcce59f402b1753227a59134ecbb353074457cd7e8"
+        }
+      ]
+    }
+  ]
+}

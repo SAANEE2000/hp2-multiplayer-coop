@@ -3,19 +3,214 @@
 class HPVersusHUD extends HPHud;
 
 var bool bShowVersusScores;
+var bool bVersusHUDTextureLoadAttempted;
+var Texture VersusWhiteTexture;
+var Texture VersusSpellIcons[6];
 
-simulated function DrawVersusText(Canvas C, float X, float Y, string Message)
+simulated event PostBeginPlay()
+{
+    Super.PostBeginPlay();
+    LoadVersusHUDTextures();
+}
+
+simulated function LoadVersusHUDTextures()
+{
+    if (bVersusHUDTextureLoadAttempted)
+        return;
+    bVersusHUDTextureLoadAttempted = True;
+
+    if (VersusWhiteTexture == None)
+        VersusWhiteTexture = Texture(DynamicLoadObject(
+            "UWindow.WhiteTexture", Class'Texture'));
+
+    // Reuse HP2 assets. The duel icons cover the first three spells; the
+    // stock spell-shape textures cover the three adventure interactions.
+    if (VersusSpellIcons[0] == None)
+        VersusSpellIcons[0] = Texture(DynamicLoadObject(
+            "HP2_Menu.Icons.HP2SpellRictusempraSelect", Class'Texture'));
+    if (VersusSpellIcons[1] == None)
+        VersusSpellIcons[1] = Texture(DynamicLoadObject(
+            "HP2_Menu.Icons.HP2SpellMimblewimbleSelect", Class'Texture'));
+    if (VersusSpellIcons[2] == None)
+        VersusSpellIcons[2] = Texture(DynamicLoadObject(
+            "HP2_Menu.Icons.HP2SpellExpelliarmusSelect", Class'Texture'));
+    if (VersusSpellIcons[3] == None)
+        VersusSpellIcons[3] = Texture(DynamicLoadObject(
+            "SpellShapes.SpellFX.FlipendoWet1", Class'Texture'));
+    if (VersusSpellIcons[4] == None)
+        VersusSpellIcons[4] = Texture(DynamicLoadObject(
+            "SpellShapes.SpellFX.AlohomoraWet1", Class'Texture'));
+    if (VersusSpellIcons[5] == None)
+        VersusSpellIcons[5] = Texture(DynamicLoadObject(
+            "SpellShapes.SpellFX.SpongifyWet1", Class'Texture'));
+}
+
+simulated function DrawSolidRect(Canvas C, float X, float Y,
+    float W, float H, byte R, byte G, byte B)
+{
+    if (VersusWhiteTexture == None || W <= 0.0 || H <= 0.0)
+        return;
+
+    C.Style = 1;
+    C.DrawColor.R = R;
+    C.DrawColor.G = G;
+    C.DrawColor.B = B;
+    C.DrawColor.A = 255;
+    C.SetPos(X, Y);
+    C.DrawTile(VersusWhiteTexture, W, H, 0.0, 0.0,
+        VersusWhiteTexture.USize, VersusWhiteTexture.VSize);
+}
+
+simulated function DrawVersusTextTint(Canvas C, float X, float Y,
+    string Message, byte R, byte G, byte B)
 {
     C.DrawColor.R = 0;
     C.DrawColor.G = 0;
     C.DrawColor.B = 0;
     C.SetPos(X + 1, Y + 1);
     C.DrawText(Message, False);
-    C.DrawColor.R = 245;
-    C.DrawColor.G = 238;
-    C.DrawColor.B = 210;
+    C.DrawColor.R = R;
+    C.DrawColor.G = G;
+    C.DrawColor.B = B;
     C.SetPos(X, Y);
     C.DrawText(Message, False);
+}
+
+simulated function DrawVersusText(Canvas C, float X, float Y, string Message)
+{
+    DrawVersusTextTint(C, X, Y, Message, 245, 238, 210);
+}
+
+simulated function string FormatVersusSeconds(float Seconds)
+{
+    local int Hundredths;
+    local int Whole;
+    local int Fraction;
+    local string FractionText;
+
+    if (Seconds < 0.0)
+        Seconds = 0.0;
+    Hundredths = int(Seconds * 100.0 + 0.99);
+    Whole = Hundredths / 100;
+    Fraction = Hundredths - Whole * 100;
+    FractionText = string(Fraction);
+    if (Fraction < 10)
+        FractionText = "0" $ FractionText;
+    return string(Whole) $ "." $ FractionText;
+}
+
+simulated function DrawVersusSpellIcon(Canvas C, byte SpellSlot,
+    float X, float Y, float Size)
+{
+    local Texture Icon;
+
+    if (SpellSlot > 5)
+        return;
+    Icon = VersusSpellIcons[SpellSlot];
+    if (Icon == None)
+        return;
+
+    C.Style = 2;
+    C.DrawColor.R = 255;
+    C.DrawColor.G = 255;
+    C.DrawColor.B = 255;
+    C.DrawColor.A = 255;
+    C.SetPos(X, Y);
+    C.DrawTile(Icon, Size, Size, 0.0, 0.0, Icon.USize, Icon.VSize);
+}
+
+simulated function DrawVersusCombatPanel(Canvas C, HPVersusHarry H)
+{
+    local float Scale;
+    local float X;
+    local float Y;
+    local float W;
+    local float HealthFraction;
+    local float CooldownLeft;
+    local float LockLeft;
+    local float DisarmLeft;
+    local float SpeedLeft;
+    local string StatusText;
+    local string EffectText;
+    local byte StatusR;
+    local byte StatusG;
+    local byte StatusB;
+    local byte SpellSlot;
+
+    Scale = FClamp(C.SizeY / 720.0, 0.75, 1.50);
+    X = 18.0 * Scale;
+    Y = C.SizeY - 156.0 * Scale;
+    W = 342.0 * Scale;
+    SpellSlot = H.SelectedVersusSpell;
+
+    if (!bVersusHUDTextureLoadAttempted)
+        LoadVersusHUDTextures();
+
+    DrawSolidRect(C, X, Y, W, 138.0 * Scale, 19, 17, 28);
+    DrawSolidRect(C, X, Y, W, 2.0 * Scale, 126, 103, 177);
+
+    C.Font = C.SmallFont;
+    DrawVersusTextTint(C, X + 12.0 * Scale, Y + 8.0 * Scale,
+        "HP", 220, 205, 232);
+
+    HealthFraction = FClamp(float(H.Health) / 100.0, 0.0, 1.0);
+    DrawSolidRect(C, X + 12.0 * Scale, Y + 29.0 * Scale,
+        220.0 * Scale, 13.0 * Scale, 55, 44, 61);
+    DrawSolidRect(C, X + 14.0 * Scale, Y + 31.0 * Scale,
+        216.0 * Scale * HealthFraction, 9.0 * Scale, 173, 45, 57);
+    DrawVersusText(C, X + 242.0 * Scale, Y + 25.0 * Scale,
+        string(Clamp(H.Health, 0, 100)) $ " / 100");
+
+    DrawVersusTextTint(C, X + 12.0 * Scale, Y + 52.0 * Scale,
+        "SELECTED SPELL", 220, 205, 232);
+    DrawVersusSpellIcon(C, SpellSlot,
+        X + 12.0 * Scale, Y + 74.0 * Scale, 50.0 * Scale);
+
+    C.Font = C.MedFont;
+    DrawVersusText(C, X + 72.0 * Scale, Y + 72.0 * Scale,
+        Caps(H.GetVersusSpellName(SpellSlot)));
+
+    CooldownLeft = H.VersusCooldownEndTime - Level.TimeSeconds;
+    LockLeft = H.VersusSpellLockEndTime - Level.TimeSeconds;
+    DisarmLeft = H.VersusDisarmEndTime - Level.TimeSeconds;
+    StatusR = 116;
+    StatusG = 231;
+    StatusB = 141;
+    if (DisarmLeft > 0.0)
+    {
+        StatusText = "DISARMED " $ FormatVersusSeconds(DisarmLeft);
+        StatusR = 244;
+        StatusG = 111;
+        StatusB = 106;
+    }
+    else if (LockLeft > 0.0)
+    {
+        StatusText = "MUTED " $ FormatVersusSeconds(LockLeft);
+        StatusR = 219;
+        StatusG = 150;
+        StatusB = 244;
+    }
+    else if (CooldownLeft > 0.0)
+    {
+        StatusText = "COOLDOWN " $ FormatVersusSeconds(CooldownLeft);
+        StatusR = 245;
+        StatusG = 190;
+        StatusB = 88;
+    }
+    else
+        StatusText = "READY";
+
+    C.Font = C.SmallFont;
+    DrawVersusTextTint(C, X + 72.0 * Scale, Y + 98.0 * Scale,
+        StatusText, StatusR, StatusG, StatusB);
+
+    SpeedLeft = H.VersusSpeedBoostEndTime - Level.TimeSeconds;
+    if (H.VersusSpeedMultiplier > 1.01 && SpeedLeft > 0.0)
+        EffectText = "SPEED x" $ string(H.VersusSpeedMultiplier)
+            $ "  " $ string(int(SpeedLeft + 0.99)) $ "s";
+    if (EffectText != "")
+        DrawVersusTextTint(C, X + 72.0 * Scale, Y + 117.0 * Scale,
+            EffectText, 109, 205, 255);
 }
 
 simulated function int GetSortedPlayers(out HPVersusPRI Rows[8])
@@ -52,10 +247,10 @@ simulated function PostRender(Canvas C)
     local HPVersusGRI G;
     local Font SavedFont;
     local Color SavedColor;
+    local int SavedStyle;
     local string PhaseText;
-    local string CombatText;
     local int Count, I;
-    local float X, Y, SpeedLeft, LockLeft, DisarmLeft;
+    local float X, Y;
 
     Super.PostRender(C);
     if (bHideHud)
@@ -64,83 +259,67 @@ simulated function PostRender(Canvas C)
     H = HPVersusHarry(Owner);
     if (H == None)
         return;
-    OwnPRI = HPVersusPRI(H.PlayerReplicationInfo);
-    G = HPVersusGRI(H.GameReplicationInfo);
-    if (G == None || OwnPRI == None)
-        return;
 
     SavedFont = C.Font;
     SavedColor = C.DrawColor;
-    C.Font = C.MedFont;
-    X = 20;
-    Y = 22;
-    DrawVersusText(C, X, Y, "HP " $ H.Health $ "/100   Frags " $ OwnPRI.RoundScore
-        $ "/" $ G.ScoreLimit $ "   Deaths " $ int(OwnPRI.Deaths));
+    SavedStyle = C.Style;
+    DrawVersusCombatPanel(C, H);
 
-    CombatText = "[" $ string(int(H.SelectedVersusSpell) + 1) $ "] "
-        $ H.GetVersusSpellName(H.SelectedVersusSpell);
-    LockLeft = H.VersusSpellLockEndTime - Level.TimeSeconds;
-    DisarmLeft = H.VersusDisarmEndTime - Level.TimeSeconds;
-    if (DisarmLeft > 0.0)
-        CombatText = CombatText $ "   DISARMED "
-            $ string(int(DisarmLeft + 0.99)) $ "s";
-    else if (LockLeft > 0.0)
-        CombatText = CombatText $ "   MUTED " $ string(int(LockLeft + 0.99)) $ "s";
-    else if (H.VersusCooldownEndTime > Level.TimeSeconds)
-        CombatText = CombatText $ "   COOLDOWN";
-    else
-        CombatText = CombatText $ "   READY";
-    SpeedLeft = H.VersusSpeedBoostEndTime - Level.TimeSeconds;
-    if (H.VersusSpeedMultiplier > 1.01 && SpeedLeft > 0.0)
-        CombatText = CombatText $ "   SPEED x" $ string(H.VersusSpeedMultiplier)
-            $ " " $ string(int(SpeedLeft + 0.99)) $ "s";
-    DrawVersusText(C, X, Y + 22, CombatText);
-
-    if (G.MatchState == 'WaitingForPlayers')
-        PhaseText = "Waiting for players";
-    else if (G.MatchState == 'Countdown')
-        PhaseText = "Match starts in " $ G.RoundTimer;
-    else if (G.MatchState == 'MatchOver')
-        PhaseText = "Winner: " $ G.WinnerName $ "   Next match in " $ G.RoundTimer;
-    else
-        PhaseText = "Free-for-all in progress";
-
-    if (H.bVersusDead && G.MatchState != 'MatchOver')
-    {
-        if (H.VersusRespawnSeconds > 0)
-            PhaseText = "Respawn in " $ H.VersusRespawnSeconds;
-        else
-            PhaseText = "Waiting for a free spawn";
-    }
-    DrawVersusText(C, X, Y + 44, PhaseText);
-
-    Count = GetSortedPlayers(Rows);
-    if (Count > 0 && G.MatchState == 'InProgress')
-        DrawVersusText(C, X, Y + 66, "Leader: " $ Rows[0].PlayerName
-            $ " (" $ Rows[0].RoundScore $ ")   F3: scores");
-    else
-        DrawVersusText(C, X, Y + 66, "F3: scores");
-
-    if (bShowVersusScores || G.MatchState == 'MatchOver')
+    OwnPRI = HPVersusPRI(H.PlayerReplicationInfo);
+    G = HPVersusGRI(H.GameReplicationInfo);
+    if (G != None && OwnPRI != None)
     {
         C.Font = C.SmallFont;
-        X = C.SizeX * 0.12;
-        Y = C.SizeY * 0.18;
-        DrawVersusText(C, X, Y, "FREE FOR ALL   " $ Count $ "/8");
-        Y += 25;
-        DrawVersusText(C, X, Y, "NAME");
-        DrawVersusText(C, X + 175, Y, "CHARACTER");
-        DrawVersusText(C, X + 325, Y, "FRAGS");
-        DrawVersusText(C, X + 405, Y, "DEATHS");
-        for (I = 0; I < Count; I++)
+        if (G.MatchState == 'WaitingForPlayers')
+            PhaseText = "WAITING FOR PLAYERS";
+        else if (G.MatchState == 'Countdown')
+            PhaseText = "MATCH STARTS IN " $ G.RoundTimer;
+        else if (G.MatchState == 'MatchOver')
+            PhaseText = "WINNER: " $ G.WinnerName
+                $ "   NEXT MATCH IN " $ G.RoundTimer;
+        else if (H.bVersusDead)
         {
-            Y += 22;
-            DrawVersusText(C, X, Y, Rows[I].PlayerName);
-            DrawVersusText(C, X + 175, Y, Rows[I].SelectedCharacter);
-            DrawVersusText(C, X + 325, Y, string(Rows[I].RoundScore));
-            DrawVersusText(C, X + 405, Y, string(int(Rows[I].Deaths)));
+            if (H.VersusRespawnSeconds > 0)
+                PhaseText = "RESPAWN IN " $ H.VersusRespawnSeconds;
+            else
+                PhaseText = "WAITING FOR A FREE SPAWN";
+        }
+        else
+            PhaseText = "FFA   FRAGS " $ OwnPRI.RoundScore $ "/"
+                $ G.ScoreLimit $ "   DEATHS " $ int(OwnPRI.Deaths);
+
+        DrawVersusText(C, 20, 20, PhaseText);
+        Count = GetSortedPlayers(Rows);
+        if (Count > 0 && G.MatchState == 'InProgress')
+            DrawVersusText(C, 20, 40, "LEADER " $ Rows[0].PlayerName
+                $ " (" $ Rows[0].RoundScore $ ")   F3 SCORES");
+        else
+            DrawVersusText(C, 20, 40, "F3 SCORES");
+
+        // Preserve the accepted scoreboard layout and F3 behaviour.
+        if (bShowVersusScores || G.MatchState == 'MatchOver')
+        {
+            C.Font = C.SmallFont;
+            X = C.SizeX * 0.12;
+            Y = C.SizeY * 0.18;
+            DrawVersusText(C, X, Y, "FREE FOR ALL   " $ Count $ "/8");
+            Y += 25;
+            DrawVersusText(C, X, Y, "NAME");
+            DrawVersusText(C, X + 175, Y, "CHARACTER");
+            DrawVersusText(C, X + 325, Y, "FRAGS");
+            DrawVersusText(C, X + 405, Y, "DEATHS");
+            for (I = 0; I < Count; I++)
+            {
+                Y += 22;
+                DrawVersusText(C, X, Y, Rows[I].PlayerName);
+                DrawVersusText(C, X + 175, Y, Rows[I].SelectedCharacter);
+                DrawVersusText(C, X + 325, Y, string(Rows[I].RoundScore));
+                DrawVersusText(C, X + 405, Y, string(int(Rows[I].Deaths)));
+            }
         }
     }
+
     C.Font = SavedFont;
     C.DrawColor = SavedColor;
+    C.Style = SavedStyle;
 }

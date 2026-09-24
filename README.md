@@ -34,3 +34,5 @@ closing the local client stops its matching server. This avoids the cutscene
 camera-capture failure observed when the earlier menu used a listen server.
 See `docs/VERSUS_V16_QUICKSTART.md` for the arena, 2–8 player setup and
 the exact tests completed so far.
+For the isolated six-spell interaction arena, Numpad selector, HUD states and
+the two-client manual checklist, see `docs/VERSUS_SPELL_TEST_QUICKSTART.md`.

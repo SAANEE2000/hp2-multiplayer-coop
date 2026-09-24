@@ -386,11 +386,16 @@ if ($Mode -eq 'Coop') {
     }
 } elseif (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json')) {
     # The supplied v16 DefUser.ini combines the direct buttons with native
-    # MoveForward/StrafeLeft/etc. Keep them and add only the score-table key.
+    # MoveForward/StrafeLeft/etc. Keep them. Numpad 1-6 are an isolated
+    # temporary spell-test selector; the main keyboard number row retains its
+    # stock duel bindings.
     # Alt is handled by HPConsole.KeyEvent because M212 clears unknown aliases
     # from the generated user profile during startup.
     $bindings = [ordered]@{
-        F3='VersusScores'
+        F3='VersusScores';
+        NumPad1='VersusSpell1'; NumPad2='VersusSpell2';
+        NumPad3='VersusSpell3'; NumPad4='VersusSpell4';
+        NumPad5='VersusSpell5'; NumPad6='VersusSpell6'
     }
 } else {
     # v18's proven direct bridge consumes these buttons. Do not add a second axis.

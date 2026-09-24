@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-character-audit",
+  "description": "Run the complete character-profile structural audit only after the explicit two-client mechanics/world probe.",
+  "source_snapshot": "interaction arena at c86a080",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "cf8ddb9a8d0c476b0ecde7520813b1f93a7d82ef102ed2238720b3ca57c794c5",
+      "result_sha256": "57242822177f89fddf2664fd60912c5c88127f0f1da27aad24f78a303c2186d7",
+      "replacements": [
+        {
+          "old": "var HPVersusInteractionArena VersusInteractionArena;\n\nfunction InitGame",
+          "new": "var HPVersusInteractionArena VersusInteractionArena;\nvar bool bVersusCharacterAuditComplete;\n\nfunction InitGame",
+          "old_sha256": "1371bb3a863331a8eb1ac28354f2c0d2b67c771a08292ca7bf8a65b91b015cea",
+          "new_sha256": "176a393f6bc3c8ec4ca34c1c7c5746780d59466df498f36cce9641e24a66a442"
+        },
+        {
+          "old": "function Timer()\n{",
+          "new": "function RunVersusCharacterAuditProbe()\n{\n    local HPVersusHarry A;\n    local HPVersusHarry B;\n    local HPVersusCharacterAudit Audit;\n\n    if (!bVersusMechanicsProbe || !bVersusMechanicsProbeComplete\n        || bVersusCharacterAuditComplete)\n        return;\n    if (VersusInteractionArena != None\n        && !VersusInteractionArena.bWorldProbeComplete)\n        return;\n    if (!GetVersusProbePlayers(A, B))\n        return;\n\n    Audit = Spawn(Class'HPVersusCharacterAudit');\n    if (Audit == None)\n    {\n        Log(\"HPVersusCharacterAudit BLOCKED reason=spawn-failed\");\n        bVersusCharacterAuditComplete = True;\n        return;\n    }\n\n    Audit.RunAudit(A);\n    Audit.Destroy();\n    bVersusCharacterAuditComplete = True;\n}\n\nfunction Timer()\n{",
+          "old_sha256": "573accf3cb5ed165b78f5098dc758891a3b62c00813828ac83eeef669f64f55c",
+          "new_sha256": "020d9b55a11faa0198636efa835ecede8ecad6da12af853270de3acf02f05ec2"
+        },
+        {
+          "old": "        VersusInteractionArena.RunWorldProbe(ProbeA, ProbeB);\n}",
+          "new": "        VersusInteractionArena.RunWorldProbe(ProbeA, ProbeB);\n    RunVersusCharacterAuditProbe();\n}",
+          "old_sha256": "a9bb0c02bb609fe6417faaecd4e85511365dc02afd7ac42f03a10924d8524e82",
+          "new_sha256": "32b6d6abcaccc159e2d0b96c535519a1f7bafd5a67ff2d59efeb9d19d1fe4e7c"
+        }
+      ]
+    }
+  ]
+}

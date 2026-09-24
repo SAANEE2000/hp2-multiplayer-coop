@@ -8,7 +8,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$')][string]$Server = '127.0.0.1',
     [ValidateRange(1024,65532)][int]$Port = 7777,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$')][string]$PlayerName = 'Harry',
-    [ValidateSet('Harry','Ron','Hermione')][string]$Character = 'Harry',
+    [ValidatePattern('^[A-Za-z][A-Za-z0-9]{0,39}$')][string]$Character = 'Harry',
     [ValidateRange(2,8)][int]$MaxPlayers = 2,
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
     [ValidateRange(-32768,32767)][int]$WindowX = 20,

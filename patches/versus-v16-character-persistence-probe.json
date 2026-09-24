@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-character-persistence-probe",
+  "description": "Verify selected profiles and meshes survive death, respawn and a new match in the explicit mechanics probe.",
+  "source_snapshot": "character audit layer",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "57242822177f89fddf2664fd60912c5c88127f0f1da27aad24f78a303c2186d7",
+      "result_sha256": "d13cdff9466c8e587a2158ac46074be58f357612c9aea01cfec4eb655b3bb29d",
+      "replacements": [
+        {
+          "old": "var bool bVersusCharacterAuditComplete;\n\nfunction InitGame",
+          "new": "var bool bVersusCharacterAuditComplete;\nvar string VersusProbeCharacterA;\nvar string VersusProbeCharacterB;\n\nfunction InitGame",
+          "old_sha256": "b4029c3bb740f5778896397384377c047da67b80c6c2cb08d19352e62022ee24",
+          "new_sha256": "77652d0c71f7dc8bdb5ff4fe42d626793c18d175da43ce86dc8bb9e70a0238b6"
+        },
+        {
+          "old": "    local Vector ProbeLocation;\n    local float RemainingCooldown;",
+          "new": "    local Vector ProbeLocation;\n    local float RemainingCooldown;\n    local HPVersusPRI ProbeAPRI;\n    local HPVersusPRI ProbeBPRI;",
+          "old_sha256": "501489e98daed012da9e746e4ddea77e7599764e21d694d6c586ecde37860532",
+          "new_sha256": "8aaa631a9932c5226c068900fdc02ba702f80ed4c5b452ac7b7dce79fd6e4c9e"
+        },
+        {
+          "old": "        Log(\"HPVersusMechanicsProbe START A=\" $ string(A) $ \" B=\" $ string(B));\n        A.ServerSelectVersusSpell(1);",
+          "new": "        Log(\"HPVersusMechanicsProbe START A=\" $ string(A) $ \" B=\" $ string(B));\n        ProbeAPRI = HPVersusPRI(A.PlayerReplicationInfo);\n        ProbeBPRI = HPVersusPRI(B.PlayerReplicationInfo);\n        if (ProbeAPRI != None)\n            VersusProbeCharacterA = ProbeAPRI.SelectedCharacter;\n        if (ProbeBPRI != None)\n            VersusProbeCharacterB = ProbeBPRI.SelectedCharacter;\n        A.ServerSelectVersusSpell(1);",
+          "old_sha256": "f969f226624883b95743863b22161854a61862adf3b015a83300c64d97048eb0",
+          "new_sha256": "1646d46de2ab8097735f46a4d84e833757a93eed5c2f6e569fe9641f6c58bd96"
+        },
+        {
+          "old": "    VersusProbeResult(!A.bVersusDead && A.Health == 100\n        && !A.IsVersusSpeedBoosted(), \"respawn-restores-clean-state\");\n    B.ApplyVersusSpeedBoost(1.5, 10.0);",
+          "new": "    VersusProbeResult(!A.bVersusDead && A.Health == 100\n        && !A.IsVersusSpeedBoosted(), \"respawn-restores-clean-state\");\n    ProbeAPRI = HPVersusPRI(A.PlayerReplicationInfo);\n    ProbeBPRI = HPVersusPRI(B.PlayerReplicationInfo);\n    VersusProbeResult(ProbeAPRI != None && ProbeBPRI != None\n        && ProbeAPRI.SelectedCharacter ~= VersusProbeCharacterA\n        && ProbeBPRI.SelectedCharacter ~= VersusProbeCharacterB\n        && A.Mesh == class'HPVersusCharacterProfiles'.static.GetMesh(\n            VersusProbeCharacterA)\n        && B.Mesh == class'HPVersusCharacterProfiles'.static.GetMesh(\n            VersusProbeCharacterB),\n        \"character-profile-survives-respawn\");\n    B.ApplyVersusSpeedBoost(1.5, 10.0);",
+          "old_sha256": "23dd907890572f797a60fa3dc4c5efdd8386b131330f6a071306e1fc5171d55e",
+          "new_sha256": "1e3a859e30d5c2471981574e5b31718ce182462367f986e029e512c6afe29d68"
+        },
+        {
+          "old": "    VersusProbeResult(!B.IsVersusSpeedBoosted() && B.Health == 100,\n        \"new-match-clears-speed\");",
+          "new": "    VersusProbeResult(!B.IsVersusSpeedBoosted() && B.Health == 100,\n        \"new-match-clears-speed\");\n    VersusProbeResult(ProbeAPRI.SelectedCharacter ~= VersusProbeCharacterA\n        && ProbeBPRI.SelectedCharacter ~= VersusProbeCharacterB\n        && A.Mesh == class'HPVersusCharacterProfiles'.static.GetMesh(\n            VersusProbeCharacterA)\n        && B.Mesh == class'HPVersusCharacterProfiles'.static.GetMesh(\n            VersusProbeCharacterB),\n        \"character-profile-survives-new-match\");",
+          "old_sha256": "d606dd0c33716923d8809f4e353cad077e7af10d1499bcbeb5dc5af8cab5f38c",
+          "new_sha256": "e61c582efe887d35d761f2b5c1e21bcc9ed4eec9629763f631b2368b22e31cbe"
+        }
+      ]
+    }
+  ]
+}

@@ -55,3 +55,50 @@
 - `spongify-next-native-movement-ready`.
 
 Серверный журнал подтверждает вход обоих клиентов и authoritative state transitions. В этом прогоне M212 не создал доступные отдельные client engine logs (`client-stdout.log` остался пустым), поэтому визуальное подтверждение remote-proxy в отчёте не подменяется автоматическим утверждением: оно остаётся пунктом ручного визуального прогона. Серверная репликация, endpoint и отсутствие регрессии Native movement проверены автоматически.
+
+## Этап 4: централизованные character profiles
+
+Добавлен `HPVersusCharacterProfiles`: один табличный registry содержит `Id`, display/group, mesh, DrawScale, animation strategy, cloak strategy, wand bone, visual offset, прозрачность, generic-student skins, selectable-флаг и статус аудита. `HPVersusPRI.SetSelectedCharacter` валидирует Id через registry; `HPVersusHarry.ApplyCharacterSkin` больше не содержит цепочку специальных веток. Все варианты остаются `HPVersusHarry`, получают `skHarryAnims` только как presentation animation set и сохраняют единую gameplay-капсулу `15x42`, 100 HP, скорость, прыжок, damage и cooldown.
+
+NPC AI-классы, ghost physics/no-collision и HagridPlayer не используются. Myrtle/Nick сохраняют только косметическую прозрачность; collision и hit registration остаются обычными PvP. Generic Gryffindor/Slytherin используют штатные duel meshes и stock texture sets.
+
+### Матрица совместимости
+
+Автопроверка для каждого профиля проверяет spawn/mesh, `Bip01 R Hand`, общую капсулу, idle, run, runback, strafe L/R, jump, fall, land, cast/aim и `faint` death. Stock `harry.PlayHit()` пустой, поэтому выдуманная обязательная последовательность `hit` не используется: получение урона проверяется общим combat probe, смерть — `faint`.
+
+| Группа | Профиль | Статус | Результат |
+|---|---|---|---|
+| Gryffindor | Harry | PASS | Контрольный stock mesh |
+| Gryffindor | Ron | PASS | Player mesh + Harry body set + male cloak channels |
+| Gryffindor | Hermione | PASS | Player mesh + Harry body set + female cloak channels |
+| Gryffindor | Ginny | PASS | Полный набор, wand bone 54, female cloak roots 89/120 |
+| Gryffindor | Fred, George, Percy, Oliver Wood | NEEDS EXTRA CHANNEL | Тело/cast/death/wand работают; совместимых `~Cloak01/02` нет |
+| Gryffindor | Generic student M/F | PASS | Полный набор, stock duel mesh/skins и generic cloak channels |
+| Slytherin | Draco, Crabbe | PASS | Полный набор и male cloak roots 78/109 |
+| Slytherin | Goyle, Prefect, Tom Riddle | NEEDS EXTRA CHANNEL | Тело/cast/death/wand работают; отдельная мантия не подтверждена |
+| Slytherin | Generic student M/F | PASS | Полный набор, stock duel mesh/skins и generic cloak channels |
+| Adults | Snape, Lockhart, Dumbledore, McGonagall, Lucius | NEEDS EXTRA CHANNEL | Основной humanoid rig, wand и полный body set проходят; robe channel отсутствует |
+| Adults | Hagrid | NEEDS VISUAL FIX | Полный body set, wand bone 55, stock DrawScale 1.25 и общая capsule; нужен ручной camera/floor/wand кадр |
+| Fun | Dobby | NEEDS VISUAL FIX | Полный body set, wand bone 74 и общая capsule; нужен ручной кадр малого mesh |
+| Fun | Moaning Myrtle, Nearly Headless Nick | NEEDS VISUAL FIX | Полный body set, wand и обычная PvP collision; прозрачность косметическая, нужен remote-render кадр |
+| Fun | Bloody Baron | BLOCKED | В mesh нет стандартной humanoid-ветки: не найдены hand, forearm, finger, spine или их проверенные варианты; выбор отключён |
+
+`NEEDS EXTRA CHANNEL` профили остаются выбираемыми: движение, бой и смерть у них доказаны, ограничение относится только к независимому движению части мантии/одежды. `NEEDS VISUAL FIX` также оставлены в меню для теста, но не объявлены визуально законченными.
+
+### Меню и persistence
+
+Меню выбора теперь двухступенчатое: `Гриффиндор / Слизерин / Взрослые / Особые` → character. Одинаковые профили не запрещены. Bloody Baron виден как `BLOCKED`, но его кнопка отключена. Profile Id передаётся в join URL, проверяется сервером, реплицируется в PRI и уже используется F3 scoreboard.
+
+`Show-MenuTest.ps1 -SelfTest` проходит навигацию, расширенный выбор Snape и проверяет, что Bloody Baron нельзя нажать. Два новых mechanics checks подтвердили сохранение Id и mesh после death/respawn и нового матча.
+
+### Финальная автоматическая проверка этапа
+
+Сборка `20260924-232803-901`: `Success - 0 error(s), 276 warnings`. Финальный dedicated-прогон `versus-host-20260924-232841-094-b4e464` использовал два настоящих `Game.exe` (`PersistHagrid` и `PersistDobby`) и завершился без `FAIL`:
+
+- 16/16 combat/pickup/death/respawn/match/profile-persistence checks;
+- 7/7 Alohomora/Flipendo/Spongify world checks; Spongify endpoint delta `0.031860`;
+- 27/27 profile records: 10 `PASS`, 12 `NEEDS EXTRA CHANNEL`, 4 `NEEDS VISUAL FIX`, 1 `BLOCKED`.
+
+Отдельный шестиклиентный запуск `versus-host-20260924-231612-680-5dbbda` подтвердил реальные подключения Snape, Hagrid, Dobby и Moaning Myrtle наряду с двумя контрольными клиентами; у каждого сервер увидел правильный mesh, полный набор animations, wand bone и capsule `15x42`.
+
+Инструмент Windows Computer Use дважды вернул пустой список приложений, хотя четыре `Game.exe` отвечали и имели ненулевые window handles. Поэтому я не выдаю структурный server audit за визуальное подтверждение. Ручной визуальный checklist остаётся для Hagrid/Dobby/ghosts и для одежных каналов со статусом `NEEDS`; это конкретное ограничение текущего прогона, а не скрытый PASS.

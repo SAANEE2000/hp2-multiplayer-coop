@@ -2,7 +2,7 @@
 param(
     [switch]$RenderPreview,
     [switch]$SelfTest,
-    [ValidateSet('Main','Coop','Versus','VersusCharacters','CoopStart','CoopLevels','CoopLoad','CoopHost','CoopJoin','VersusHost','VersusJoin')]
+    [ValidateSet('Main','Coop','Versus','VersusCharacterGroups','VersusCharacters','CoopStart','CoopLevels','CoopLoad','CoopHost','CoopJoin','VersusHost','VersusJoin')]
     [string]$PreviewPage = 'Main'
 )
 $ErrorActionPreference = 'Stop'
@@ -14,6 +14,63 @@ $repo = Split-Path $PSScriptRoot -Parent
 $script:versusProfilePath = Join-Path $repo '.local\versus-menu-player.json'
 $script:versusName = 'Harry'
 $script:versusCharacter = 'Harry'
+$script:versusCharacterGroup = 'Gryffindor'
+$script:versusCharacterProfiles = [ordered]@{
+    Gryffindor = @(
+        [pscustomobject]@{Id='Harry'; Label='Гарри'; Enabled=$true},
+        [pscustomobject]@{Id='Ron'; Label='Рон'; Enabled=$true},
+        [pscustomobject]@{Id='Hermione'; Label='Гермиона'; Enabled=$true},
+        [pscustomobject]@{Id='Ginny'; Label='Джинни'; Enabled=$true},
+        [pscustomobject]@{Id='Fred'; Label='Фред'; Enabled=$true},
+        [pscustomobject]@{Id='George'; Label='Джордж'; Enabled=$true},
+        [pscustomobject]@{Id='Percy'; Label='Перси'; Enabled=$true},
+        [pscustomobject]@{Id='OliverWood'; Label='Оливер Вуд'; Enabled=$true},
+        [pscustomobject]@{Id='GryffindorStudentM'; Label='Ученик Гриффиндора'; Enabled=$true},
+        [pscustomobject]@{Id='GryffindorStudentF'; Label='Ученица Гриффиндора'; Enabled=$true}
+    )
+    Slytherin = @(
+        [pscustomobject]@{Id='Draco'; Label='Драко'; Enabled=$true},
+        [pscustomobject]@{Id='Crabbe'; Label='Крэбб'; Enabled=$true},
+        [pscustomobject]@{Id='Goyle'; Label='Гойл'; Enabled=$true},
+        [pscustomobject]@{Id='SlytherinPrefect'; Label='Староста Слизерина'; Enabled=$true},
+        [pscustomobject]@{Id='TomRiddle'; Label='Том Реддл'; Enabled=$true},
+        [pscustomobject]@{Id='SlytherinStudentM'; Label='Ученик Слизерина'; Enabled=$true},
+        [pscustomobject]@{Id='SlytherinStudentF'; Label='Ученица Слизерина'; Enabled=$true}
+    )
+    Adults = @(
+        [pscustomobject]@{Id='Snape'; Label='Снейп'; Enabled=$true},
+        [pscustomobject]@{Id='Lockhart'; Label='Локхарт'; Enabled=$true},
+        [pscustomobject]@{Id='Dumbledore'; Label='Дамблдор'; Enabled=$true},
+        [pscustomobject]@{Id='McGonagall'; Label='Макгонагалл'; Enabled=$true},
+        [pscustomobject]@{Id='Hagrid'; Label='Хагрид'; Enabled=$true},
+        [pscustomobject]@{Id='Lucius'; Label='Люциус Малфой'; Enabled=$true}
+    )
+    Fun = @(
+        [pscustomobject]@{Id='Dobby'; Label='Добби'; Enabled=$true},
+        [pscustomobject]@{Id='MoaningMyrtle'; Label='Плакса Миртл'; Enabled=$true},
+        [pscustomobject]@{Id='NearlyHeadlessNick'; Label='Почти Безголовый Ник'; Enabled=$true},
+        [pscustomobject]@{Id='BloodyBaron'; Label='Кровавый Барон — BLOCKED'; Enabled=$false}
+    )
+}
+function Get-VersusCharacterProfile([string]$Id) {
+    foreach ($group in $script:versusCharacterProfiles.Keys) {
+        foreach ($profile in @($script:versusCharacterProfiles[$group])) {
+            if ($profile.Id -ceq $Id) { return $profile }
+        }
+    }
+    return $null
+}
+function Get-VersusCharacterLabel([string]$Id) {
+    $profile = Get-VersusCharacterProfile $Id
+    if ($profile) { return $profile.Label }
+    return 'Гарри'
+}
+function Get-VersusCharacterGroup([string]$Id) {
+    foreach ($group in $script:versusCharacterProfiles.Keys) {
+        if (@($script:versusCharacterProfiles[$group].Id) -ccontains $Id) { return $group }
+    }
+    return 'Gryffindor'
+}
 $script:versusHostWindowX = 20
 $script:versusHostWindowY = 40
 $script:versusHostWindowWidth = 800
@@ -26,7 +83,11 @@ if (Test-Path -LiteralPath $script:versusProfilePath) {
     try {
         $savedProfile = Get-Content -LiteralPath $script:versusProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($savedProfile.name -match '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') { $script:versusName = $savedProfile.name }
-        if ($savedProfile.character -in @('Harry','Ron','Hermione')) { $script:versusCharacter = $savedProfile.character }
+        $savedCharacter = Get-VersusCharacterProfile ([string]$savedProfile.character)
+        if ($savedCharacter -and $savedCharacter.Enabled) {
+            $script:versusCharacter = $savedCharacter.Id
+            $script:versusCharacterGroup = Get-VersusCharacterGroup $savedCharacter.Id
+        }
         foreach ($setting in @('hostWindowX','hostWindowY','joinWindowX','joinWindowY')) {
             $value = 0
             if ([int]::TryParse([string]$savedProfile.$setting, [ref]$value) -and
@@ -112,6 +173,18 @@ function Add-MenuButton {
     $button.Add_MouseLeave({ $this.BackgroundImage = $script:buttonUp })
     $button.Add_Click($OnClick)
     $script:form.Controls.Add($button)
+    return $button
+}
+
+function Add-MenuCompactButton {
+    param([string]$Caption, [int]$Left, [int]$Top, [scriptblock]$OnClick,
+        [bool]$Enabled = $true)
+    $button = Add-MenuButton $Caption $Top $OnClick
+    $button.Location = New-Object System.Drawing.Point($Left, $Top)
+    $button.Size = New-Object System.Drawing.Size(250, 49)
+    $button.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+    $button.Enabled = $Enabled
+    if (!$Enabled) { $button.ForeColor = [System.Drawing.Color]::Gray }
     return $button
 }
 
@@ -266,32 +339,66 @@ function Show-ModeMenu {
         [void](Add-MenuLabel 'Кооперативная кампания пока экспериментальная.' 668 30 10)
     } else {
         $script:nameBox = Add-MenuInput 'Имя игрока' $script:versusName 333 300
-        [void](Add-MenuLabel ("Персонаж: " + $(switch ($script:versusCharacter) {
-            Ron { 'Рон' }; Hermione { 'Гермиона' }; default { 'Гарри' }
-        })) 372 27 11)
-        [void](Add-MenuButton 'Выбрать персонажа' 400 { Remember-VersusName; Show-VersusCharacters })
+        [void](Add-MenuLabel ("Персонаж: " + (Get-VersusCharacterLabel $script:versusCharacter)) 372 27 11)
+        [void](Add-MenuButton 'Выбрать персонажа' 400 { Remember-VersusName; Show-VersusCharacterGroups })
         [void](Add-MenuButton 'Создать сервер' 478 { Remember-VersusName; Show-HostMenu })
         [void](Add-MenuButton 'Подключиться' 556 { Remember-VersusName; Show-JoinMenu })
         [void](Add-MenuButton 'Назад' 634 { Remember-VersusName; Show-MainMenu })
     }
 }
 
+function Show-VersusCharacterGroups {
+    Clear-MenuPage
+    $script:page = 'VersusCharacterGroups'
+    [void](Add-MenuLabel 'Группа персонажей' 271 38 18)
+    [void](Add-MenuLabel ("Выбран: " + (Get-VersusCharacterLabel $script:versusCharacter)) 309 25 11)
+    $labels = [ordered]@{
+        Gryffindor='Гриффиндор'; Slytherin='Слизерин'; Adults='Взрослые'; Fun='Особые'
+    }
+    $top = 342
+    foreach ($group in $labels.Keys) {
+        $button = Add-MenuButton $labels[$group] $top {
+            $script:versusCharacterGroup = [string]$this.Tag
+            Show-VersusCharacters $script:versusCharacterGroup
+        }
+        $button.Tag = $group
+        if ((Get-VersusCharacterGroup $script:versusCharacter) -eq $group) {
+            $button.ForeColor = [System.Drawing.Color]::Gold
+        }
+        $top += 68
+    }
+    [void](Add-MenuButton 'Назад' 623 { Show-ModeMenu 'Versus' })
+}
+
 function Show-VersusCharacters {
+    param([string]$Group = $script:versusCharacterGroup)
+    if (!$script:versusCharacterProfiles.Contains($Group)) { $Group = 'Gryffindor' }
+    $script:versusCharacterGroup = $Group
     Clear-MenuPage
     $script:page = 'VersusCharacters'
-    [void](Add-MenuLabel 'Выбор персонажа' 275 38 18)
-    [void](Add-MenuLabel ("Выбран: " + $(switch ($script:versusCharacter) {
-        Ron { 'Рон' }; Hermione { 'Гермиона' }; default { 'Гарри' }
-    })) 314 25 11)
-    $harryButton = Add-MenuButton 'Гарри' 349 { $script:versusCharacter='Harry'; Save-VersusProfile; Show-ModeMenu 'Versus' }
-    $ronButton = Add-MenuButton 'Рон' 428 { $script:versusCharacter='Ron'; Save-VersusProfile; Show-ModeMenu 'Versus' }
-    $hermioneButton = Add-MenuButton 'Гермиона' 507 { $script:versusCharacter='Hermione'; Save-VersusProfile; Show-ModeMenu 'Versus' }
-    switch ($script:versusCharacter) {
-        Ron { $ronButton.ForeColor = [System.Drawing.Color]::Gold }
-        Hermione { $hermioneButton.ForeColor = [System.Drawing.Color]::Gold }
-        default { $harryButton.ForeColor = [System.Drawing.Color]::Gold }
+    $groupLabel = switch ($Group) {
+        Gryffindor { 'Гриффиндор' }; Slytherin { 'Слизерин' }
+        Adults { 'Взрослые' }; default { 'Особые' }
     }
-    [void](Add-MenuButton 'Назад' 617 { Show-ModeMenu 'Versus' })
+    [void](Add-MenuLabel ("Персонажи: " + $groupLabel) 271 38 17)
+    [void](Add-MenuLabel ("Выбран: " + (Get-VersusCharacterLabel $script:versusCharacter)) 309 25 10)
+    $profiles = @($script:versusCharacterProfiles[$Group])
+    for ($i = 0; $i -lt $profiles.Count; $i++) {
+        $profile = $profiles[$i]
+        $left = if (($i % 2) -eq 0) { 58 } else { 332 }
+        $top = 342 + ([int][Math]::Floor($i / 2) * 57)
+        $button = Add-MenuCompactButton $profile.Label $left $top {
+            $script:versusCharacter = [string]$this.Tag
+            $script:versusCharacterGroup = Get-VersusCharacterGroup $script:versusCharacter
+            Save-VersusProfile
+            Show-ModeMenu 'Versus'
+        } $profile.Enabled
+        $button.Tag = $profile.Id
+        if ($profile.Id -ceq $script:versusCharacter) {
+            $button.ForeColor = [System.Drawing.Color]::Gold
+        }
+    }
+    [void](Add-MenuButton 'К группам' 640 { Show-VersusCharacterGroups })
 }
 
 function Show-CoopStartMenu {
@@ -451,7 +558,8 @@ $script:form.Add_KeyDown({
     param($sender, $eventArgs)
     if ($eventArgs.KeyCode -ne [System.Windows.Forms.Keys]::Escape) { return }
     if ($script:page -eq 'Host' -and $script:currentMode -eq 'Coop') { Show-CoopStartMenu }
-    elseif ($script:page -eq 'VersusCharacters') { Show-ModeMenu 'Versus' }
+    elseif ($script:page -eq 'VersusCharacters') { Show-VersusCharacterGroups }
+    elseif ($script:page -eq 'VersusCharacterGroups') { Show-ModeMenu 'Versus' }
     elseif ($script:page -eq 'CoopLevels' -or $script:page -eq 'CoopLoad') { Show-CoopStartMenu }
     elseif ($script:page -eq 'CoopStart') { Show-ModeMenu 'Coop' }
     elseif ($script:page -in @('Host','Join')) { Show-ModeMenu $script:currentMode }
@@ -522,17 +630,37 @@ try {
             $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Выбрать персонажа'
         }) | Select-Object -First 1
         $chooseButton.PerformClick()
+        $gryffindorButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Гриффиндор'
+        }) | Select-Object -First 1
+        $gryffindorButton.PerformClick()
         $ronButton = @($script:form.Controls | Where-Object {
             $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Рон'
         }) | Select-Object -First 1
         $ronButton.PerformClick()
         if ($script:versusCharacter -ne 'Ron' -or $script:page -ne 'Mode') { throw 'Versus character selection failed.' }
+        Show-VersusCharacterGroups
+        $adultsButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Взрослые'
+        }) | Select-Object -First 1
+        $adultsButton.PerformClick()
+        $snapeButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -eq 'Снейп'
+        }) | Select-Object -First 1
+        $snapeButton.PerformClick()
+        if ($script:versusCharacter -ne 'Snape' -or $script:page -ne 'Mode') { throw 'Extended Versus character selection failed.' }
+        Show-VersusCharacters 'Fun'
+        $baronButton = @($script:form.Controls | Where-Object {
+            $_ -is [System.Windows.Forms.Button] -and $_.Text -like 'Кровавый Барон*'
+        }) | Select-Object -First 1
+        if (!$baronButton -or $baronButton.Enabled) { throw 'Blocked character must remain disabled.' }
+        Show-ModeMenu 'Versus'
         Show-HostMenu
         Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $null 8 3 $script:versusHostWindowX $script:versusHostWindowY $script:versusHostWindowWidth $script:versusHostWindowHeight
         if ($script:lastTestLaunch.LaunchMode -ne 'VersusHost' -or
             $script:lastTestLaunch.URL -ne 'startup.unr?game=HGame.HPVersusGame?MaxPlayers=8?ScoreLimit=3' -or
             $script:lastTestLaunch.Arguments[0] -ne 'server' -or
-            $script:lastTestLaunch.Character -ne 'Ron' -or
+            $script:lastTestLaunch.Character -ne 'Snape' -or
             $script:lastTestLaunch.WindowX -ne $script:versusHostWindowX -or
             $script:lastTestLaunch.WindowY -ne $script:versusHostWindowY -or
             $script:lastTestLaunch.WindowWidth -ne $script:versusHostWindowWidth -or
@@ -553,7 +681,8 @@ try {
         switch ($PreviewPage) {
             Coop       { Show-ModeMenu 'Coop' }
             Versus     { Show-ModeMenu 'Versus' }
-            VersusCharacters { Show-ModeMenu 'Versus'; Show-VersusCharacters }
+            VersusCharacterGroups { Show-ModeMenu 'Versus'; Show-VersusCharacterGroups }
+            VersusCharacters { Show-ModeMenu 'Versus'; Show-VersusCharacters 'Gryffindor' }
             CoopStart  { Show-ModeMenu 'Coop'; Show-CoopStartMenu }
             CoopLevels { Show-ModeMenu 'Coop'; Show-CoopLevelsMenu }
             CoopLoad   { Show-ModeMenu 'Coop'; Show-CoopLoadMenu }

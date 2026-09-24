@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-free-look",
+  "description": "Hold only the local Versus pawn rotation while the stock standard camera orbits its CamTarget; keep movement and spell authority unchanged.",
+  "source_snapshot": "current validated v16 world-interactions and character-profile layer",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/harry.uc",
+      "source_sha256": "c4dfe134fdc5da24d691296cc65f60999cb5b8fa60e1e6dacefa485fef09f6c3",
+      "result_sha256": "562ff90c7567a3b80ef6b29a74240c4508241644456b802086dca979b6b5472c",
+      "replacements": [
+        {
+          "old": "function bool UseEngineNetworkMovement()\n{\n  return False;\n}\n\n// Optional movement hooks.",
+          "new": "function bool UseEngineNetworkMovement()\n{\n  return False;\n}\n\n// Camera/pawn coupling stays stock unless a network subclass temporarily\n// detaches only its local presentation camera.\nfunction bool ShouldCouplePawnRotationToCamera()\n{\n  return True;\n}\n\n// Optional movement hooks.",
+          "old_sha256": "d79450a79e55ad108a020b4c639ece1f395eb4adeac2193b71ce5b7ac6863290",
+          "new_sha256": "95daaebabc42fe022e78c80096efee8430403e2c52c563e1ca5bb292f722eeed"
+        },
+        {
+          "old": "  ViewRotation = BaseCam(ViewTarget).rCurrRotation;\n  ViewShake(dtime);",
+          "new": "  if ( ShouldCouplePawnRotationToCamera() )\n    ViewRotation = BaseCam(ViewTarget).rCurrRotation;\n  ViewShake(dtime);",
+          "old_sha256": "2d25bfe1b8191e36bf9208d46b4c999da39a1c1ceed5c19de3544230060dcca3",
+          "new_sha256": "26149b369f6fa9ad15683e722b9a364c0182756867554c5d7cb39425f0418367"
+        },
+        {
+          "old": "\tif( cam.IsInState('StateStandardCam') )//|| cam.IsInState('StateBossCam') )\n\t{\n\t\t// Force our desired Yaw to what the camera's yaw is, in this way harry will\n\t\t// always \"lookAt\" what the camera is looking at.\n\t\t\tDesiredRotation.Yaw = cam.rotation.Yaw & 0xFFFF;\n\t}",
+          "new": "\tif( cam.IsInState('StateStandardCam') && ShouldCouplePawnRotationToCamera() )//|| cam.IsInState('StateBossCam') )\n\t{\n\t\t// Force our desired Yaw to what the camera's yaw is, in this way harry will\n\t\t// always \"lookAt\" what the camera is looking at.\n\t\t\tDesiredRotation.Yaw = cam.rotation.Yaw & 0xFFFF;\n\t}",
+          "old_sha256": "0f5fd1f1f7e316748bad9b22b1659126ee3bb9b5e92676f7d7c72beaa7ca585b",
+          "new_sha256": "87a871558a6e875fe4a94f2ea204806a84d9a0066d28710c4bf8a93e5de51d3d"
+        },
+        {
+          "old": "    if ( Cam.IsInState('StateStandardCam') )\n    {\n      DesiredRotation.Yaw = Cam.Rotation.Yaw & 0xFFFF;",
+          "new": "    if ( Cam.IsInState('StateStandardCam') && ShouldCouplePawnRotationToCamera() )\n    {\n      DesiredRotation.Yaw = Cam.Rotation.Yaw & 0xFFFF;",
+          "old_sha256": "b9b2f759a65df09884aade8897d5d5b512320e252a391c2eabbd1c8450b6ff00",
+          "new_sha256": "6fef67dd27fc85e3a52de6287eb802bdb7de299b2bdbd0ff21902870bda94c19"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "621e813baba61c56cbd90fccbfdf5152eea7f62017303f749195d44fb328173c",
+      "result_sha256": "340dbf03b69d93d999e8a84be423706e8e31ad8139acd842f4d10c75fad61a98",
+      "replacements": [
+        {
+          "old": "var input byte bVersusJump;\nvar byte bVersusJumpWasDown;\nvar float NextVersusInputLogTime;",
+          "new": "var input byte bVersusJump;\nvar byte bVersusJumpWasDown;\n// Local key state. This is deliberately absent from replication.\nvar byte bVersusFreeLook;\nvar bool bVersusFreeLookActive;\nvar rotator VersusFreeLookPawnRotation;\nvar rotator VersusFreeLookAimRotation;\nvar float NextVersusInputLogTime;",
+          "old_sha256": "12c2428e3b65c252d89deae9a64814929399ef4dbf544e564fa25422dcb5d46b",
+          "new_sha256": "b40684ddc53ca3e81ab79123b6b02b5e8fe614ed7b09025e8fa690cb9d5fce8b"
+        },
+        {
+          "old": "function SetupVersusPlayer()\n{\n    local bool bLocalPlayer;\n\n    bLocalPlayer = IsLocalViewportPlayer();",
+          "new": "function bool IsVersusFreeLookDetached()\n{\n    return IsLocalViewportPlayer() && bVersusFreeLookActive;\n}\n\nfunction bool ShouldCouplePawnRotationToCamera()\n{\n    return !IsVersusFreeLookDetached();\n}\n\nfunction BeginVersusFreeLook()\n{\n    if (!IsLocalViewportPlayer() || bVersusDead)\n        return;\n\n    bVersusFreeLookActive = True;\n    VersusFreeLookPawnRotation = Rotation;\n    VersusFreeLookPawnRotation.Pitch = 0;\n    VersusFreeLookPawnRotation.Roll = 0;\n\n    if (Cam != None)\n    {\n        VersusFreeLookAimRotation = Cam.rCurrRotation;\n        // StateStandardCam already rotates and positions the camera around\n        // CamTarget. Alt only stops the pawn from following that yaw.\n        Cam.bSyncPositionWithTarget = True;\n        Cam.bSyncRotationWithTarget = False;\n    }\n    else\n        VersusFreeLookAimRotation = ViewRotation;\n\n    VersusFreeLookAimRotation.Yaw = VersusFreeLookPawnRotation.Yaw;\n    VersusFreeLookAimRotation.Roll = 0;\n    Log(\"HPV FREELOOK ENTER pawn=\" $ string(self)\n        $ \" pawnYaw=\" $ string(VersusFreeLookPawnRotation.Yaw));\n}\n\nfunction EndVersusFreeLook()\n{\n    // Put the stock follow camera behind the unchanged pawn before normal\n    // coupling resumes. This prevents the pawn from snapping to the orbit yaw.\n    if (Cam != None)\n    {\n        Cam.rDestRotation.Yaw = VersusFreeLookPawnRotation.Yaw;\n        Cam.rCurrRotation.Yaw = VersusFreeLookPawnRotation.Yaw;\n        Cam.SetRotation(Cam.rCurrRotation);\n        ViewRotation = Cam.rCurrRotation;\n    }\n    else\n        ViewRotation = VersusFreeLookAimRotation;\n\n    ViewRotation.Yaw = VersusFreeLookPawnRotation.Yaw;\n    DesiredRotation = VersusFreeLookPawnRotation;\n    SetRotation(VersusFreeLookPawnRotation);\n    bVersusFreeLookActive = False;\n    Log(\"HPV FREELOOK EXIT pawn=\" $ string(self));\n}\n\nfunction ResetVersusFreeLook(string Reason)\n{\n    if (!IsLocalViewportPlayer())\n        return;\n\n    if (bVersusFreeLookActive)\n        Log(\"HPV FREELOOK RESET pawn=\" $ string(self) $ \" reason=\" $ Reason);\n    bVersusFreeLook = 0;\n    bVersusFreeLookActive = False;\n}\n\nfunction UpdateVersusFreeLook()\n{\n    if (!IsLocalViewportPlayer() || bVersusDead)\n        return;\n\n    if (bVersusFreeLook == 0)\n    {\n        if (bVersusFreeLookActive)\n            EndVersusFreeLook();\n        return;\n    }\n\n    if (!bVersusFreeLookActive)\n        BeginVersusFreeLook();\n\n    // Freeze only body/view authority. BaseCam's normal standard-camera\n    // tick consumes the mouse and orbits around its attached CamTarget.\n    ViewRotation = VersusFreeLookAimRotation;\n    DesiredRotation = VersusFreeLookPawnRotation;\n    SetRotation(VersusFreeLookPawnRotation);\n    aTurn = 0.0;\n}\n\nexec function VersusFreeLookState()\n{\n    ClientMessage(\"Free Look: held=\" $ string(bVersusFreeLook != 0)\n        $ \" active=\" $ string(bVersusFreeLookActive));\n    Log(\"HPV FREELOOK STATE pawn=\" $ string(self)\n        $ \" held=\" $ string(bVersusFreeLook != 0)\n        $ \" active=\" $ string(bVersusFreeLookActive)\n        $ \" pawnRotation=\" $ string(Rotation)\n        $ \" viewRotation=\" $ string(ViewRotation)\n        $ \" cameraRotation=\" $ string(Cam.Rotation));\n}\n\nfunction SetupVersusPlayer()\n{\n    local bool bLocalPlayer;\n\n    bLocalPlayer = IsLocalViewportPlayer();\n    if (bLocalPlayer)\n        ResetVersusFreeLook(\"Setup\");",
+          "old_sha256": "eebb7e8d779b2d9030faa149b47647e513482f6c4cf0b854b82ef81bd4b5ef4d",
+          "new_sha256": "637e34f01ed5c81af66fe827d22e56e70c92e1075e3224e8f648c5c15e791636"
+        },
+        {
+          "old": "function rotator GetVersusMoveRotation()\n{\n    local rotator R;\n\n    if (IsLocalViewportPlayer() && Cam != None)\n        R = Cam.Rotation;",
+          "new": "function rotator GetVersusMoveRotation()\n{\n    local rotator R;\n\n    if (IsVersusFreeLookDetached())\n        R = VersusFreeLookPawnRotation;\n    else if (IsLocalViewportPlayer() && Cam != None)\n        R = Cam.Rotation;",
+          "old_sha256": "590284599e07a88ac67c6e35706733e4521f955682b22f26b4ed756514f06063",
+          "new_sha256": "3609022712c2123bb334ecde905b4c1bbd67ac181761ca8b363f2dec82baaf54"
+        },
+        {
+          "old": "    Super.PlayerInput(DeltaTime);\n    ApplyVersusInput(DeltaTime);",
+          "new": "    Super.PlayerInput(DeltaTime);\n    UpdateVersusFreeLook();\n    ApplyVersusInput(DeltaTime);",
+          "old_sha256": "e2a7e9b8b584b3a852def783202035791140de05f2f6d9dc9f6ea0c0af59fed8",
+          "new_sha256": "f159f880388f1bfd9f55650a9741c49bd4f473a5626b4d5eeac75c40bc59074a"
+        },
+        {
+          "old": "function ClientVersusDeath()\n{\n    bVersusDead = True;",
+          "new": "function ClientVersusDeath()\n{\n    ResetVersusFreeLook(\"Death\");\n    bVersusDead = True;",
+          "old_sha256": "1d6368a5476e1aaaa8d0efc4db13e25da790a3168d375d5be7a46b85670f014d",
+          "new_sha256": "cbd56721a2d2a412c88099995948704bce423d4afc82ea131059d12f9ea65814"
+        },
+        {
+          "old": "function rotator GetVersusAimRotation()\n{\n    local rotator AimRot;\n\n    if (IsLocalViewportPlayer() && Cam != None)\n        AimRot = Cam.Rotation;",
+          "new": "function rotator GetVersusAimRotation()\n{\n    local rotator AimRot;\n\n    if (IsVersusFreeLookDetached())\n        AimRot = VersusFreeLookAimRotation;\n    else if (IsLocalViewportPlayer() && Cam != None)\n        AimRot = Cam.Rotation;",
+          "old_sha256": "e8ae9ddb1b52ec80ee06989b7fd956603692ebc0137fe88eac48d8804332c2a0",
+          "new_sha256": "c84a394cf7b6dde38849d5ecf9baeb115400ccfa7b02183b77530ca0c589cbab"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/Internal/HPConsole.uc",
+      "source_sha256": "73ab38bbc4b63d7f319cce57989cdc2f6e640497a3de177b128d0e91f3e4ccd2",
+      "result_sha256": "4e62bf7663b67c64be68ed6409935309acb854f33805c9859155584926cdc75b",
+      "replacements": [
+        {
+          "old": "function bool ApplyVersusMovementKey(EInputKey Key, EInputAction Action)",
+          "new": "function bool ApplyVersusFreeLookKey(EInputKey Key, EInputAction Action)\n{\n    local HPVersusHarry H;\n\n    if (Key != IK_Alt && Key != IK_LAlt)\n        return False;\n    if (Action != IST_Press && Action != IST_Release)\n        return True;\n\n    H = GetLocalVersusPawn();\n    if (H == None)\n        return False;\n\n    if (Action == IST_Press)\n        H.bVersusFreeLook = 1;\n    else\n        H.bVersusFreeLook = 0;\n\n    return True;\n}\n\nfunction bool ApplyVersusMovementKey(EInputKey Key, EInputAction Action)",
+          "old_sha256": "dadd6fda67926b548a3b17d23674c3c7dd459c2fa7458a0d21003b35128a690e",
+          "new_sha256": "8fde6054ea81a54c5c470ca3d4d2551b53b78f32364c11d6decd98293e516263"
+        },
+        {
+          "old": "\tInputHarry = GetInputHarry();\n\tApplyVersusMovementKey(Key, Action);\n\tk = Key;",
+          "new": "\tInputHarry = GetInputHarry();\n\tif (ApplyVersusFreeLookKey(Key, Action))\n\t\treturn True;\n\tApplyVersusMovementKey(Key, Action);\n\tk = Key;",
+          "old_sha256": "871920a27f196c0ffb88414f9ac17de17f359f9bf0d7a97df71f5d8600108566",
+          "new_sha256": "70d816436774bbbbc0abb70a4e37723bc16b4cb9a6c509d68cbb8cb5fdfdb308"
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,8 @@ for same-PC testing (defaults: host `20,40`, second client `840,40`, size
 Each client is created by the renderer as a native framed, resizable window.
 The launcher sets the requested initial rectangle once; the user can then move
 or resize it freely. No background process rewrites the window style.
+In Versus, hold left `Alt` and move the mouse to orbit the stock camera around
+your character without turning the character or changing spell aim.
 The native three-button
 Game.exe front-end is preserved for save loading and settings. See
 `docs/MENU_TEST_QUICKSTART.md` for setup on another PC.

@@ -387,7 +387,11 @@ if ($Mode -eq 'Coop') {
 } elseif (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json')) {
     # The supplied v16 DefUser.ini combines the direct buttons with native
     # MoveForward/StrafeLeft/etc. Keep them and add only the score-table key.
-    $bindings = [ordered]@{ F3='VersusScores' }
+    # Alt is handled by HPConsole.KeyEvent because M212 clears unknown aliases
+    # from the generated user profile during startup.
+    $bindings = [ordered]@{
+        F3='VersusScores'
+    }
 } else {
     # v18's proven direct bridge consumes these buttons. Do not add a second axis.
     $bindings = [ordered]@{

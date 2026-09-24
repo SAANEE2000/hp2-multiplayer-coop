@@ -65,7 +65,12 @@ def synthetic_entry(path, before=b"before\n", after=b"after\n"):
 def source_bytes(relative, v16=False):
     if v16:
         with zipfile.ZipFile(V16_ARCHIVE) as archive:
-            return archive.read("Classes/" + Path(relative).name)
+            source_path = Path(relative)
+            try:
+                nested = source_path.relative_to(Path("HGame") / "Classes")
+            except ValueError:
+                nested = Path(source_path.name)
+            return archive.read("Classes/" + nested.as_posix())
     return (SOURCE_ROOT / relative).read_bytes()
 
 

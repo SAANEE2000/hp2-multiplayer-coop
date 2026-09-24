@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-join-camera-idle-fix",
+  "description": "Preserve the established local camera orbit when Countdown becomes the first live match, and keep linked roster meshes on their compatible Idle sequence instead of random Harry idle/fidget variants.",
+  "source_snapshot": "six-spell HUD at 6854224",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "d6b953152f9cca019020b724dca1a2dccbecf54627eae5b3d036011d862f846f",
+      "result_sha256": "445e027e5d3d23891921d69c72abb6447f7536d8afdbc3e20ab8ad6b62a35651",
+      "replacements": [
+        {
+          "old": "var float NextVersusInputLogTime;\n\n// v7: direct server-authoritative movement fallback.",
+          "new": "var float NextVersusInputLogTime;\n// Set only while an already-running local camera is rebound after the\n// warmup countdown. The first live match keeps its current orbit.\nvar bool bPreserveVersusCameraOnSetup;\n\n// v7: direct server-authoritative movement fallback.",
+          "old_sha256": "df07dd2850c1986bff27e174aa613049f57e6706b01da20ddb836ec9d2c2cbc1",
+          "new_sha256": "2419c6e7e981cdc18ce0388c193709f3a0250933baa0445e93990fdd62149772"
+        },
+        {
+          "old": "    // Camera: route through the safety shim so ONLY the local viewport pawn\n    // ever touches the shared BaseCam. Remote pawns are a no-op here, which is\n    // what stops a remote pawn from retargeting the host camera.\n    class'HPVersusCamera'.static.ForceStandardCam(self);\n    SetupVersusSpellObjects(\"SetupVersusPlayer\");",
+          "new": "    // Camera: route through the safety shim so ONLY the local viewport pawn\n    // ever touches the shared BaseCam. During the first Countdown -> live\n    // transition keep the established orbit instead of hard-resetting it to\n    // the PlayerStart rotation merely because the second player connected.\n    if (bPreserveVersusCameraOnSetup)\n        class'HPVersusCamera'.static.ApplyStandardCam(self);\n    else\n        class'HPVersusCamera'.static.ForceStandardCam(self);\n    SetupVersusSpellObjects(\"SetupVersusPlayer\");",
+          "old_sha256": "f14e28db30a551fe6268dba513637584ed2dfb72f2c214d8a3c0346899e65714",
+          "new_sha256": "900f0dee4029fce3b6c87e3a16be8cb83d829c59359424b428b0ee134cd072e0"
+        },
+        {
+          "old": "function ClientVersusRespawn()\n{\n    bVersusDead = False;\n    SetupVersusPlayer();\n}",
+          "new": "function ClientVersusRespawn(optional bool bPreserveLiveCamera)\n{\n    bVersusDead = False;\n    bPreserveVersusCameraOnSetup = bPreserveLiveCamera\n        && IsLocalViewportPlayer() && Cam != None;\n    SetupVersusPlayer();\n    bPreserveVersusCameraOnSetup = False;\n}",
+          "old_sha256": "dd194958dcd12b8987391c463a2561ae9acd77b265308b4a1eda922bebc75cb1",
+          "new_sha256": "13e2753c9bf0c683e1c7c4922d1f28e9c4b57c95505ec5f6f5e953428e27ba29"
+        },
+        {
+          "old": "function ApplyCharacterSkin(string CharacterName)\n{",
+          "new": "// Harry's idle_1/fidget variants contain bones that are not safe on every\n// linked cosmetic skeleton. The common Idle sequence is present in the\n// accepted player set and keeps new roster characters out of reference pose.\nfunction bool UsesStableVersusIdle()\n{\n    return class'HPVersusCharacterProfiles'.static.ShouldLinkHarryAnimations(Mesh);\n}\n\nfunction name GetCurrIdleAnimName()\n{\n    if (UsesStableVersusIdle())\n        return HarryAnims[HarryAnimSet].Idle;\n\n    return Super.GetCurrIdleAnimName();\n}\n\nfunction name GetCurrFidgetAnimName()\n{\n    if (UsesStableVersusIdle())\n        return HarryAnims[HarryAnimSet].Idle;\n\n    return Super.GetCurrFidgetAnimName();\n}\n\nfunction ApplyCharacterSkin(string CharacterName)\n{",
+          "old_sha256": "175d06322336245f67f017e2e6c2d4d16bd7fb6db83a71ebafed2887b93dd3a5",
+          "new_sha256": "87f05ece5724741f51b6f8e61ed300d49ddbb1ae5328a21e9020633b5e61be07"
+        },
+        {
+          "old": "    EnsureVersusPlayerAnimationSet();\n    if (class'HPVersusCharacterProfiles'.static.GetCloakStrategy(Mesh) != 0)",
+          "new": "    EnsureVersusPlayerAnimationSet();\n    if (UsesStableVersusIdle() && Physics != PHYS_Falling\n        && VSize2D(Velocity) < 5.0)\n    {\n        CurrIdleAnimName = HarryAnims[HarryAnimSet].Idle;\n        LoopAnim(CurrIdleAnimName, 0.8, 0.15,, HarryAnimType);\n    }\n    if (class'HPVersusCharacterProfiles'.static.GetCloakStrategy(Mesh) != 0)",
+          "old_sha256": "ef1d2957c20f629d70b80c434c25f4d388238198f2e8cd2d31ef0d2d736e48e2",
+          "new_sha256": "34f3477dd89b64f5686d31832eddac98e147be174fe6c89ed9fcf11a81130e11"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "d13cdff9466c8e587a2158ac46074be58f357612c9aea01cfec4eb655b3bb29d",
+      "result_sha256": "f05e1d5d9035d250a8806efb9df5a35ca40078b5aaa79d82717f0fe77eb066be",
+      "replacements": [
+        {
+          "old": "function BeginVersusMatch()\n{\n    local Pawn P;\n    local HPVersusHarry H;\n    local HPVersusPRI PRI;\n    local HPVersusSpell Spell;\n    local HPVersusGRI G;",
+          "new": "function BeginVersusMatch()\n{\n    local Pawn P;\n    local HPVersusHarry H;\n    local HPVersusPRI PRI;\n    local HPVersusSpell Spell;\n    local HPVersusGRI G;\n    local bool bPreserveLiveCamera;\n    local rotator SavedRotation;\n    local rotator SavedDesiredRotation;\n    local rotator SavedViewRotation;",
+          "old_sha256": "d14ab0c09fa0859a4acb6b4a328e9760a3e3ff5c912c6303027b3da2744e208a",
+          "new_sha256": "d82a48dee2b68f0b7b99faaa0423ea2e17c31cbb02420b4a7e60a45325f1c0b1"
+        },
+        {
+          "old": "    bMatchInProgress = False;\n    foreach AllActors(Class'HPVersusSpell', Spell)",
+          "new": "    // A Countdown begins because the missing opponent connected. Players\n    // still return to their spawn locations, but their established view\n    // direction must not snap to the map's PlayerStart rotation. MatchOver\n    // restarts keep the normal clean round reset.\n    bPreserveLiveCamera = VersusPhase == 'Countdown';\n    bMatchInProgress = False;\n    foreach AllActors(Class'HPVersusSpell', Spell)",
+          "old_sha256": "23e25d71c482cce6d0c85fd44fbb6770c93b2a15cc5e9123e3ae8e3410d94d72",
+          "new_sha256": "f41be3315d086351a400f3991b329cd61eef8db8abb3f4e5b9149cb0f1452770"
+        },
+        {
+          "old": "        H.ResetVersusCombatEffects();\n        if (RestartPlayer(H))\n        {\n            H.SetupVersusPlayer();\n            H.VersusRespawnAt = 0;\n            H.VersusRespawnSeconds = 0;\n            H.ClientVersusRespawn();\n        }",
+          "new": "        if (bPreserveLiveCamera)\n        {\n            SavedRotation = H.Rotation;\n            SavedDesiredRotation = H.DesiredRotation;\n            SavedViewRotation = H.ViewRotation;\n        }\n        H.ResetVersusCombatEffects();\n        if (RestartPlayer(H))\n        {\n            if (bPreserveLiveCamera)\n            {\n                H.SetRotation(SavedRotation);\n                H.DesiredRotation = SavedDesiredRotation;\n                H.ViewRotation = SavedViewRotation;\n            }\n            H.SetupVersusPlayer();\n            H.VersusRespawnAt = 0;\n            H.VersusRespawnSeconds = 0;\n            H.ClientVersusRespawn(bPreserveLiveCamera);\n        }",
+          "old_sha256": "726f946501691e439a8c721a978cad8ff1c8e8a3fbeac9756fee383b21f1ca26",
+          "new_sha256": "5430c35084125c419dd032caf8fb5c1f47644cbee34a7836ad085ad68563dc9e"
+        }
+      ]
+    }
+  ]
+}

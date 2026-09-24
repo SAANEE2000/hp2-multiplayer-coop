@@ -96,6 +96,7 @@ class VersusSpellTestContractTests(unittest.TestCase):
         self.assertIn("Interaction arena copy hash mismatch", self.arena_script)
         bases = {
             "HPVersusArenaLock.uc": "extends Padlock",
+            "HPVersusArenaAlohomoraTrigger.uc": "extends spellTrigger",
             "HPVersusArenaCauldron.uc": "extends BronzeCauldron",
             "HPVersusArenaFlipendoTrigger.uc": "extends spellTrigger",
             "HPVersusSpongifyPad.uc": "extends SpongifyPad",

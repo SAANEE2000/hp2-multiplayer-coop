@@ -4,7 +4,7 @@ class HPVersusInteractionArena extends Info;
 
 var HPVersusArenaLock DoorLock;
 var HPVersusArenaBarrier DoorBarrier;
-var HPVersusArenaLock SecretLock;
+var HPVersusArenaAlohomoraTrigger SecretTrigger;
 var HPVersusArenaBarrier SecretBarrier;
 var HPVersusArenaCauldron FlipendoObject;
 var HPVersusArenaFlipendoTrigger FlipendoTrigger;
@@ -63,7 +63,7 @@ function ClearArena()
 {
     DestroyArenaActor(DoorLock);
     DestroyArenaActor(DoorBarrier);
-    DestroyArenaActor(SecretLock);
+    DestroyArenaActor(SecretTrigger);
     DestroyArenaActor(SecretBarrier);
     DestroyArenaActor(FlipendoObject);
     DestroyArenaActor(FlipendoTrigger);
@@ -74,7 +74,7 @@ function ClearArena()
     DestroyArenaActor(RouteSpeed);
     DoorLock = None;
     DoorBarrier = None;
-    SecretLock = None;
+    SecretTrigger = None;
     SecretBarrier = None;
     FlipendoObject = None;
     FlipendoTrigger = None;
@@ -113,10 +113,10 @@ function BuildArena()
         Offset(-330, -130, 0), rot(0,0,0));
     if (SecretBarrier != None)
         SecretBarrier.Tag = 'VersusAlohomoraSecret';
-    SecretLock = Spawn(Class'HPVersusArenaLock',,,
+    SecretTrigger = Spawn(Class'HPVersusArenaAlohomoraTrigger',,,
         Offset(-220, -130, 10), rot(0,32768,0));
-    if (SecretLock != None)
-        SecretLock.Event = 'VersusAlohomoraSecret';
+    if (SecretTrigger != None)
+        SecretTrigger.Event = 'VersusAlohomoraSecret';
     RouteSpeed = Spawn(Class'HPVersusSpeedPickup',,,
         Offset(-430, -130, 0), rot(0,0,0));
 
@@ -142,7 +142,7 @@ function BuildArena()
     }
 
     bArenaReady = DoorLock != None && DoorBarrier != None
-        && SecretLock != None && SecretBarrier != None
+        && SecretTrigger != None && SecretBarrier != None
         && FlipendoObject != None && FlipendoTrigger != None
         && MechanismBarrier != None && SpongifyPadActor != None
         && SpongifyTargetActor != None && RouteHealth != None
@@ -151,7 +151,7 @@ function BuildArena()
         $ " center=" $ string(ArenaCenter)
         $ " doorLock=" $ string(DoorLock)
         $ " doorBarrier=" $ string(DoorBarrier)
-        $ " secretLock=" $ string(SecretLock)
+        $ " secretTrigger=" $ string(SecretTrigger)
         $ " secretBarrier=" $ string(SecretBarrier)
         $ " flipObject=" $ string(FlipendoObject)
         $ " flipTrigger=" $ string(FlipendoTrigger)
@@ -215,6 +215,18 @@ function RunWorldProbe(HPVersusHarry A, HPVersusHarry B)
         ProbeResult(Alohomora != None && DoorBarrier.bOpened
             && (DoorLock == None || DoorLock.bDeleteMe),
             "alohomora-stock-lock-event-opens-door");
+
+        Alohomora = Spawn(Class'HPVersusAlohomora', A,,
+            SecretTrigger.Location, A.Rotation);
+        if (Alohomora != None)
+        {
+            Alohomora.Instigator = A;
+            SecretTrigger.Touch(Alohomora);
+            Alohomora.Destroy();
+        }
+        ProbeResult(Alohomora != None && SecretBarrier.bOpened
+            && !SecretTrigger.bProjTarget,
+            "alohomora-stock-spelltrigger-event");
 
         Flipendo = Spawn(Class'HPVersusFlipendo', A,,
             FlipendoObject.Location, A.Rotation);

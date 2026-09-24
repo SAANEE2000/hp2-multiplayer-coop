@@ -61,9 +61,10 @@ Dedicated server:
 
 ## Что находится на стенде
 
-Fixture строится вокруг центра арены. На нём есть два штатных пути
-`Padlock -> event -> barrier` с health/speed pickup за ними, stock-derived
-cauldron и `spellTrigger` для Flipendo, а также связанная пара
+Fixture строится вокруг центра арены. На нём есть штатные пути Alohomora
+`Padlock -> event -> barrier` и `spellTrigger -> event -> barrier` с
+health/speed pickup за ними, stock-derived cauldron и отдельный `spellTrigger`
+для Flipendo, а также связанная пара
 `SpongifyPad + SpongifyTarget`. Второй игрок является обычным сетевым игроком.
 
 ## Ручной checklist
@@ -73,12 +74,18 @@ cauldron и `spellTrigger` для Flipendo, а также связанная п�
 - Numpad 3: Expelliarmus прерывает зарядку/даёт disarm и не становится обычным damage bolt.
 - Numpad 4: Flipendo наносит игроку damage и push.
 - Numpad 4: Flipendo отдельно активирует cauldron и spellTrigger/barrier.
-- Numpad 5: Alohomora открывает lock/barrier и не наносит PvP damage.
+- Numpad 5: Alohomora отдельно открывает lock/door и spellTrigger/barrier, не нанося PvP damage.
 - Numpad 6: Spongify включает pad; наступивший игрок долетает до target, приземляется и снова двигается.
 - Для каждого каста второй клиент видит projectile, FX и итог взаимодействия.
 - Health pickup лечит, не превышая 100; speed pickup включается и гарантированно заканчивается.
 - Повторно проверить Native movement, прыжок, Alt Free Look, Harry/Ron/Hermione,
   cloak channels, death, respawn, HP, score, pickups и следующий раунд.
+- До подключения второго игрока повернуть камеру/персонажа в заметный угол:
+  после старта countdown игрок переносится на свой spawn, но yaw/pitch камеры не
+  должны сбрасываться к повороту `PlayerStart`.
+- Для новых профилей (например, `GryffindorStudentM` и
+  `SlytherinStudentF`) постоять без движения на обоих клиентах: локальный и
+  удалённый персонажи должны проигрывать `Idle`, без T-позы.
 
 Автоматические probe-тесты подтверждают серверные state transitions, но не
 заменяют этот визуальный и игровой прогон двумя клиентами.

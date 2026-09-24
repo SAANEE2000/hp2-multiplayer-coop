@@ -37,29 +37,57 @@ F3 scoreboard оставлен прежним. Загрузка текстур �
 
 Стенд находится в `Maps\HPV_Interactions.unr`. Это byte-for-byte копия
 принятого `startup.unr`; бинарная рабочая карта не редактировалась. Только для
-этого map name authority создаёт stock-derived Padlock, BronzeCauldron,
-spellTrigger, SpongifyPad/SpongifyTarget и существующие Versus pickups.
+этого map name authority создаёт stock-derived Padlock, отдельные Alohomora и
+Flipendo spellTrigger, BronzeCauldron, SpongifyPad/SpongifyTarget и
+существующие Versus pickups.
+
+## Исправления после ручного прогона
+
+Первый ручной прогон обнаружил два дефекта, которые не покрывал прежний
+структурный audit персонажей.
+
+1. Подключение второго игрока переводило матч из `Countdown` в `InProgress`.
+   `BeginVersusMatch()` делал обязательный перенос игроков на старт, а затем
+   `ClientVersusRespawn()` вызывал жёсткий `ForceStandardCam()`. Из-за этого
+   камера сбрасывалась к yaw/pitch `PlayerStart`, хотя удалённый pawn сам камеру
+   не перехватывал. Теперь сервер сохраняет `Rotation`, `DesiredRotation` и
+   `ViewRotation` живого игрока на переходе `Countdown -> InProgress`, а клиент
+   сохраняет уже работающую орбиту через `ApplyStandardCam()`. Обычный respawn
+   после смерти и новый раунд после `MatchOver` сохраняют полный reset.
+2. Новые косметические меши были связаны с `skHarryAnims`, но stock
+   `GetCurrIdleAnimName()` случайно выбирал `idle_1`/fidget. Последовательность
+   формально существовала, однако на части связанного ростера визуально давала
+   reference/T-pose. Для всех профилей с `ANIM_LINK_HARRY` idle и fidget теперь
+   используют совместимую общую последовательность `Idle`; бег, strafe,
+   прыжок, каст и cloak channels не менялись.
+
+Runtime-журнал после исправления подтверждает сохранение фактического viewport:
+до старта матча `Cam.Rotation=494,14453,0`, после переноса на spawn и setup —
+те же `494,14453,0`; `Cam.PlayerHarry`, `ViewTarget` и локальный pawn не
+сменились. У удалённого `skhp2_genmale1Mesh` опубликован `AnimSequence=Idle` с
+растущим `AnimFrame`, тогда как дефектный прогон публиковал `idle_1`.
 
 ## Проверки
 
-- UnrealScript build `20260925-010921-199`: 0 errors, 276 warnings.
+- UnrealScript build `20260925-014441-810`: 0 errors, 276 warnings.
 - `HGame.u` SHA-256:
-  `CD580BF519BE337D1591F759873BCE2E8F51445E4BF73C6BBDC6CF086E7A5A1F`.
+  `3F87CFA156730C7F28EEAFC92C9C1D2F2832607A15D59CDCD06F3767CAE31233`.
 - `M212Share.u` SHA-256:
-  `2432AC09F89554B64940CD140153B903E7580523ED3361F7812254EAD3D1A57C`.
-- Контрактный набор selector/HUD/free-look/patch recipes: 31 PASS, 1 SKIP.
-  SKIP относится только к невозможности создать тестовый symlink без Windows
-  privilege; функциональный тест не падал.
-- Полный репозиторный набор: 50 PASS, тот же 1 SKIP.
+  `2A366B19803F7B2E5762B8BBB2A9B1A839ABFD4F1E2B05E40A8A0DE5C969758E`.
+- Полный репозиторный набор: 54 PASS, 1 SKIP. SKIP относится только к
+  невозможности создать тестовый symlink без Windows privilege;
+  функциональный тест не падал.
+- Runtime: dedicated server и несколько клиентских подключений; переход
+  countdown, перенос на spawn, стабильная камера и remote `Idle` подтверждены
+  по клиентскому и серверному журналам.
 - Два сгенерированных клиентских `User.ini` содержали точные bind’ы
   `NumPad1=VersusSpell1` … `NumPad6=VersusSpell6`.
-- В текущем окружении новый engine log становился доступен только после
-  штатного закрытия окна; Computer Use не вернул список native apps, поэтому
-  этот прогон не используется как визуальный PASS. Ранее принятые server probes
-  interaction arena остаются зелёными, но ручной spell-by-spell тест обязателен.
+- Отдельная карта `HPV_Interactions.unr` подготовлена из принятого
+  `startup.unr`; рабочий `startup.unr` не изменён.
 
 ## Статус приёмки
 
-Сборка и статические/серверные контракты готовы. Визуальное отображение нового
-HUD, ввод Numpad и видимость projectile/FX/result на втором клиенте имеют статус
+Сборка, статические контракты и runtime-проверка camera/idle готовы. Полный
+визуальный spell-by-spell прогон, внешний вид HUD, projectile/FX/result и
+финальная визуальная проверка отсутствия T-позы остаются
 `PENDING USER MANUAL TEST`, как и требовалось в задаче.

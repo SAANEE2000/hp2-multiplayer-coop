@@ -46,6 +46,11 @@ Copy-Item -LiteralPath $arenaPath -Destination $destinationMap -Force
 if ((Get-FileHash -LiteralPath $destinationMap -Algorithm SHA256).Hash -ne $expected[$arenaPath]) {
     throw 'Installed Startup arena hash mismatch.'
 }
+$interactionMap = Join-Path $versusRoot 'Maps\HPV_Interactions.unr'
+Copy-Item -LiteralPath $destinationMap -Destination $interactionMap -Force
+if ((Get-FileHash -LiteralPath $interactionMap -Algorithm SHA256).Hash -ne $expected[$arenaPath]) {
+    throw 'Installed interaction arena copy hash mismatch.'
+}
 
 & (Join-Path $PSScriptRoot 'Import-TestBuild.ps1') -Artifact $artifactPath -WorkRoot $versusRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $repo '.local\last-build.json') `
@@ -53,4 +58,5 @@ Copy-Item -LiteralPath (Join-Path $repo '.local\last-build.json') `
 
 Write-Output 'Versus v16 test installation completed successfully.'
 Write-Output "Arena: $destinationMap"
+Write-Output "Interaction arena: $interactionMap"
 Write-Output "Launcher: $(Join-Path $repo 'Play-Menu-Test.cmd')"

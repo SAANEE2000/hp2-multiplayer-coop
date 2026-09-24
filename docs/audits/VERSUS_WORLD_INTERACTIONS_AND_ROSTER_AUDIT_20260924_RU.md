@@ -37,3 +37,21 @@
 Добавлен `HPVersusSpongify`, который вызывает исходный `HandleSpellSpongify`, и сетевой наследник `SpongifyPad`. Адаптер остаётся в отдельном нейтральном state, поскольку унаследованный `stateDisabled.HandleSpellSpongify` имеет более высокий приоритет, чем global override. Authority активирует pad, выбирает target и использует исходный `ComputeTrajectoryByTime`; owning client получает ту же стартовую скорость для presentation/prediction, а сервер остаётся источником physics и конечного положения. Обычный Native movement код не менялся.
 
 Сборка `20260924-224242-182`: `Success - 0 error(s), 274 warnings`. Dedicated-прогон с двумя `Game.exe` `versus-host-20260924-224314-867-de51ab` завершил 14 проверок без `FAIL`. Дополнительные PASS: `spongify-authoritative-activation-and-bounce` и `death-clears-spongify`; весь прежний combat/pickup/respawn набор также прошёл.
+
+## Этап 3: отдельная interaction arena
+
+`startup.unr` не изменён. Скрипт `Prepare-VersusInteractionArena.ps1` создаёт его побайтовую копию `HPV_Interactions.unr`, а `HPVersusInteractionArena` добавляет тестовые объекты только при загрузке этой карты. Такой способ сохраняет принятую арену и делает fixture воспроизводимым без ручного редактирования бинарной карты.
+
+На fixture размещены два штатных `Padlock`-пути Alohomora с health/speed pickup, штатный cauldron и `spellTrigger` для Flipendo, а также связка `SpongifyPad + SpongifyTarget`. Тонкие сетевые barrier-actors получают одноразовый server event и реплицируют открытое положение; сами spell callbacks остаются исходными HP2.
+
+Сборка `20260924-225429-401`: `Success - 0 error(s), 276 warnings`. Dedicated-прогон `versus-host-20260924-225502-273-1527f2` использовал два настоящих клиента `Game.exe` (`ArenaA2/Harry` и `ArenaB2/Ron`). Сначала повторно прошли все 14 combat/pickup/respawn проверок, затем world probe завершился без `FAIL`:
+
+- `alohomora-stock-lock-event-opens-door`;
+- `flipendo-stock-object-state`;
+- `flipendo-stock-spelltrigger-event`;
+- `spongify-pad-active-owner-launched`;
+- `spongify-server-endpoint` с отклонением `3.667526` от target по XY;
+- `spongify-no-fall-damage`;
+- `spongify-next-native-movement-ready`.
+
+Серверный журнал подтверждает вход обоих клиентов и authoritative state transitions. В этом прогоне M212 не создал доступные отдельные client engine logs (`client-stdout.log` остался пустым), поэтому визуальное подтверждение remote-proxy в отчёте не подменяется автоматическим утверждением: оно остаётся пунктом ручного визуального прогона. Серверная репликация, endpoint и отсутствие регрессии Native movement проверены автоматически.

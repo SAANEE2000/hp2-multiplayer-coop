@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-interaction-arena",
+  "description": "Spawn a reproducible world-interaction fixture only on the separate HPV_Interactions map and run a post-combat two-client probe.",
+  "source_snapshot": "Spongify network layer at e46da4a",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "1793abe89c3c8b1c8787b9e8b09722c2c314cea4a41ca8b77b0da8a49f14c888",
+      "result_sha256": "cf8ddb9a8d0c476b0ecde7520813b1f93a7d82ef102ed2238720b3ca57c794c5",
+      "replacements": [
+        {
+          "old": "var HPVersusSpongifyTarget VersusProbeSpongifyTarget;\n\nfunction InitGame",
+          "new": "var HPVersusSpongifyTarget VersusProbeSpongifyTarget;\nvar HPVersusInteractionArena VersusInteractionArena;\n\nfunction InitGame",
+          "old_sha256": "2154819530295e6788b788188a244c8db2dca5b70529f6e4cbb0af9c6f1d1423",
+          "new_sha256": "8caca62fff6828fbd9a07379f590142c269b772a01d971c7a61bcf8235c32442"
+        },
+        {
+          "old": "    SpawnVersusPickups();\n    UpdateVersusGRI();\n}\n\nfunction Vector GetVersusPickupCenter()",
+          "new": "    SpawnVersusPickups();\n    SpawnVersusInteractionArena();\n    UpdateVersusGRI();\n}\n\nfunction bool IsVersusInteractionMap()\n{\n    return InStr(Caps(string(Level)), \"HPV_INTERACTIONS\") >= 0;\n}\n\nfunction SpawnVersusInteractionArena()\n{\n    if (Role != ROLE_Authority || !IsVersusInteractionMap())\n        return;\n    if (VersusInteractionArena == None)\n        VersusInteractionArena = Spawn(\n            Class'HPVersusInteractionArena',,,\n            GetVersusPickupCenter(), rot(0,0,0));\n    Log(\"HPVersusInteractionArena spawn actor=\"\n        $ string(VersusInteractionArena)\n        $ \" level=\" $ string(Level));\n}\n\nfunction Vector GetVersusPickupCenter()",
+          "old_sha256": "f65c5878b5698c3d71aca47ee0881b0df148fd2ce2472862bfac7f3fa2f1c900",
+          "new_sha256": "b8603abd1a157b84fc7eaf4ef7fdffd88a6c78e1a54282463c43ddad5f9eebaf"
+        },
+        {
+          "old": "function Timer()\n{\n    local Pawn P;\n    local HPVersusHarry H;",
+          "new": "function Timer()\n{\n    local Pawn P;\n    local HPVersusHarry H;\n    local HPVersusHarry ProbeA;\n    local HPVersusHarry ProbeB;",
+          "old_sha256": "bf24845244170a3564d839ed726388ad5fb17837b591815ad85bec88b0c62a37",
+          "new_sha256": "6a3baa602250ef7bb6c2b5b27d27e780f2074c4bd39f1310631030b7f8aacaeb"
+        },
+        {
+          "old": "    UpdateVersusGRI();\n    RunVersusMechanicsProbe();\n}\n\nfunction int CountVersusPlayers()",
+          "new": "    UpdateVersusGRI();\n    RunVersusMechanicsProbe();\n    if (bVersusMechanicsProbe && bVersusMechanicsProbeComplete\n        && VersusInteractionArena != None\n        && GetVersusProbePlayers(ProbeA, ProbeB))\n        VersusInteractionArena.RunWorldProbe(ProbeA, ProbeB);\n}\n\nfunction int CountVersusPlayers()",
+          "old_sha256": "2b5d4e1dc1be6ede83380222f398a11a1896459ca18ad7215f7cad2a4cd4935b",
+          "new_sha256": "eeb87f14274dd05d37dedf116b67454acf6c0e23985fd8977d8b46df8997a3bc"
+        },
+        {
+          "old": "    foreach AllActors(Class'HPVersusSpell', Spell)\n        Spell.Destroy();\n    ResetVersusPickups();",
+          "new": "    foreach AllActors(Class'HPVersusSpell', Spell)\n        Spell.Destroy();\n    ResetVersusPickups();\n    if (VersusInteractionArena != None)\n        VersusInteractionArena.ResetArena();",
+          "old_sha256": "c27b1a3b1c496ab517ebb4ea40e3c028a3b8589aad588383285333d965780307",
+          "new_sha256": "51392069140ba0f3959d365d8d6c224f714b10ec793fb4847f074074cc74fde8"
+        }
+      ]
+    }
+  ]
+}

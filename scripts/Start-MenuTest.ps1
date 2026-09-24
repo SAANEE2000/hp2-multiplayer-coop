@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Original','Single','CoopHost','CoopJoin','VersusHost','VersusJoin')]
+    [ValidateSet('Original','Single','CoopHost','CoopJoin','VersusHost','VersusJoin','HideSeekHost','HideSeekJoin')]
     [string]$LaunchMode = 'Original',
     [string]$Server = '127.0.0.1',
     [ValidateRange(1024,65535)][int]$Port = 7777,
@@ -8,6 +8,9 @@ param(
     [ValidatePattern('^[A-Za-z][A-Za-z0-9]{0,39}$')][string]$Character = 'Harry',
     [ValidateRange(2,8)][int]$MaxPlayers = 8,
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$')][string]$VersusMap = 'startup',
+    [ValidateRange(5,600)][int]$HideTime = 60,
+    [ValidateRange(15,1200)][int]$HuntTime = 180,
     [ValidateRange(-32768,32767)][int]$WindowX = 20,
     [ValidateRange(-32768,32767)][int]$WindowY = 40,
     [ValidateRange(320,7680)][int]$WindowWidth = 800,
@@ -112,10 +115,11 @@ namespace HP2MP {
 }
 
 $repo = Split-Path $PSScriptRoot -Parent
-$gameRoot = Join-Path $repo $(if ($LaunchMode -like 'Versus*') { '.local\versus-v16-game' } else { '.local\game' })
+$isVersusContainer = $LaunchMode -like 'Versus*' -or $LaunchMode -like 'HideSeek*'
+$gameRoot = Join-Path $repo $(if ($isVersusContainer) { '.local\versus-v16-game' } else { '.local\game' })
 $system = Join-Path $gameRoot 'System'
 $exe = Join-Path $system 'Game.exe'
-$modeBuild = Join-Path $repo $(if ($LaunchMode -like 'Versus*') { '.local\last-build-v16.json' } else { '.local\last-build-coop.json' })
+$modeBuild = Join-Path $repo $(if ($isVersusContainer) { '.local\last-build-v16.json' } else { '.local\last-build-coop.json' })
 $buildRecord = if (Test-Path -LiteralPath $modeBuild) { $modeBuild } else { Join-Path $repo '.local\last-build.json' }
 
 if (!(Test-Path -LiteralPath (Join-Path $gameRoot '.hp2-development-copy.json') -PathType Leaf)) {
@@ -149,7 +153,7 @@ foreach ($name in @('HGame.u', 'M212Share.u')) {
 if ($PlayerName -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') {
     throw 'Player name must be 1-23 letters, digits, _ or -.'
 }
-if ($LaunchMode -in @('CoopJoin','VersusJoin')) {
+if ($LaunchMode -in @('CoopJoin','VersusJoin','HideSeekJoin')) {
     if ($Server -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$' -or
         [Uri]::CheckHostName($Server) -notin @([UriHostNameType]::Dns,[UriHostNameType]::IPv4)) {
         throw 'Server must be an IPv4 address or DNS name without URL options.'
@@ -157,9 +161,11 @@ if ($LaunchMode -in @('CoopJoin','VersusJoin')) {
 }
 
 $logName = 'HP2MP-menu-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log'
-$profileMode = if ($LaunchMode -like 'Versus*') { 'Versus' } else { 'Coop' }
+$profileMode = if ($LaunchMode -like 'HideSeek*') { 'HideSeek' }
+    elseif ($LaunchMode -like 'Versus*') { 'Versus' }
+    else { 'Coop' }
 $prepared = $null
-if ($LaunchMode -notin @('CoopHost','VersusHost')) {
+if ($LaunchMode -notin @('CoopHost','VersusHost','HideSeekHost')) {
     $prepared = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
         -Mode $profileMode -Role Join -WorkRoot $gameRoot -PrepareOnly -PlayerName $PlayerName `
         -WindowX $WindowX -WindowY $WindowY -WindowWidth $WindowWidth -WindowHeight $WindowHeight
@@ -171,20 +177,23 @@ $url = switch ($LaunchMode) {
     Single     { 'PrivetDr.unr?game=Engine.GameInfo' }
     CoopHost   { "$CoopMap.unr?game=HGame.HPCoopGame?MaxPlayers=2" }
     CoopJoin   { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Coop" }
-    VersusHost { "startup.unr?game=HGame.HPVersusGame?MaxPlayers=$MaxPlayers`?ScoreLimit=$ScoreLimit" }
+    VersusHost { "$VersusMap.unr?game=HGame.HPVersusGame?MaxPlayers=$MaxPlayers`?ScoreLimit=$ScoreLimit" }
     VersusJoin { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=Versus`?MPCharacter=$Character" }
+    HideSeekHost { "$VersusMap.unr?game=HGame.HPHideSeekGame?MaxPlayers=$MaxPlayers`?HideTime=$HideTime`?HuntTime=$HuntTime" }
+    HideSeekJoin { "unreal://${Server}:${Port}/?Name=$PlayerName`?MPMode=HideSeek`?MPCharacter=$Character" }
 }
 $mapName = switch ($LaunchMode) {
     Original { 'startup.unr' }
     Single { 'PrivetDr.unr' }
     CoopHost { "$CoopMap.unr" }
-    VersusHost { 'startup.unr' }
+    VersusHost { "$VersusMap.unr" }
+    HideSeekHost { "$VersusMap.unr" }
     default { 'Entry.unr' }
 }
 if (!(Test-Path -LiteralPath (Join-Path $gameRoot "Maps\$mapName") -PathType Leaf)) {
     throw "Map is missing from the test game: $mapName"
 }
-$arguments = if ($LaunchMode -in @('CoopHost','VersusHost')) {
+$arguments = if ($LaunchMode -in @('CoopHost','VersusHost','HideSeekHost')) {
     @('server', $url, "port=$Port", '-unattended', '-FORCEFLUSH')
 } else {
     @($url, '-windowed', '-NOFRONTEND', '-NewWindow',
@@ -192,25 +201,25 @@ $arguments = if ($LaunchMode -in @('CoopHost','VersusHost')) {
         ('USERINI=' + (Split-Path $prepared.userIni -Leaf)), "-log=$logName", '-FORCEFLUSH')
 }
 if ($DryRun) {
-    [PSCustomObject]@{LaunchMode=$LaunchMode; CoopMap=$CoopMap; Character=$Character; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit; URL=$url; Arguments=$arguments;
+    [PSCustomObject]@{LaunchMode=$LaunchMode; CoopMap=$CoopMap; VersusMap=$VersusMap; Character=$Character; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit; HideTime=$HideTime; HuntTime=$HuntTime; URL=$url; Arguments=$arguments;
         Windowed=$true; WindowX=$WindowX; WindowY=$WindowY; WindowWidth=$WindowWidth; WindowHeight=$WindowHeight;
         EngineIni=$prepared.engineIni; UserIni=$prepared.userIni;
-        Executable=$(if ($LaunchMode -in @('CoopHost','VersusHost')) { Join-Path $system 'UCC.exe' } else { $exe });
+        Executable=$(if ($LaunchMode -in @('CoopHost','VersusHost','HideSeekHost')) { Join-Path $system 'UCC.exe' } else { $exe });
         LocalClientExecutable=$exe}
     return
 }
-if ($LaunchMode -in @('CoopHost','VersusHost')) {
+if ($LaunchMode -in @('CoopHost','VersusHost','HideSeekHost')) {
     # A playable host is a dedicated server plus a separate local client.
     # The single-process listen path gives the host a second BaseCam and breaks
     # the original CutScript capture/command pairing on campaign intros.
     $hostRun = $null
     $localRun = $null
     try {
-        $hostMap = if ($LaunchMode -eq 'CoopHost') { $CoopMap } else { 'startup' }
+        $hostMap = if ($LaunchMode -eq 'CoopHost') { $CoopMap } else { $VersusMap }
         $hostSlots = if ($LaunchMode -eq 'CoopHost') { 2 } else { $MaxPlayers }
         $hostRun = & (Join-Path $PSScriptRoot 'Launch-Multiplayer.ps1') `
             -Mode $profileMode -Role Host -WorkRoot $gameRoot -Map $hostMap -Port $Port `
-            -MaxPlayers $hostSlots -ScoreLimit $ScoreLimit -PlayerName $PlayerName -Unattended
+            -MaxPlayers $hostSlots -ScoreLimit $ScoreLimit -HideTime $HideTime -HuntTime $HuntTime -PlayerName $PlayerName -Unattended
         if ($hostRun.status -ne 'STARTED') { throw 'The server did not start.' }
         $hostOutput = Join-Path $hostRun.runRoot 'server-stdout.log'
         $serverReady = $false

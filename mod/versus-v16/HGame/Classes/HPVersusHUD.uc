@@ -239,12 +239,130 @@ simulated function int GetSortedPlayers(out HPVersusPRI Rows[8])
     return Count;
 }
 
+simulated function string FormatHideSeekClock(int Seconds)
+{
+    local int Minutes;
+    local int Remainder;
+    local string Tail;
+
+    if (Seconds < 0)
+        Seconds = 0;
+    Minutes = Seconds / 60;
+    Remainder = Seconds - Minutes * 60;
+    if (Remainder < 10)
+        Tail = "0" $ string(Remainder);
+    else
+        Tail = string(Remainder);
+    return string(Minutes) $ ":" $ Tail;
+}
+
+simulated function HPVersusHarry FindPawnForPRI(HPVersusPRI WantedPRI)
+{
+    local HPVersusHarry H;
+
+    foreach AllActors(Class'HPVersusHarry', H)
+        if (H.PlayerReplicationInfo == WantedPRI)
+            return H;
+    return None;
+}
+
+simulated function DrawHideSeekOverlay(Canvas C, HPVersusHarry H,
+    HPHideSeekGRI G, HPVersusPRI Rows[8], int Count)
+{
+    local float Scale;
+    local float X;
+    local float Y;
+    local float W;
+    local int I;
+    local HPVersusHarry RowPawn;
+    local string PhaseText;
+
+    Scale = FClamp(C.SizeY / 720.0, 0.75, 1.50);
+    X = 18.0 * Scale;
+    Y = C.SizeY - 168.0 * Scale;
+    W = 350.0 * Scale;
+    DrawSolidRect(C, X, Y, W, 150.0 * Scale, 19, 17, 28);
+    DrawSolidRect(C, X, Y, W, 2.0 * Scale, 126, 103, 177);
+
+    if (G.HideSeekPhase == 'WaitingForPlayers')
+        PhaseText = "WAITING FOR PLAYERS";
+    else if (G.HideSeekPhase == 'SelectHunter')
+        PhaseText = "SELECTING HUNTER";
+    else if (G.HideSeekPhase == 'HidePhase')
+        PhaseText = "HIDE PHASE";
+    else if (G.HideSeekPhase == 'HuntPhase')
+        PhaseText = "HUNT PHASE";
+    else if (G.HideSeekPhase == 'RoundOver')
+        PhaseText = "ROUND OVER";
+    else
+        PhaseText = "NEXT ROUND";
+
+    C.Font = C.MedFont;
+    DrawVersusTextTint(C, X + 12.0 * Scale, Y + 10.0 * Scale,
+        PhaseText, 230, 215, 255);
+    C.Font = C.SmallFont;
+    DrawVersusText(C, X + 12.0 * Scale, Y + 40.0 * Scale,
+        "TIME  " $ FormatHideSeekClock(G.RoundTimer));
+    DrawVersusText(C, X + 180.0 * Scale, Y + 40.0 * Scale,
+        "HIDERS LEFT  " $ string(G.HidersLeft));
+    DrawVersusTextTint(C, X + 12.0 * Scale, Y + 66.0 * Scale,
+        "ROLE  " $ H.GetHideSeekRoleName(), 116, 231, 141);
+
+    if (H.bHideSeekCaught)
+    {
+        DrawVersusTextTint(C, X + 12.0 * Scale, Y + 94.0 * Scale,
+            "FOUND - WAIT FOR NEXT ROUND", 244, 111, 106);
+    }
+    else if (H.HideSeekRole == 1)
+    {
+        DrawVersusText(C, X + 12.0 * Scale, Y + 94.0 * Scale,
+            "SPELL  RICTUSEMPRA");
+        if (G.HideSeekPhase == 'HuntPhase')
+            DrawVersusTextTint(C, X + 12.0 * Scale, Y + 119.0 * Scale,
+                "READY", 116, 231, 141);
+        else
+            DrawVersusTextTint(C, X + 12.0 * Scale, Y + 119.0 * Scale,
+                "WAIT...", 245, 190, 88);
+    }
+    else
+    {
+        DrawVersusText(C, X + 12.0 * Scale, Y + 94.0 * Scale,
+            "DISGUISE  " $ H.GetHideSeekDisguiseName());
+        DrawVersusTextTint(C, X + 12.0 * Scale, Y + 119.0 * Scale,
+            "NUMPAD 0 - CHANGE DISGUISE", 109, 205, 255);
+    }
+
+    DrawVersusText(C, 20, 20, "HIDE & SEEK   HUNTER " $ G.HunterName);
+    DrawVersusText(C, 20, 40, "F3 ROLES");
+    if (!bShowVersusScores && G.HideSeekPhase != 'RoundOver')
+        return;
+
+    X = C.SizeX * 0.10;
+    Y = C.SizeY * 0.18;
+    DrawVersusText(C, X, Y, "HIDE & SEEK   " $ string(Count) $ "/8");
+    Y += 25.0;
+    DrawVersusText(C, X, Y, "NAME");
+    DrawVersusText(C, X + 175.0, Y, "CHARACTER");
+    DrawVersusText(C, X + 345.0, Y, "ROLE");
+    for (I = 0; I < Count; I++)
+    {
+        Y += 22.0;
+        RowPawn = FindPawnForPRI(Rows[I]);
+        DrawVersusText(C, X, Y, Rows[I].PlayerName);
+        DrawVersusText(C, X + 175.0, Y, Rows[I].SelectedCharacter);
+        if (RowPawn != None)
+            DrawVersusText(C, X + 345.0, Y,
+                RowPawn.GetHideSeekRoleName());
+    }
+}
+
 simulated function PostRender(Canvas C)
 {
     local HPVersusHarry H;
     local HPVersusPRI OwnPRI;
     local HPVersusPRI Rows[8];
     local HPVersusGRI G;
+    local HPHideSeekGRI HideSeekGRI;
     local Font SavedFont;
     local Color SavedColor;
     local int SavedStyle;
@@ -263,10 +381,21 @@ simulated function PostRender(Canvas C)
     SavedFont = C.Font;
     SavedColor = C.DrawColor;
     SavedStyle = C.Style;
-    DrawVersusCombatPanel(C, H);
 
     OwnPRI = HPVersusPRI(H.PlayerReplicationInfo);
     G = HPVersusGRI(H.GameReplicationInfo);
+    HideSeekGRI = HPHideSeekGRI(H.GameReplicationInfo);
+    Count = GetSortedPlayers(Rows);
+    if (HideSeekGRI != None && OwnPRI != None)
+    {
+        DrawHideSeekOverlay(C, H, HideSeekGRI, Rows, Count);
+        C.Font = SavedFont;
+        C.DrawColor = SavedColor;
+        C.Style = SavedStyle;
+        return;
+    }
+
+    DrawVersusCombatPanel(C, H);
     if (G != None && OwnPRI != None)
     {
         C.Font = C.SmallFont;
@@ -289,7 +418,6 @@ simulated function PostRender(Canvas C)
                 $ G.ScoreLimit $ "   DEATHS " $ int(OwnPRI.Deaths);
 
         DrawVersusText(C, 20, 20, PhaseText);
-        Count = GetSortedPlayers(Rows);
         if (Count > 0 && G.MatchState == 'InProgress')
             DrawVersusText(C, 20, 40, "LEADER " $ Rows[0].PlayerName
                 $ " (" $ Rows[0].RoundScore $ ")   F3 SCORES");

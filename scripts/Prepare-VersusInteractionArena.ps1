@@ -10,6 +10,7 @@ if (!(Test-Path -LiteralPath $marker -PathType Leaf)) {
 }
 $source = Join-Path $WorkRoot 'Maps\startup.unr'
 $destination = Join-Path $WorkRoot 'Maps\HPV_Interactions.unr'
+$hideSeekDestination = Join-Path $WorkRoot 'Maps\HPV_HideSeek.unr'
 if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
     throw 'Accepted startup.unr is missing.'
 }
@@ -18,4 +19,10 @@ if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
     (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) {
     throw 'Interaction arena copy hash mismatch.'
 }
+Copy-Item -LiteralPath $source -Destination $hideSeekDestination -Force
+if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
+    (Get-FileHash -LiteralPath $hideSeekDestination -Algorithm SHA256).Hash) {
+    throw 'Hide & Seek arena copy hash mismatch.'
+}
 Write-Output $destination
+Write-Output $hideSeekDestination

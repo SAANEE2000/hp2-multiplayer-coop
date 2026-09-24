@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "maps": [
+    {
+      "MapId": "StartupArena",
+      "DisplayName": "Startup Arena",
+      "PackageName": "startup",
+      "SupportsFFA": true,
+      "SupportsHideSeek": false,
+      "MinPlayers": 2,
+      "MaxPlayers": 8
+    },
+    {
+      "MapId": "InteractionsTest",
+      "DisplayName": "Interactions Test",
+      "PackageName": "HPV_Interactions",
+      "SupportsFFA": true,
+      "SupportsHideSeek": false,
+      "MinPlayers": 2,
+      "MaxPlayers": 8
+    },
+    {
+      "MapId": "HideSeekLab",
+      "DisplayName": "Hide & Seek Lab",
+      "PackageName": "HPV_HideSeek",
+      "SupportsFFA": false,
+      "SupportsHideSeek": true,
+      "MinPlayers": 2,
+      "MaxPlayers": 8
+    }
+  ]
+}

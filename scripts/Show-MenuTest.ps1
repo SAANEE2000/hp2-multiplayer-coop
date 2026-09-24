@@ -2,7 +2,7 @@
 param(
     [switch]$RenderPreview,
     [switch]$SelfTest,
-    [ValidateSet('Main','Coop','Versus','VersusCharacterGroups','VersusCharacters','CoopStart','CoopLevels','CoopLoad','CoopHost','CoopJoin','VersusHost','VersusJoin')]
+    [ValidateSet('Main','Coop','VersusModes','Versus','HideSeek','VersusCharacterGroups','VersusCharacters','CoopStart','CoopLevels','CoopLoad','CoopHost','CoopJoin','VersusHost','VersusJoin','HideSeekHost','HideSeekJoin')]
     [string]$PreviewPage = 'Main'
 )
 $ErrorActionPreference = 'Stop'
@@ -15,6 +15,13 @@ $script:versusProfilePath = Join-Path $repo '.local\versus-menu-player.json'
 $script:versusName = 'Harry'
 $script:versusCharacter = 'Harry'
 $script:versusCharacterGroup = 'Gryffindor'
+$script:versusMapCatalogPath = Join-Path $repo 'config\versus-maps.json'
+if (!(Test-Path -LiteralPath $script:versusMapCatalogPath -PathType Leaf)) {
+    throw 'Versus map catalog is missing.'
+}
+$script:versusMapCatalog = @((Get-Content -LiteralPath $script:versusMapCatalogPath -Raw -Encoding UTF8 | ConvertFrom-Json).maps)
+$script:versusMap = 'startup'
+$script:hideSeekMap = 'HPV_HideSeek'
 $script:versusCharacterProfiles = [ordered]@{
     Gryffindor = @(
         [pscustomobject]@{Id='Harry'; Label='Гарри'; Enabled=$true},
@@ -71,6 +78,12 @@ function Get-VersusCharacterGroup([string]$Id) {
     }
     return 'Gryffindor'
 }
+function Get-VersusMaps([string]$Mode) {
+    if ($Mode -eq 'HideSeek') {
+        return @($script:versusMapCatalog | Where-Object { [bool]$_.SupportsHideSeek })
+    }
+    return @($script:versusMapCatalog | Where-Object { [bool]$_.SupportsFFA })
+}
 $script:versusHostWindowX = 20
 $script:versusHostWindowY = 40
 $script:versusHostWindowWidth = 800
@@ -119,7 +132,7 @@ function Save-VersusProfile {
         Set-Content -LiteralPath $script:versusProfilePath -Encoding UTF8
 }
 function Remember-VersusName {
-    if ($script:currentMode -eq 'Versus' -and $script:nameBox -and !$script:nameBox.IsDisposed) {
+    if ($script:currentMode -in @('Versus','HideSeek') -and $script:nameBox -and !$script:nameBox.IsDisposed) {
         $script:versusName = $script:nameBox.Text
         Save-VersusProfile
     }
@@ -241,6 +254,28 @@ function Add-MenuSideInput {
     return $box
 }
 
+function Add-MenuMapChoice {
+    param([object[]]$Maps, [string]$SelectedPackage, [int]$Top)
+    [void](Add-MenuLabel 'Карта' ($Top - 24) 27 10)
+    $choice = New-Object System.Windows.Forms.ComboBox
+    $choice.Left = 145
+    $choice.Top = $Top
+    $choice.Width = 350
+    $choice.Height = 30
+    $choice.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    $choice.BackColor = [System.Drawing.Color]::FromArgb(23,19,39)
+    $choice.ForeColor = [System.Drawing.Color]::White
+    $choice.Font = New-Object System.Drawing.Font('Segoe UI',11)
+    foreach ($map in $Maps) { [void]$choice.Items.Add($map) }
+    $choice.DisplayMember = 'DisplayName'
+    for ($i = 0; $i -lt $choice.Items.Count; $i++) {
+        if ($choice.Items[$i].PackageName -ieq $SelectedPackage) { $choice.SelectedIndex = $i; break }
+    }
+    if ($choice.SelectedIndex -lt 0 -and $choice.Items.Count -gt 0) { $choice.SelectedIndex = 0 }
+    [void]$script:form.Controls.Add($choice)
+    return $choice
+}
+
 function Read-WindowPosition {
     param([System.Windows.Forms.TextBox]$XBox, [System.Windows.Forms.TextBox]$YBox,
           [ref]$X, [ref]$Y)
@@ -285,13 +320,15 @@ function Invoke-MenuGame {
     param([string]$Mode, [string]$Address, [int]$PortNumber, [string]$Name,
           [string]$CoopMap = 'Ch1Rictusempra', [int]$MaxPlayers = 8, [int]$ScoreLimit = 3,
           [int]$WindowX = 20, [int]$WindowY = 40,
-          [int]$WindowWidth = 800, [int]$WindowHeight = 600)
+          [int]$WindowWidth = 800, [int]$WindowHeight = 600,
+          [string]$VersusMap = 'startup', [int]$HideTime = 60, [int]$HuntTime = 180)
     try {
-        if ($Mode -like 'Versus*') { $script:versusName = $Name; Save-VersusProfile }
+        if ($Mode -like 'Versus*' -or $Mode -like 'HideSeek*') { $script:versusName = $Name; Save-VersusProfile }
         $launchParameters = @{
             LaunchMode=$Mode; Server=$Address; Port=$PortNumber; PlayerName=$Name
             Character=$script:versusCharacter; MaxPlayers=$MaxPlayers; ScoreLimit=$ScoreLimit
             WindowX=$WindowX; WindowY=$WindowY; WindowWidth=$WindowWidth; WindowHeight=$WindowHeight
+            VersusMap=$VersusMap; HideTime=$HideTime; HuntTime=$HuntTime
         }
         # Versus has its own fixed arena. Do not pass the unrelated co-op map
         # field: on a fresh menu session $script:coopMap has not been set yet.
@@ -320,17 +357,29 @@ function Show-MainMenu {
     [void](Add-MenuButton 'Загрузка игры' 353 { Invoke-MenuGame 'Original' '127.0.0.1' 7777 'Harry' })
     [void](Add-MenuButton 'Настройка' 431 { Invoke-MenuGame 'Original' '127.0.0.1' 7777 'Harry' })
     [void](Add-MenuButton 'Кооператив' 509 { Show-ModeMenu 'Coop' })
-    [void](Add-MenuButton 'Версус' 587 { Show-ModeMenu 'Versus' })
+    [void](Add-MenuButton 'Версус' 587 { Show-VersusModeSelect })
     [void](Add-MenuLabel 'Загрузка и настройка открывают исходное меню игры.' 674 25 9)
 }
 
+function Show-VersusModeSelect {
+    Remember-VersusName
+    Clear-MenuPage
+    $script:page = 'VersusModes'
+    [void](Add-MenuLabel 'Версус: режим игры' 275 35 19)
+    [void](Add-MenuButton 'Каждый за себя' 355 { Show-ModeMenu 'Versus' })
+    [void](Add-MenuButton 'Прятки' 445 { Show-ModeMenu 'HideSeek' })
+    [void](Add-MenuButton 'Назад' 555 { Show-MainMenu })
+}
+
 function Show-ModeMenu {
-    param([ValidateSet('Coop','Versus')][string]$Mode)
+    param([ValidateSet('Coop','Versus','HideSeek')][string]$Mode)
     Remember-VersusName
     Clear-MenuPage
     $script:page = 'Mode'
     $script:currentMode = $Mode
-    $title = if ($Mode -eq 'Coop') { 'Кооператив' } else { 'Версус' }
+    $title = if ($Mode -eq 'Coop') { 'Кооператив' }
+        elseif ($Mode -eq 'HideSeek') { 'Версус: прятки' }
+        else { 'Версус: каждый за себя' }
     [void](Add-MenuLabel $title 275 35 19)
     if ($Mode -eq 'Coop') {
         [void](Add-MenuButton 'Создать сервер' 355 { Show-CoopStartMenu })
@@ -343,7 +392,7 @@ function Show-ModeMenu {
         [void](Add-MenuButton 'Выбрать персонажа' 400 { Remember-VersusName; Show-VersusCharacterGroups })
         [void](Add-MenuButton 'Создать сервер' 478 { Remember-VersusName; Show-HostMenu })
         [void](Add-MenuButton 'Подключиться' 556 { Remember-VersusName; Show-JoinMenu })
-        [void](Add-MenuButton 'Назад' 634 { Remember-VersusName; Show-MainMenu })
+        [void](Add-MenuButton 'Назад' 634 { Remember-VersusName; Show-VersusModeSelect })
     }
 }
 
@@ -367,7 +416,7 @@ function Show-VersusCharacterGroups {
         }
         $top += 68
     }
-    [void](Add-MenuButton 'Назад' 623 { Show-ModeMenu 'Versus' })
+    [void](Add-MenuButton 'Назад' 623 { Show-ModeMenu $script:currentMode })
 }
 
 function Show-VersusCharacters {
@@ -391,7 +440,7 @@ function Show-VersusCharacters {
             $script:versusCharacter = [string]$this.Tag
             $script:versusCharacterGroup = Get-VersusCharacterGroup $script:versusCharacter
             Save-VersusProfile
-            Show-ModeMenu 'Versus'
+            Show-ModeMenu $script:currentMode
         } $profile.Enabled
         $button.Tag = $profile.Id
         if ($profile.Id -ceq $script:versusCharacter) {
@@ -447,7 +496,9 @@ function Show-CoopHostMenu {
 function Show-HostMenu {
     Clear-MenuPage
     $script:page = 'Host'
-    $title = if ($script:currentMode -eq 'Coop') { 'Кооператив: сервер' } else { 'Версус: сервер' }
+    $title = if ($script:currentMode -eq 'Coop') { 'Кооператив: сервер' }
+        elseif ($script:currentMode -eq 'HideSeek') { 'Прятки: сервер' }
+        else { 'FFA: сервер' }
     [void](Add-MenuLabel $title 275 35 18)
     if ($script:currentMode -eq 'Coop') {
         $mapLabel = switch ($script:coopMap) {
@@ -458,22 +509,39 @@ function Show-HostMenu {
         }
         [void](Add-MenuLabel ("Уровень: " + $mapLabel) 318 30 11)
     }
-    if ($script:currentMode -eq 'Versus') {
+    if ($script:currentMode -in @('Versus','HideSeek')) {
         [void](Add-MenuLabel ("Игрок: " + $script:versusName) 318 27 11)
-        $script:slotsBox = Add-MenuSideInput 'Игроков (2–8)' '8' 160 374 110
-        $script:scoreBox = Add-MenuSideInput 'Фрагов (1–99)' '3' 370 374 110
-        $script:windowXBox = Add-MenuSideInput 'Окно X' ([string]$script:versusHostWindowX) 220 442 90
-        $script:windowYBox = Add-MenuSideInput 'Окно Y' ([string]$script:versusHostWindowY) 330 442 90
-        $script:windowWidthBox = Add-MenuSideInput 'Ширина' ([string]$script:versusHostWindowWidth) 220 496 90
-        $script:windowHeightBox = Add-MenuSideInput 'Высота' ([string]$script:versusHostWindowHeight) 330 496 90
+        $maps = Get-VersusMaps $script:currentMode
+        $selectedMap = if ($script:currentMode -eq 'HideSeek') { $script:hideSeekMap } else { $script:versusMap }
+        $script:mapBox = Add-MenuMapChoice $maps $selectedMap 354
+        $script:slotsBox = Add-MenuSideInput 'Игроков (2–8)' '8' 145 414 105
+        if ($script:currentMode -eq 'HideSeek') {
+            $script:hideTimeBox = Add-MenuSideInput 'Скрытие, сек' '60' 270 414 105
+            $script:huntTimeBox = Add-MenuSideInput 'Поиск, сек' '180' 395 414 105
+        } else {
+            $script:scoreBox = Add-MenuSideInput 'Фрагов (1–99)' '3' 350 414 105
+        }
+        $script:windowXBox = Add-MenuSideInput 'Окно X' ([string]$script:versusHostWindowX) 145 474 90
+        $script:windowYBox = Add-MenuSideInput 'Окно Y' ([string]$script:versusHostWindowY) 255 474 90
+        $script:windowWidthBox = Add-MenuSideInput 'Ширина' ([string]$script:versusHostWindowWidth) 365 474 90
+        $script:windowHeightBox = Add-MenuSideInput 'Высота' ([string]$script:versusHostWindowHeight) 475 474 90
         [void](Add-MenuButton 'Запустить сервер' 535 {
-            $slots = 0; $score = 0; $windowX = 0; $windowY = 0; $windowWidth = 0; $windowHeight = 0
+            $slots = 0; $score = 3; $hideTime = 60; $huntTime = 180
+            $windowX = 0; $windowY = 0; $windowWidth = 0; $windowHeight = 0
             if (![int]::TryParse($script:slotsBox.Text, [ref]$slots) -or $slots -lt 2 -or $slots -gt 8 -or
-                ![int]::TryParse($script:scoreBox.Text, [ref]$score) -or $score -lt 1 -or $score -gt 99) {
-                [void][System.Windows.Forms.MessageBox]::Show('Укажите 2–8 игроков и 1–99 фрагов.', 'Параметры матча',
+                ($script:currentMode -eq 'Versus' -and
+                 (![int]::TryParse($script:scoreBox.Text, [ref]$score) -or $score -lt 1 -or $score -gt 99)) -or
+                ($script:currentMode -eq 'HideSeek' -and
+                 (![int]::TryParse($script:hideTimeBox.Text, [ref]$hideTime) -or $hideTime -lt 5 -or $hideTime -gt 600 -or
+                  ![int]::TryParse($script:huntTimeBox.Text, [ref]$huntTime) -or $huntTime -lt 15 -or $huntTime -gt 1200))) {
+                [void][System.Windows.Forms.MessageBox]::Show('Проверьте число игроков и параметры режима.', 'Параметры матча',
                     [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
                 return
             }
+            if (!$script:mapBox.SelectedItem) { return }
+            $mapPackage = [string]$script:mapBox.SelectedItem.PackageName
+            if ($script:currentMode -eq 'HideSeek') { $script:hideSeekMap = $mapPackage }
+            else { $script:versusMap = $mapPackage }
             if (!(Read-WindowPosition $script:windowXBox $script:windowYBox ([ref]$windowX) ([ref]$windowY))) { return }
             if (!(Read-WindowSize $script:windowWidthBox $script:windowHeightBox ([ref]$windowWidth) ([ref]$windowHeight))) { return }
             $script:versusHostWindowX = $windowX
@@ -481,7 +549,8 @@ function Show-HostMenu {
             $script:versusHostWindowWidth = $windowWidth
             $script:versusHostWindowHeight = $windowHeight
             Save-VersusProfile
-            Invoke-MenuGame 'VersusHost' '127.0.0.1' 7777 $script:versusName $script:coopMap $slots $score $windowX $windowY $windowWidth $windowHeight
+            $launchMode = if ($script:currentMode -eq 'HideSeek') { 'HideSeekHost' } else { 'VersusHost' }
+            Invoke-MenuGame $launchMode '127.0.0.1' 7777 $script:versusName $script:coopMap $slots $score $windowX $windowY $windowWidth $windowHeight $mapPackage $hideTime $huntTime
         })
     } else {
         $script:nameBox = Add-MenuInput 'Имя игрока' 'Harry' 385 300
@@ -502,16 +571,18 @@ function Show-HostMenu {
         }
         [void](Add-MenuLabel $hint 674 28 9)
     } else {
-        [void](Add-MenuLabel 'Арена: Startup. Порт: 7777. Вы тоже входите в матч.' 691 22 9)
+        [void](Add-MenuLabel 'Карта и режим задаются сервером. Порт: 7777.' 691 22 9)
     }
 }
 
 function Show-JoinMenu {
     Clear-MenuPage
     $script:page = 'Join'
-    $title = if ($script:currentMode -eq 'Coop') { 'Кооператив: подключение' } else { 'Версус: подключение' }
+    $title = if ($script:currentMode -eq 'Coop') { 'Кооператив: подключение' }
+        elseif ($script:currentMode -eq 'HideSeek') { 'Прятки: подключение' }
+        else { 'FFA: подключение' }
     [void](Add-MenuLabel $title 266 35 17)
-    if ($script:currentMode -eq 'Versus') {
+    if ($script:currentMode -in @('Versus','HideSeek')) {
         $script:addressBox = Add-MenuInput 'IP-адрес или имя сервера' '127.0.0.1' 334 330
         [void](Add-MenuLabel ("Игрок: " + $script:versusName) 370 25 10)
         $script:portBox = Add-MenuSideInput 'Порт' '7777' 145 428 100
@@ -537,7 +608,7 @@ function Show-JoinMenu {
                 [System.Windows.Forms.MessageBoxIcon]::Warning)
             return
         }
-        if ($script:currentMode -eq 'Versus') {
+        if ($script:currentMode -in @('Versus','HideSeek')) {
             if (!(Read-WindowPosition $script:windowXBox $script:windowYBox ([ref]$windowX) ([ref]$windowY))) { return }
             if (!(Read-WindowSize $script:windowWidthBox $script:windowHeightBox ([ref]$windowWidth) ([ref]$windowHeight))) { return }
             $script:versusJoinWindowX = $windowX
@@ -559,10 +630,12 @@ $script:form.Add_KeyDown({
     if ($eventArgs.KeyCode -ne [System.Windows.Forms.Keys]::Escape) { return }
     if ($script:page -eq 'Host' -and $script:currentMode -eq 'Coop') { Show-CoopStartMenu }
     elseif ($script:page -eq 'VersusCharacters') { Show-VersusCharacterGroups }
-    elseif ($script:page -eq 'VersusCharacterGroups') { Show-ModeMenu 'Versus' }
+    elseif ($script:page -eq 'VersusCharacterGroups') { Show-ModeMenu $script:currentMode }
     elseif ($script:page -eq 'CoopLevels' -or $script:page -eq 'CoopLoad') { Show-CoopStartMenu }
     elseif ($script:page -eq 'CoopStart') { Show-ModeMenu 'Coop' }
     elseif ($script:page -in @('Host','Join')) { Show-ModeMenu $script:currentMode }
+    elseif ($script:page -eq 'Mode' -and $script:currentMode -in @('Versus','HideSeek')) { Show-VersusModeSelect }
+    elseif ($script:page -eq 'VersusModes') { Show-MainMenu }
     elseif ($script:page -eq 'Mode') { Show-MainMenu }
     else { $script:form.Close() }
 })
@@ -578,8 +651,11 @@ try {
             @('Скурдж (эксп.)','Host'), @('Назад','CoopStart'),
             @('Выбор уровня','CoopLevels'), @('Назад','CoopStart'),
             @('Назад','Mode'), @('Подключиться','Join'), @('Назад','Mode'),
-            @('Назад','Main'), @('Версус','Mode'), @('Создать сервер','Host'),
-            @('Назад','Mode'), @('Назад','Main')
+            @('Назад','Main'), @('Версус','VersusModes'),
+            @('Каждый за себя','Mode'), @('Создать сервер','Host'),
+            @('Назад','Mode'), @('Назад','VersusModes'),
+            @('Прятки','Mode'), @('Создать сервер','Host'),
+            @('Назад','Mode'), @('Назад','VersusModes'), @('Назад','Main')
         )) {
             $button = @($script:form.Controls | Where-Object {
                 $_ -is [System.Windows.Forms.Button] -and $_.Text -eq $step[0]
@@ -667,6 +743,18 @@ try {
             $script:lastTestLaunch.WindowHeight -ne $script:versusHostWindowHeight) {
             throw 'Versus host menu route failed.'
         }
+        Show-ModeMenu 'HideSeek'
+        Show-HostMenu
+        Invoke-MenuGame -Mode 'HideSeekHost' -Address '127.0.0.1' -PortNumber 7777 `
+            -Name $script:versusName -MaxPlayers 8 -WindowX $script:versusHostWindowX `
+            -WindowY $script:versusHostWindowY -WindowWidth $script:versusHostWindowWidth `
+            -WindowHeight $script:versusHostWindowHeight -VersusMap 'HPV_HideSeek' `
+            -HideTime 60 -HuntTime 180
+        if ($script:lastTestLaunch.LaunchMode -ne 'HideSeekHost' -or
+            $script:lastTestLaunch.URL -ne 'HPV_HideSeek.unr?game=HGame.HPHideSeekGame?MaxPlayers=8?HideTime=60?HuntTime=180') {
+            throw 'Hide & Seek host menu route failed.'
+        }
+        Show-ModeMenu 'Versus'
         Show-JoinMenu
         if ($script:addressBox.Text -ne '127.0.0.1' -or
             $script:portBox.Text -ne '7777' -or
@@ -680,7 +768,9 @@ try {
     } elseif ($RenderPreview) {
         switch ($PreviewPage) {
             Coop       { Show-ModeMenu 'Coop' }
+            VersusModes { Show-VersusModeSelect }
             Versus     { Show-ModeMenu 'Versus' }
+            HideSeek   { Show-ModeMenu 'HideSeek' }
             VersusCharacterGroups { Show-ModeMenu 'Versus'; Show-VersusCharacterGroups }
             VersusCharacters { Show-ModeMenu 'Versus'; Show-VersusCharacters 'Gryffindor' }
             CoopStart  { Show-ModeMenu 'Coop'; Show-CoopStartMenu }
@@ -690,6 +780,8 @@ try {
             CoopJoin   { Show-ModeMenu 'Coop'; Show-JoinMenu }
             VersusHost { Show-ModeMenu 'Versus'; Show-HostMenu }
             VersusJoin { Show-ModeMenu 'Versus'; Show-JoinMenu }
+            HideSeekHost { Show-ModeMenu 'HideSeek'; Show-HostMenu }
+            HideSeekJoin { Show-ModeMenu 'HideSeek'; Show-JoinMenu }
         }
         $script:form.Show()
         [System.Windows.Forms.Application]::DoEvents()

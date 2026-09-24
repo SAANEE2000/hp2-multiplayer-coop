@@ -36,3 +36,7 @@ See `docs/VERSUS_V16_QUICKSTART.md` for the arena, 2–8 player setup and
 the exact tests completed so far.
 For the isolated six-spell interaction arena, Numpad selector, HUD states and
 the two-client manual checklist, see `docs/VERSUS_SPELL_TEST_QUICKSTART.md`.
+Versus now offers Free For All and Hide & Seek with a central map catalog.
+Hide & Seek reuses the accepted v16 pawn, movement, camera and character
+pipeline; see `docs/HIDE_SEEK_QUICKSTART.md` for launch commands and the manual
+three-client checklist.

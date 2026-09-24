@@ -1,6 +1,6 @@
 [CmdletBinding(DefaultParameterSetName='Launch')]
 param(
-    [Parameter(Mandatory=$true,ParameterSetName='Launch')][ValidateSet('Coop','Versus')][string]$Mode,
+    [Parameter(Mandatory=$true,ParameterSetName='Launch')][ValidateSet('Coop','Versus','HideSeek')][string]$Mode,
     [Parameter(Mandatory=$true,ParameterSetName='Launch')][ValidateSet('Host','Join')][string]$Role,
     [Parameter(Mandatory=$true,ParameterSetName='Collect')][ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$')][string]$CollectSession,
     [string]$WorkRoot,
@@ -11,6 +11,8 @@ param(
     [ValidatePattern('^[A-Za-z][A-Za-z0-9]{0,39}$')][string]$Character = 'Harry',
     [ValidateRange(2,8)][int]$MaxPlayers = 2,
     [ValidateRange(1,99)][int]$ScoreLimit = 3,
+    [ValidateRange(5,600)][int]$HideTime = 60,
+    [ValidateRange(15,1200)][int]$HuntTime = 180,
     [ValidateRange(-32768,32767)][int]$WindowX = 20,
     [ValidateRange(-32768,32767)][int]$WindowY = 40,
     [ValidateRange(320,7680)][int]$WindowWidth = 800,
@@ -21,6 +23,7 @@ param(
     [switch]$FirstIntroPreflight,
     [ValidateSet('None','MissingAck0','MissingAck1','DuplicateCallbacks','DeathWalk0','DeathWalk1')][string]$IntroFault = 'None',
     [switch]$VersusMechanicsProbe,
+    [switch]$HideSeekProbe,
     [switch]$PrepareOnly,
     [switch]$Unattended
 )
@@ -101,8 +104,25 @@ $executable = Join-Path $system $(if ($Role -eq 'Host') { 'UCC.exe' } else { 'Ga
 foreach ($required in @($executable, (Join-Path $system 'Default.ini'), (Join-Path $system 'DefUser.ini'))) {
     if (!(Test-Path -LiteralPath $required -PathType Leaf)) { throw "Required file missing: $required" }
 }
-if (!$Map) { $Map = if ($Mode -eq 'Coop') { 'Ch1Rictusempra' } else { 'HPV_Entry' } }
+if (!$Map) {
+    $Map = if ($Mode -eq 'Coop') { 'Ch1Rictusempra' }
+        elseif ($Mode -eq 'HideSeek') { 'HPV_HideSeek' }
+        else { 'startup' }
+}
 $mapName = $Map -replace '(?i)\.unr$', ''
+$mapProfile = $null
+if ($Mode -in @('Versus','HideSeek') -and $Role -eq 'Host') {
+    $catalogPath = Join-Path $repo 'config\versus-maps.json'
+    if (!(Test-Path -LiteralPath $catalogPath -PathType Leaf)) { throw 'Versus map catalog is missing.' }
+    $catalog = Get-Content -LiteralPath $catalogPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $mapProfile = @($catalog.maps | Where-Object { $_.PackageName -ieq $mapName }) | Select-Object -First 1
+    if (!$mapProfile) { throw "Map is not registered in the Versus catalog: $mapName" }
+    $supported = if ($Mode -eq 'HideSeek') { [bool]$mapProfile.SupportsHideSeek } else { [bool]$mapProfile.SupportsFFA }
+    if (!$supported) { throw "Map $mapName does not support mode $Mode." }
+    if ($MaxPlayers -lt [int]$mapProfile.MinPlayers -or $MaxPlayers -gt [int]$mapProfile.MaxPlayers) {
+        throw "Map $mapName supports $($mapProfile.MinPlayers)-$($mapProfile.MaxPlayers) players."
+    }
+}
 if ($TestStage -ne 'None' -and ($Mode -ne 'Coop' -or $Role -ne 'Host' -or $mapName -ine 'Ch1Rictusempra')) {
     throw 'RictusempraLessonComplete is an explicit test fixture for Coop Host on Ch1Rictusempra only.'
 }
@@ -121,6 +141,9 @@ if ($IntroFault -ne 'None' -and !$FirstIntroPreflight) {
 if ($VersusMechanicsProbe -and ($Mode -ne 'Versus' -or $Role -ne 'Host')) {
     throw 'VersusMechanicsProbe is an explicit Versus Host test fixture.'
 }
+if ($HideSeekProbe -and ($Mode -ne 'HideSeek' -or $Role -ne 'Host')) {
+    throw 'HideSeekProbe is an explicit HideSeek Host test fixture.'
+}
 if ($RuntimeProbe -in @('MountRootB0','MountRootB1','Travel') -and (!$FirstIntroPreflight -or $IntroFault -ne 'None')) {
     throw 'MountRootB0/B1/Travel requires normal FirstIntroPreflight without an injected fault.'
 }
@@ -131,7 +154,9 @@ if ($Role -eq 'Host' -and !(Test-Path -LiteralPath (Join-Path $WorkRoot "Maps\$m
 if ([Uri]::CheckHostName($Server) -notin @([UriHostNameType]::Dns,[UriHostNameType]::IPv4)) {
     throw 'Server must be an IPv4 address or DNS hostname without a port, slash or URL options.'
 }
-$gameClass = if ($Mode -eq 'Coop') { 'HGame.HPCoopGame' } else { 'HGame.HPVersusGame' }
+$gameClass = if ($Mode -eq 'Coop') { 'HGame.HPCoopGame' }
+    elseif ($Mode -eq 'HideSeek') { 'HGame.HPHideSeekGame' }
+    else { 'HGame.HPVersusGame' }
 $pawnClass = if ($Mode -eq 'Coop') { 'HGame.HPCoopHarry' } else { 'HGame.HPVersusHarry' }
 $localGameClass = if ($Role -eq 'Join') { 'Engine.GameInfo' } else { $gameClass }
 $localPawnClass = if ($Role -eq 'Join') { 'HGame.harry' } else { $pawnClass }
@@ -178,7 +203,7 @@ if (!$PrepareOnly) {
         }
         if (!$knownServer) { throw "Unrecognized UCC process $($uccProcess.Id) may be building this copy. Wait for it to finish." }
     }
-    $modeBuild = Join-Path $repo $(if ($Mode -eq 'Versus' -and (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json'))) {
+    $modeBuild = Join-Path $repo $(if ($Mode -ne 'Coop' -and (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json'))) {
         '.local\last-build-v16.json'
     } else { '.local\last-build-coop.json' })
     $buildFile = if (Test-Path -LiteralPath $modeBuild) { $modeBuild } else { Join-Path $repo '.local\last-build.json' }
@@ -358,6 +383,7 @@ $config = Set-IniValues $config 'Engine.Player' ([ordered]@{ConfiguredInternetSp
 $config = Set-IniValues $config 'IpDrv.TcpNetDriver' ([ordered]@{MaxClientRate=50000})
 $config = Set-IniValues $config $gameClass ([ordered]@{MaxPlayers=$MaxPlayers})
 if ($Mode -eq 'Versus') { $config = Set-IniValues $config $gameClass ([ordered]@{ScoreLimit=$ScoreLimit}) }
+if ($Mode -eq 'HideSeek') { $config = Set-IniValues $config $gameClass ([ordered]@{HideDuration=$HideTime; HuntDuration=$HuntTime}) }
 $config = Set-IniValues $config 'IpDrv.UdpBeacon' ([ordered]@{DoBeacon='False'})
 $config = Set-IniValues $config 'IpServer.UdpServerUplink' ([ordered]@{DoUplink='False'})
 $config = Set-IniValues $config 'UWeb.WebServer' ([ordered]@{bEnabled='False'})
@@ -395,7 +421,8 @@ if ($Mode -eq 'Coop') {
         F3='VersusScores';
         NumPad1='VersusSpell1'; NumPad2='VersusSpell2';
         NumPad3='VersusSpell3'; NumPad4='VersusSpell4';
-        NumPad5='VersusSpell5'; NumPad6='VersusSpell6'
+        NumPad5='VersusSpell5'; NumPad6='VersusSpell6';
+        NumPad0='CycleVersusDisguise'
     }
 } else {
     # v18's proven direct bridge consumes these buttons. Do not add a second axis.
@@ -419,6 +446,8 @@ Copy-Item -LiteralPath $userIni -Destination (Join-Path $runRoot 'User.ini')
 if ($Role -eq 'Host') {
     $url = '{0}.unr?game={1}?MaxPlayers={2}' -f $mapName,$gameClass,$MaxPlayers
     if ($Mode -eq 'Versus') { $url += "?ScoreLimit=$ScoreLimit" }
+    if ($Mode -eq 'HideSeek') { $url += "?HideTime=$HideTime`?HuntTime=$HuntTime" }
+    if ($HideSeekProbe) { $url += '?HideSeekProbe=1' }
     if ($VersusMechanicsProbe) { $url += '?VersusMechanicsProbe=1' }
     if ($TestStage -ne 'None') { $url += "?CoopTestStage=$TestStage" }
     if ($RuntimeProbe -ne 'None') { $url += "?CoopProbe=$RuntimeProbe" }
@@ -431,7 +460,7 @@ if ($Role -eq 'Host') {
     # force a network pawn before a connection exists. Both server modes force
     # the correct pawn in Login, so the join URL needs no Class/game override.
     $url = 'unreal://{0}:{1}/?Name={2}' -f $Server,$Port,$PlayerName
-    if ($Mode -eq 'Versus') { $url += "?MPCharacter=$Character" }
+    if ($Mode -in @('Versus','HideSeek')) { $url += "?MPCharacter=$Character" }
     # M212 Game.exe's NewWindow command-line branch skips forwarding this
     # connection to an existing client window, allowing local two-client tests.
     $launchArgs = @($url, '-windowed', '-NOFRONTEND', '-NewWindow')
@@ -449,8 +478,8 @@ $manifest = [ordered]@{
     workRoot=$WorkRoot; executable=$executable; arguments=$launchArgs; map=$mapName; server=$Server; port=$Port;
     connectUrl=$(if ($Role -eq 'Join') { $url } else { $null });
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
-    playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; versusMechanicsProbe=[bool]$VersusMechanicsProbe; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
-    maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit;
+    playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; versusMechanicsProbe=[bool]$VersusMechanicsProbe; hideSeekProbe=[bool]$HideSeekProbe; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
+    maxPlayers=$MaxPlayers; scoreLimit=$ScoreLimit; hideTime=$HideTime; huntTime=$HuntTime;
     windowed=$true; windowX=$WindowX; windowY=$WindowY; windowWidth=$WindowWidth; windowHeight=$WindowHeight;
     windowPositionApplied=$false; windowFrameMode='native-resizable';
     engineLogCandidates=$logCandidates; engineLogLocationVerified=$false;

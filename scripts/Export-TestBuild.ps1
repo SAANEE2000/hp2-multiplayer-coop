@@ -68,7 +68,8 @@ if ($logText -notmatch 'Success - 0 error\(s\)' -or $logText -match '(?im)(Error
 $payload['ucc-output.log'] = $logBytes
 $files += [ordered]@{name='ucc-output.log'; bytes=$logBytes.Length; sha256=(Get-BytesHash $logBytes)}
 $exportCommit = $null
-if (Get-Command git -ErrorAction SilentlyContinue) {
+if ((Test-Path -LiteralPath (Join-Path $repo '.git')) -and
+    (Get-Command git -ErrorAction SilentlyContinue)) {
     try {
         $head = & git -C $repo rev-parse HEAD 2>$null
         if ($LASTEXITCODE -eq 0 -and "$head" -match '^[0-9a-f]{40,64}$') { $exportCommit = "$head" }

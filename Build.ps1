@@ -49,9 +49,33 @@ foreach ($sourceDir in @('mod','patches','scripts')) {
     }
 }
 $sourceManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $logRoot 'source-manifest.json') -Encoding UTF8
-$buildCommit = (& git -C $repo rev-parse HEAD 2>$null)
-$buildBranch = (& git -C $repo branch --show-current 2>$null)
-$buildDirty = [bool](& git -C $repo status --porcelain 2>$null)
+$buildCommit = $null
+$buildBranch = $null
+$buildDirty = $null
+# Git metadata is useful for a cloned checkout, but GitHub's Download ZIP has
+# no .git marker by design. Do not invoke git there: recent PowerShell versions
+# can promote git.exe's "not a repository" stderr to a terminating error.
+$repoGitMarker = Join-Path $repo '.git'
+if ((Test-Path -LiteralPath $repoGitMarker) -and
+    (Get-Command git -ErrorAction SilentlyContinue)) {
+    try {
+        $commitOutput = @(& git -C $repo rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $commitOutput.Count -gt 0) {
+            $buildCommit = $commitOutput[0]
+            $branchOutput = @(& git -C $repo branch --show-current 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $branchOutput.Count -gt 0) {
+                $buildBranch = $branchOutput[0]
+            }
+            $dirtyOutput = @(& git -C $repo status --porcelain 2>$null)
+            if ($LASTEXITCODE -eq 0) { $buildDirty = $dirtyOutput.Count -gt 0 }
+        }
+    } catch {
+        # Provenance stays null; compilation and package hashes remain valid.
+        $buildCommit = $null
+        $buildBranch = $null
+        $buildDirty = $null
+    }
+}
 if (!$Baseline) {
     $recipeFilter = if ($VersusV16) { 'versus-v16-*.json' } else { '*.json' }
     $recipes = @(Get-ChildItem -LiteralPath (Join-Path $repo 'patches') -Filter $recipeFilter -ErrorAction SilentlyContinue |

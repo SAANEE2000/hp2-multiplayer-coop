@@ -2,15 +2,20 @@
 param([string]$ArchivePath, [string]$GameRoot, [string]$WorkRoot, [switch]$ResumePreparedCopy)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
+$expectedHash = 'A2B13B924BF9BBA9F81C6A70E38024657C71F6F1F861FA49BF3F812C86EFB9BF'
 if (!$ArchivePath) {
-    $archives = @(Get-ChildItem -LiteralPath $repo -File -Filter 'HPVersus_v16_remote_bottom_align_20260905*.zip')
-    if ($archives.Count -ne 1) { throw "Expected one v16 archive in $repo; found $($archives.Count)." }
-    $ArchivePath = $archives[0].FullName
+    $archives = @(Get-ChildItem -LiteralPath $repo -File -Filter 'HPVersus_v16_remote_bottom_align_20260905*.zip' | Sort-Object Name)
+    $validArchives = @($archives | Where-Object {
+        (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash -eq $expectedHash
+    })
+    if ($validArchives.Count -eq 0) {
+        throw "No v16 archive with expected SHA-256 found in $repo; checked $($archives.Count) candidate(s)."
+    }
+    $ArchivePath = $validArchives[0].FullName
 }
 if (!$WorkRoot) { $WorkRoot = Join-Path $repo '.local\versus-v16-game' }
 $ArchivePath = (Resolve-Path -LiteralPath $ArchivePath).Path
 $WorkRoot = [IO.Path]::GetFullPath($WorkRoot)
-$expectedHash = 'A2B13B924BF9BBA9F81C6A70E38024657C71F6F1F861FA49BF3F812C86EFB9BF'
 $actualHash = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash
 if ($actualHash -ne $expectedHash) { throw "Unexpected v16 archive SHA-256: $actualHash" }
 if (Test-Path -LiteralPath $WorkRoot) {

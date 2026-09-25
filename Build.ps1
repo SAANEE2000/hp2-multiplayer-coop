@@ -113,37 +113,61 @@ if (!$Baseline) {
     }
 }
 $system = Join-Path $WorkRoot 'System'
-# Force a real rebuild; preserve previous packages instead of deleting them.
-foreach ($package in @('HGame.u','M212Share.u')) {
-    $binary = Join-Path $system $package
-    if (Test-Path -LiteralPath $binary) { Move-Item -LiteralPath $binary -Destination (Join-Path $logRoot "$package.before") }
-}
-$ini = Join-Path $system 'HP2Build.ini'
-$config = Get-Content -LiteralPath (Join-Path $system 'Default.ini') -Raw
-$config = $config -replace '(?m)^UserFolder=.*$', 'UserFolder=HP2-Multiplayer-Development'
-Set-Content -LiteralPath $ini -Value $config -Encoding ASCII
-Copy-Item -LiteralPath $ini -Destination (Join-Path $logRoot 'Build.ini')
-$output = Join-Path $logRoot 'ucc-output.log'
-$errorLog = Join-Path $logRoot 'ucc-stderr.log'
-# The supplied executable requests elevation even for a user-owned build tree.
-# Run it with ordinary user rights; no privileged installation writes are needed.
-$previousCompat = $env:__COMPAT_LAYER
+# A failed compiler run must leave the last known-good packages intact.
+$previousPackages = @{}
+$packagesReadyForBuild = $false
+$pass = $false
 try {
-    $env:__COMPAT_LAYER = 'RunAsInvoker'
-    $p = Start-Process -FilePath (Join-Path $system 'UCC.exe') -ArgumentList @('make', 'INI=HP2Build.ini', '-unattended', '-log=Make.log') -WorkingDirectory $system -RedirectStandardOutput $output -RedirectStandardError $errorLog -WindowStyle Hidden -PassThru -Wait
-} finally { $env:__COMPAT_LAYER = $previousCompat }
-$text = (Get-Content -LiteralPath $output -Raw -ErrorAction SilentlyContinue) + (Get-Content -LiteralPath $errorLog -Raw -ErrorAction SilentlyContinue)
-$pass = $p.ExitCode -eq 0 -and (Test-Path -LiteralPath (Join-Path $system 'HGame.u')) -and (Test-Path -LiteralPath (Join-Path $system 'M212Share.u')) -and $text -match 'Success - 0 error\(s\)' -and $text -notmatch '(?im)(Error in |Critical:|Compile failed|Failed to compile|\b[1-9][0-9]* error\(s\))'
+    # Force a real rebuild; retain the originals until success is verified.
+    foreach ($package in @('HGame.u','M212Share.u')) {
+        $binary = Join-Path $system $package
+        if (Test-Path -LiteralPath $binary) {
+            $backup = Join-Path $logRoot "$package.before"
+            Move-Item -LiteralPath $binary -Destination $backup
+            $previousPackages[$package] = $backup
+        }
+    }
+    $packagesReadyForBuild = $true
+    $ini = Join-Path $system 'HP2Build.ini'
+    $config = Get-Content -LiteralPath (Join-Path $system 'Default.ini') -Raw
+    $config = $config -replace '(?m)^UserFolder=.*$', 'UserFolder=HP2-Multiplayer-Development'
+    Set-Content -LiteralPath $ini -Value $config -Encoding ASCII
+    Copy-Item -LiteralPath $ini -Destination (Join-Path $logRoot 'Build.ini')
+    $output = Join-Path $logRoot 'ucc-output.log'
+    $errorLog = Join-Path $logRoot 'ucc-stderr.log'
+    # The supplied executable requests elevation even for a user-owned build tree.
+    # Run it with ordinary user rights; no privileged installation writes are needed.
+    $previousCompat = $env:__COMPAT_LAYER
+    try {
+        $env:__COMPAT_LAYER = 'RunAsInvoker'
+        $p = Start-Process -FilePath (Join-Path $system 'UCC.exe') -ArgumentList @('make', 'INI=HP2Build.ini', '-unattended', '-log=Make.log') -WorkingDirectory $system -RedirectStandardOutput $output -RedirectStandardError $errorLog -WindowStyle Hidden -PassThru -Wait
+    } finally { $env:__COMPAT_LAYER = $previousCompat }
+    $text = (Get-Content -LiteralPath $output -Raw -ErrorAction SilentlyContinue) + (Get-Content -LiteralPath $errorLog -Raw -ErrorAction SilentlyContinue)
+    $pass = $p.ExitCode -eq 0 -and (Test-Path -LiteralPath (Join-Path $system 'HGame.u')) -and (Test-Path -LiteralPath (Join-Path $system 'M212Share.u')) -and $text -match 'Success - 0 error\(s\)' -and $text -notmatch '(?im)(Error in |Critical:|Compile failed|Failed to compile|\b[1-9][0-9]* error\(s\))'
+} finally {
+    if (!$pass) {
+        foreach ($package in @('HGame.u','M212Share.u')) {
+            if (!$packagesReadyForBuild -and !$previousPackages.ContainsKey($package)) { continue }
+            $binary = Join-Path $system $package
+            if (Test-Path -LiteralPath $binary) { Remove-Item -LiteralPath $binary -Force }
+            if ($previousPackages.ContainsKey($package)) {
+                Move-Item -LiteralPath $previousPackages[$package] -Destination $binary
+            }
+        }
+    }
+}
 $result = @{passed=$pass; exitCode=$p.ExitCode; baseline=[bool]$Baseline; versusV16=[bool]$VersusV16; log=$output; workRoot=$WorkRoot; origin='local-ucc'; localUccRun=$true; commit=$buildCommit; branch=$buildBranch; sourceDirty=$buildDirty; sourceManifest=(Join-Path $logRoot 'source-manifest.json')}
 if ($VersusV16) { $result.sourceArchiveSha256 = $v16Marker.sha256 }
 if (Test-Path -LiteralPath (Join-Path $system 'HGame.u')) { $result.hgameSha256=(Get-FileHash -LiteralPath (Join-Path $system 'HGame.u') -Algorithm SHA256).Hash }
 if (Test-Path -LiteralPath (Join-Path $system 'M212Share.u')) { $result.m212ShareSha256=(Get-FileHash -LiteralPath (Join-Path $system 'M212Share.u') -Algorithm SHA256).Hash }
 $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logRoot 'result.json') -Encoding UTF8
-$result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build.json') -Encoding UTF8
-if ($VersusV16) {
-    $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-v16.json') -Encoding UTF8
-} elseif (!$Baseline) {
-    $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-coop.json') -Encoding UTF8
+if ($pass) {
+    $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build.json') -Encoding UTF8
+    if ($VersusV16) {
+        $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-v16.json') -Encoding UTF8
+    } elseif (!$Baseline) {
+        $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-coop.json') -Encoding UTF8
+    }
 }
 Get-Content -LiteralPath $output -Tail 24
 Write-Output "Build logs: $logRoot"

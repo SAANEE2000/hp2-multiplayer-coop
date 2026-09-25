@@ -11,6 +11,7 @@ simulated event PostBeginPlay()
 {
     Super.PostBeginPlay();
     LoadVersusHUDTextures();
+    Log("HPVersusHUD active owner=" $ string(Owner));
 }
 
 simulated function LoadVersusHUDTextures()
@@ -279,7 +280,7 @@ simulated function DrawHideSeekOverlay(Canvas C, HPVersusHarry H,
 
     Scale = FClamp(C.SizeY / 720.0, 0.75, 1.50);
     X = 18.0 * Scale;
-    Y = C.SizeY - 168.0 * Scale;
+    Y = 58.0 * Scale;
     W = 350.0 * Scale;
     DrawSolidRect(C, X, Y, W, 150.0 * Scale, 19, 17, 28);
     DrawSolidRect(C, X, Y, W, 2.0 * Scale, 126, 103, 177);
@@ -371,9 +372,6 @@ simulated function PostRender(Canvas C)
     local float X, Y;
 
     Super.PostRender(C);
-    if (bHideHud)
-        return;
-
     H = HPVersusHarry(Owner);
     if (H == None)
         return;
@@ -386,6 +384,7 @@ simulated function PostRender(Canvas C)
     G = HPVersusGRI(H.GameReplicationInfo);
     HideSeekGRI = HPHideSeekGRI(H.GameReplicationInfo);
     Count = GetSortedPlayers(Rows);
+    DrawVersusCombatPanel(C, H);
     if (HideSeekGRI != None && OwnPRI != None)
     {
         DrawHideSeekOverlay(C, H, HideSeekGRI, Rows, Count);
@@ -395,7 +394,6 @@ simulated function PostRender(Canvas C)
         return;
     }
 
-    DrawVersusCombatPanel(C, H);
     if (G != None && OwnPRI != None)
     {
         C.Font = C.SmallFont;

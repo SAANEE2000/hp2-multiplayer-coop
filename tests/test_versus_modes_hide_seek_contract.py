@@ -75,6 +75,12 @@ def test_common_pawn_contains_only_mode_bridge_and_authority_validation():
     ):
         assert field in harry
     assert "ServerCycleHideSeekDisguise" in harry
+    assert "HUDType = Class'HPVersusHUD';" in harry
+    assert "if (HPVersusHUD(myHUD) == None)" in harry
+    assert "myHUD = Spawn(HUDType, self);" in harry
+    assert "ServerReportVersusHUD(string(HUDType), string(myHUD));" in harry
+    assert "ResetHideSeekLockedAnimation();" in harry
+    assert "HarryAnimChannel.GotoState('stateIdle');" in harry
     assert "IsVersusCastAllowed(self, SelectedVersusSpell)" in harry
     assert "HandleVersusRictusempraModeHit" in harry
     assert "if (HPHideSeekGame" not in harry
@@ -83,6 +89,16 @@ def test_common_pawn_contains_only_mode_bridge_and_authority_validation():
         "HandleVersusRictusempraModeHit", "CanVersusDisguise",
     ):
         assert re.search(rf"function bool {hook}\b", versus)
+
+
+def test_hide_seek_hud_keeps_common_health_and_spell_panel_visible():
+    hud = read(CLASSES / "HPVersusHUD.uc")
+    assert "HPVersusHUD active owner=" in hud
+    assert "DrawVersusCombatPanel(C, H);" in hud
+    assert "if (bHideHud)" not in hud
+    combat = hud.index("DrawVersusCombatPanel(C, H);")
+    mode = hud.index("DrawHideSeekOverlay(C, H, HideSeekGRI, Rows, Count);")
+    assert combat < mode
 
 
 def test_launcher_and_menu_expose_both_modes_and_map_catalog():
@@ -125,6 +141,7 @@ def load_tests(loader, tests, pattern):
         test_hide_seek_reuses_versus_game_and_has_explicit_state_machine,
         test_hide_seek_replication_and_disguise_are_bounded,
         test_common_pawn_contains_only_mode_bridge_and_authority_validation,
+        test_hide_seek_hud_keeps_common_health_and_spell_panel_visible,
         test_launcher_and_menu_expose_both_modes_and_map_catalog,
         test_fixture_uses_round_markers_without_replacing_login_starts,
     ):

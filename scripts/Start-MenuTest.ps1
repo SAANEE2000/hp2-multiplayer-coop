@@ -26,8 +26,6 @@ function Set-ProcessWindowPosition {
         [Parameter(Mandatory=$true)][System.Diagnostics.Process]$Process,
         [Parameter(Mandatory=$true)][int]$X,
         [Parameter(Mandatory=$true)][int]$Y,
-        [Parameter(Mandatory=$true)][int]$Width,
-        [Parameter(Mandatory=$true)][int]$Height,
         [string]$Title = 'Harry Potter 2 Multiplayer',
         [int]$TimeoutMilliseconds = 12000
     )
@@ -64,9 +62,12 @@ namespace HP2MP {
             return (style & 0x00C00000) != 0 && (style & 0x00040000) != 0;
         }
 
-        public static bool SetTitleAndPlace(IntPtr hWnd, string title, int x, int y, int width, int height) {
+        public static bool SetTitleAndPlace(IntPtr hWnd, string title, int x, int y) {
             if (!String.IsNullOrEmpty(title)) SetWindowText(hWnd, title);
-            return SetWindowPos(hWnd, IntPtr.Zero, x, y, width, height, 0x0014);
+            // The engine has already created its viewport at the size from
+            // Engine.ini. Resizing the outer frame here changes its projection.
+            // SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE: position only.
+            return SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, 0x0015);
         }
 
         public static IntPtr FindLargestVisibleWindow(int processId) {
@@ -105,7 +106,7 @@ namespace HP2MP {
             } elseif (([DateTime]::UtcNow - $stableSince).TotalSeconds -ge 2 -and
                       [HP2MP.NativeWindow]::HasResizableFrame($windowHandle)) {
                 return [HP2MP.NativeWindow]::SetTitleAndPlace(
-                    $windowHandle, $Title, $X, $Y, $Width, $Height)
+                    $windowHandle, $Title, $X, $Y)
             }
         }
         Start-Sleep -Milliseconds 100
@@ -289,11 +290,11 @@ $process.Refresh()
 if ($process.HasExited) { throw "Game.exe exited immediately with code $($process.ExitCode)." }
 $windowTitle = "HP2 $profileMode - $PlayerName"
 $windowPositionApplied = Set-ProcessWindowPosition -Process $process `
-    -X $WindowX -Y $WindowY -Width $WindowWidth -Height $WindowHeight -Title $windowTitle
+    -X $WindowX -Y $WindowY -Title $windowTitle
 if (!$windowPositionApplied) {
     Write-Warning 'The game is windowed, but its window handle was not available for positioning within 12 seconds.'
 }
 $documents = [Environment]::GetFolderPath('MyDocuments')
 Write-Output "Test game is running (PID $($process.Id), mode $LaunchMode): $exe"
-Write-Output "Native resizable window requested: ${WindowWidth}x${WindowHeight} at X=$WindowX, Y=$WindowY; applied=$windowPositionApplied"
+Write-Output "Native resizable viewport requested: ${WindowWidth}x${WindowHeight}; window position X=$WindowX, Y=$WindowY applied=$windowPositionApplied"
 Write-Output "Expected log: $(Join-Path (Join-Path $documents 'HP2-Multiplayer-Development') $logName)"

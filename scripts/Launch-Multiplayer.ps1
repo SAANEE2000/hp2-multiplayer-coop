@@ -255,8 +255,6 @@ function Set-ProcessWindowPosition {
         [Parameter(Mandatory=$true)][System.Diagnostics.Process]$Process,
         [Parameter(Mandatory=$true)][int]$X,
         [Parameter(Mandatory=$true)][int]$Y,
-        [Parameter(Mandatory=$true)][int]$Width,
-        [Parameter(Mandatory=$true)][int]$Height,
         [string]$Title = 'Harry Potter 2 Multiplayer',
         [int]$TimeoutMilliseconds = 12000
     )
@@ -293,9 +291,11 @@ namespace HP2MP {
             return (style & 0x00C00000) != 0 && (style & 0x00040000) != 0;
         }
 
-        public static bool SetTitleAndPlace(IntPtr hWnd, string title, int x, int y, int width, int height) {
+        public static bool SetTitleAndPlace(IntPtr hWnd, string title, int x, int y) {
             if (!String.IsNullOrEmpty(title)) SetWindowText(hWnd, title);
-            return SetWindowPos(hWnd, IntPtr.Zero, x, y, width, height, 0x0014);
+            // Preserve the renderer-created viewport size from Engine.ini.
+            // SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE: position only.
+            return SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, 0x0015);
         }
 
         public static IntPtr FindLargestVisibleWindow(int processId) {
@@ -338,7 +338,7 @@ namespace HP2MP {
                 # style after DirectX initialization desynchronizes the client
                 # viewport and produces black margins/clipped HUD output.
                 return [HP2MP.NativeWindow]::SetTitleAndPlace(
-                    $windowHandle, $Title, $X, $Y, $Width, $Height)
+                    $windowHandle, $Title, $X, $Y)
             }
         }
         Start-Sleep -Milliseconds 100
@@ -515,7 +515,7 @@ if (!$PrepareOnly) {
         if ($Role -eq 'Join' -and !$Unattended) {
             $windowTitle = "HP2 $Mode - $PlayerName"
             $manifest.windowPositionApplied = Set-ProcessWindowPosition -Process $process `
-                -X $WindowX -Y $WindowY -Width $WindowWidth -Height $WindowHeight -Title $windowTitle
+                -X $WindowX -Y $WindowY -Title $windowTitle
             if (!$manifest.windowPositionApplied) {
                 $manifest.windowPositionError = 'The game window handle did not become available within 12 seconds.'
                 Write-Warning $manifest.windowPositionError

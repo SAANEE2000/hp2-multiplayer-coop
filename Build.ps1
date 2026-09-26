@@ -85,8 +85,22 @@ if (!$Baseline) {
         # One batch validates all files and orders each source/result hash chain.
         # File-name order cannot express recipes that patch the same source.
         $recipePaths = @($recipes | ForEach-Object { $_.FullName })
-        & python (Join-Path $repo 'scripts\apply_patches.py') --work-root $WorkRoot @recipePaths
-        if ($LASTEXITCODE -ne 0) { throw 'Patch batch failed; no build was started.' }
+        $python = & (Join-Path $repo 'scripts\Find-Python3.ps1') -LogRoot $logRoot
+        Write-Output "Patch interpreter: $($python.Version) at $($python.Path)"
+        $patchStdout = Join-Path $logRoot 'patch-stdout.log'
+        $patchStderr = Join-Path $logRoot 'patch-stderr.log'
+        $patchArgs = @($python.Prefix) + @((Join-Path $repo 'scripts\apply_patches.py'), '--work-root', $WorkRoot) + $recipePaths
+        # Start-Process joins ArgumentList into one command line on Windows.
+        # Quote every argument so a ZIP checkout under a path with spaces works.
+        $quotedPatchArgs = @($patchArgs | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' }) -join ' '
+        $patchProcess = Start-Process -FilePath $python.Path -ArgumentList $quotedPatchArgs `
+            -WorkingDirectory $repo -RedirectStandardOutput $patchStdout `
+            -RedirectStandardError $patchStderr -WindowStyle Hidden -PassThru -Wait
+        if (Test-Path -LiteralPath $patchStdout) { Get-Content -LiteralPath $patchStdout | Write-Output }
+        if (Test-Path -LiteralPath $patchStderr) { Get-Content -LiteralPath $patchStderr | Write-Output }
+        if ($patchProcess.ExitCode -ne 0) {
+            throw "Patch batch failed before UCC (exit $($patchProcess.ExitCode)); traceback and target are in $patchStderr. No game packages were replaced."
+        }
     }
     $overlay = Join-Path $repo 'mod\HGame\Classes'
     if (!$VersusV16 -and (Test-Path -LiteralPath $overlay)) {

@@ -67,6 +67,21 @@ try {
     }
 } finally { $zip.Dispose() }
 
+# Fail during preparation, rather than much later in the patch batch, if a
+# supposedly clean archive did not land byte-for-byte in the expected tree.
+$cleanSourceHashes = [ordered]@{
+    'Internal\HPConsole.uc' = '73AB38BBC4B63D7F319CCE57989CDC2F6E640497A3DE177B128D0E91F3E4CCD2'
+    'harry.uc' = 'C4DFE134FDC5DA24D691296CC65F60999CB5B8FA60E1E6DACEFA485FEF09F6C3'
+    'HPVersusHarry.uc' = 'D59AEE7B9718D296B70BAC246B8C8DF0D6EDA39D434AEF604DD206F381505146'
+}
+foreach ($relative in $cleanSourceHashes.Keys) {
+    $sourcePath = Join-Path $classesRoot $relative
+    $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
+    if ($sourceHash -ne $cleanSourceHashes[$relative]) {
+        throw "Prepared v16 source mismatch: $relative actual=$sourceHash expected=$($cleanSourceHashes[$relative]). WorkRoot preserved: $WorkRoot"
+    }
+}
+
 # M212 reads Default.ini before its per-session INI, so keep the test profile isolated.
 $defaultIni = Join-Path $systemRoot 'Default.ini'
 $defaultText = Get-Content -LiteralPath $defaultIni -Raw
@@ -75,6 +90,6 @@ if ([regex]::Matches($defaultText, '(?im)^UserFolder=.*$').Count -ne 1) {
 }
 $defaultText = $defaultText -replace '(?im)^UserFolder=.*$', 'UserFolder=HP2-Multiplayer-Development'
 Set-Content -LiteralPath $defaultIni -Value $defaultText -Encoding ASCII
-@{archive=$ArchivePath; sha256=$actualHash; classes=$classCount; created=(Get-Date -Format o)} |
+@{archive=$ArchivePath; sha256=$actualHash; classes=$classCount; created=(Get-Date -Format o); cleanSourceHashes=$cleanSourceHashes} |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json') -Encoding UTF8
 Write-Output "Prepared v16 sources: $WorkRoot ($classCount classes; SHA-256 $actualHash)"

@@ -268,6 +268,95 @@ class PatchRecipeTests(unittest.TestCase):
                     self.assertEqual(tree_contents(root), before)
                     self.assertEqual({p: p.stat().st_mtime_ns for p in times}, times)
 
+    def test_v16_archive_clean_historical_free_look_and_final_workroots(self):
+        """A fresh ZIP checkout must converge with either historical v16 tree."""
+        if not V16_ARCHIVE.is_file():
+            self.skipTest("Supplied v16 archive missing")
+
+        def extracted_root(name):
+            root = self.temp / name
+            root.mkdir()
+            (root / MARKER).write_text("{}", encoding="ascii")
+            with zipfile.ZipFile(V16_ARCHIVE) as archive:
+                classes = [item for item in archive.infolist()
+                           if item.filename.startswith("Classes/")
+                           and item.filename.endswith(".uc")]
+                self.assertEqual(len(classes), 857)
+                for item in classes:
+                    target = root / "HGame" / "Classes" / item.filename[8:]
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(archive.read(item))
+            return root
+
+        key_states = {
+            "HGame/Classes/Internal/HPConsole.uc": (
+                "73ab38bbc4b63d7f319cce57989cdc2f6e640497a3de177b128d0e91f3e4ccd2",
+                "4e62bf7663b67c64be68ed6409935309acb854f33805c9859155584926cdc75b",
+            ),
+            "HGame/Classes/harry.uc": (
+                "c4dfe134fdc5da24d691296cc65f60999cb5b8fa60e1e6dacefa485fef09f6c3",
+                "562ff90c7567a3b80ef6b29a74240c4508241644456b802086dca979b6b5472c",
+            ),
+            "HGame/Classes/HPVersusHarry.uc": (
+                "d59aee7b9718d296b70bac246b8c8df0d6eda39d434aef604dd206f381505146",
+                "340dbf03b69d93d999e8a84be423706e8e31ad8139acd842f4d10c75fad61a98",
+            ),
+        }
+        clean = extracted_root("fresh-v16")
+        for relative, (source_hash, _) in key_states.items():
+            self.assertEqual(digest((clean / relative).read_bytes()), source_hash)
+        self.apply_batch(clean, V16_RECIPE_PATHS)
+        clean_result = tree_contents(clean)
+        self.apply_batch(clean, V16_RECIPE_PATHS)
+        self.assertEqual(tree_contents(clean), clean_result)
+        self.assertEqual(
+            digest((clean / "HGame/Classes/Internal/HPConsole.uc").read_bytes()),
+            key_states["HGame/Classes/Internal/HPConsole.uc"][1],
+        )
+
+        historical = extracted_root("historical-free-look")
+        for relative, (_, historical_hash) in key_states.items():
+            old_bytes = source_at_hash(relative, historical_hash, v16=True)
+            self.assertEqual(digest(old_bytes), historical_hash)
+            (historical / relative).write_bytes(old_bytes)
+        self.apply_batch(historical, V16_RECIPE_PATHS)
+        for relative in key_states:
+            self.assertEqual((historical / relative).read_bytes(),
+                             (clean / relative).read_bytes())
+
+        final = extracted_root("already-final")
+        relatives = {entry["path"]
+                     for recipe_path in V16_RECIPE_PATHS
+                     for entry in json.loads(recipe_path.read_text(encoding="utf-8-sig"))["files"]}
+        for relative in relatives:
+            (final / relative).write_bytes((clean / relative).read_bytes())
+        final_before = tree_contents(final)
+        self.apply_batch(final, V16_RECIPE_PATHS)
+        self.assertEqual(tree_contents(final), final_before)
+        self.assertFalse((final / ".patch-backups").exists())
+
+    def test_v16_console_mismatch_reports_actual_hash_without_writes(self):
+        if not V16_ARCHIVE.is_file():
+            self.skipTest("Supplied v16 archive missing")
+        root = self.temp / "bad-console"
+        root.mkdir()
+        (root / MARKER).write_text("{}", encoding="ascii")
+        recipe = REPO / "patches" / "versus-v16-free-look.json"
+        for entry in json.loads(recipe.read_text(encoding="utf-8-sig"))["files"]:
+            target = root / entry["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source_at_hash(entry["path"], entry["source_sha256"], v16=True))
+        target = root / "HGame/Classes/Internal/HPConsole.uc"
+        target.write_bytes(target.read_bytes() + b"drift")
+        before = tree_contents(root)
+        with self.assertRaises(ValueError) as failure:
+            self.apply(root, recipe)
+        message = str(failure.exception)
+        self.assertIn("HGame/Classes/Internal/HPConsole.uc", message.replace("\\", "/"))
+        self.assertIn(digest(target.read_bytes()), message)
+        self.assertIn("73ab38bbc4b63d7f", message)
+        self.assertEqual(tree_contents(root), before)
+
     def test_synthetic_chain_preserves_binary_bytes_and_each_backup(self):
         states = [b"before\xff\r\n", b"middle\xff\r\n", b"after\xff\r\n"]
         root = self.synthetic_root(states[0])

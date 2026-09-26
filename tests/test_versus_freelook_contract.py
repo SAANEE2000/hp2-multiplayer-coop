@@ -4,17 +4,22 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RECIPE = ROOT / "patches" / "versus-v16-free-look.json"
+RECIPES = (
+    ROOT / "patches" / "versus-v16-free-look.json",
+    ROOT / "patches" / "versus-v16-free-look-render-migration.json",
+)
 LAUNCHER = ROOT / "scripts" / "Launch-Multiplayer.ps1"
 
 
 class VersusFreeLookContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.recipe = json.loads(RECIPE.read_text(encoding="utf-8-sig"))
+        cls.recipes = [json.loads(path.read_text(encoding="utf-8-sig"))
+                       for path in RECIPES]
         cls.new_source = "\n".join(
             replacement["new"]
-            for entry in cls.recipe["files"]
+            for recipe in cls.recipes
+            for entry in recipe["files"]
             for replacement in entry["replacements"]
         )
 

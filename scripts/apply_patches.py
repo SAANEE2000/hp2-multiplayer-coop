@@ -119,7 +119,14 @@ def apply_recipes(root, recipe_paths):
         nodes = [chain[0]["source"]] + [edge["result"] for edge in chain]
         current = sha(original)
         if current not in nodes:
-            raise ValueError(f"Source hash mismatch: {relative}")
+            raise ValueError(
+                f"Source hash mismatch: {relative}\n"
+                f"  actual SHA-256: {current}\n"
+                f"  accepted hash chain: {' -> '.join(nodes)}\n"
+                "  No files were patched. Check that Prepare-VersusV16.ps1 "
+                "and Build.ps1 use the same WorkRoot; preserve this tree "
+                "and prepare a new WorkRoot if its source was modified."
+            )
         for edge in chain:
             if edge["backup"].exists():
                 if not edge["backup"].is_file() or sha(edge["backup"].read_bytes()) != edge["source"]:

@@ -206,7 +206,10 @@ if (!$PrepareOnly) {
     $modeBuild = Join-Path $repo $(if ($Mode -ne 'Coop' -and (Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-versus-v16-source.json'))) {
         '.local\last-build-v16.json'
     } else { '.local\last-build-coop.json' })
-    $buildFile = if (Test-Path -LiteralPath $modeBuild) { $modeBuild } else { Join-Path $repo '.local\last-build.json' }
+    $workRootBuild = Join-Path $WorkRoot '.hp2-last-build.json'
+    $buildFile = if (Test-Path -LiteralPath $workRootBuild) { $workRootBuild }
+        elseif (Test-Path -LiteralPath $modeBuild) { $modeBuild }
+        else { Join-Path $repo '.local\last-build.json' }
     if (!(Test-Path -LiteralPath $buildFile)) { throw 'No recorded clean build. Run Build.ps1 first.' }
     $build = Get-Content -LiteralPath $buildFile -Raw -Encoding UTF8 | ConvertFrom-Json
     if (!$build.passed -or ![string]::Equals($build.workRoot, $WorkRoot, [StringComparison]::OrdinalIgnoreCase)) {

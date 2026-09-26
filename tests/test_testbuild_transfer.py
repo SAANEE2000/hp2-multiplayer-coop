@@ -178,6 +178,32 @@ class TestBuildTransfer(unittest.TestCase):
         self.assertTrue(imported["baseline"])
         self.assertTrue(imported["sourceBuild"]["baseline"])
 
+    def test_versus_import_updates_menu_and_workroot_records(self):
+        versus_root = self.local / "versus-v16-game"
+        (versus_root / "System").mkdir(parents=True)
+        (versus_root / ".hp2-development-copy.json").write_text("{}")
+        for name in self.packages:
+            (versus_root / "System" / name).write_bytes(b"previous-" + name.encode())
+
+        self.build["versusV16"] = False
+        self.write_build()
+        wrong_artifact = self.export()
+        before = files(self.repo)
+        self.run_script("Import-TestBuild.ps1", "-Artifact", wrong_artifact,
+                        "-WorkRoot", versus_root, success=False)
+        self.assertEqual(files(self.repo), before)
+
+        self.build["versusV16"] = True
+        self.write_build()
+        artifact = self.export()
+        imported = self.run_script("Import-TestBuild.ps1", "-Artifact", artifact,
+                                   "-WorkRoot", versus_root)
+        for record in (self.local / "last-build.json",
+                       self.local / "last-build-v16.json",
+                       versus_root / ".hp2-last-build.json"):
+            self.assertEqual(json.loads(record.read_text()), imported)
+        self.assertEqual(imported["workRoot"], str(versus_root))
+
     def test_matching_process_guard_rejects_before_writes(self):
         artifact = self.export()
         harness = self.scripts / "Test-RunningProcess.ps1"

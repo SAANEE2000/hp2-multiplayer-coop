@@ -7,6 +7,9 @@ $WorkRoot = (Resolve-Path -LiteralPath $WorkRoot).Path
 $Artifact = (Resolve-Path -LiteralPath $Artifact).Path
 $system = Join-Path $WorkRoot 'System'
 $local = Join-Path $repo '.local'
+$defaultVersusRoot = [IO.Path]::GetFullPath((Join-Path $local 'versus-v16-game')).TrimEnd('\')
+$isDefaultVersusRoot = [string]::Equals($WorkRoot.TrimEnd('\'), $defaultVersusRoot,
+    [StringComparison]::OrdinalIgnoreCase)
 
 function Assert-PlainPath([string]$Path) {
     $current = [IO.Path]::GetFullPath($Path)
@@ -99,6 +102,10 @@ try {
         }
     } finally { $zip.Dispose() }
 } finally { $stream.Dispose() }
+if ($isDefaultVersusRoot -and $manifest.sourceBuild.versusV16 -is [bool] -and
+    !$manifest.sourceBuild.versusV16) {
+    throw 'A Versus WorkRoot requires an artifact built with -VersusV16.'
+}
 if ($ValidateOnly) {
     [ordered]@{status='VALIDATED'; artifact=$Artifact; artifactSha256=$archiveSha; workRoot=$WorkRoot; sourceBuild=$manifest.sourceBuild; files=$manifest.files} | ConvertTo-Json -Depth 8
     return
@@ -112,8 +119,12 @@ New-Item -ItemType Directory -Path $importRoot -Force | Out-Null
 [IO.File]::WriteAllBytes((Join-Path $importRoot 'manifest.json'),$manifestBytes)
 [IO.File]::WriteAllBytes((Join-Path $importRoot 'ucc-output.log'),$payload['ucc-output.log'])
 $lastBuild = Join-Path $local 'last-build.json'
+$workRootBuild = Join-Path $WorkRoot '.hp2-last-build.json'
 $originals = @{}
-$targets = @((Join-Path $system 'HGame.u'),(Join-Path $system 'M212Share.u'),$lastBuild)
+$buildRecords = @($lastBuild,$workRootBuild)
+if ($isDefaultVersusRoot) { $buildRecords += (Join-Path $local 'last-build-v16.json') }
+$targets = @((Join-Path $system 'HGame.u'),(Join-Path $system 'M212Share.u')) + $buildRecords
+foreach ($target in $buildRecords) { Assert-PlainPath $target }
 foreach ($target in $targets) {
     $backup = Join-Path $importRoot ((Split-Path $target -Leaf) + '.before')
     if (Test-Path -LiteralPath $target -PathType Leaf) {
@@ -147,8 +158,10 @@ try {
         hgameSha256=$records['HGame.u'].sha256; m212ShareSha256=$records['M212Share.u'].sha256
     }
     $resultBytes = [Text.Encoding]::UTF8.GetBytes(($result | ConvertTo-Json -Depth 8))
-    Replace-Bytes $lastBuild $resultBytes
-    $changed.Add($lastBuild)
+    foreach ($target in $buildRecords) {
+        Replace-Bytes $target $resultBytes
+        $changed.Add($target)
+    }
     [IO.File]::WriteAllBytes((Join-Path $importRoot 'import-result.json'),$resultBytes)
 } catch {
     $failure = $_

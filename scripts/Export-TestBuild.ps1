@@ -3,8 +3,12 @@ param([string]$WorkRoot, [string]$BuildRecord)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 if (!$WorkRoot) { $WorkRoot = Join-Path $repo '.local\game' }
-if (!$BuildRecord) { $BuildRecord = Join-Path $repo '.local\last-build.json' }
 $WorkRoot = (Resolve-Path -LiteralPath $WorkRoot).Path
+if (!$BuildRecord) {
+    $workRootBuild = Join-Path $WorkRoot '.hp2-last-build.json'
+    $BuildRecord = if (Test-Path -LiteralPath $workRootBuild) { $workRootBuild }
+        else { Join-Path $repo '.local\last-build.json' }
+}
 if (!(Test-Path -LiteralPath (Join-Path $WorkRoot '.hp2-development-copy.json') -PathType Leaf)) {
     throw 'Export requires a marked development copy.'
 }
@@ -28,6 +32,7 @@ if ($build.origin -eq 'imported-test-build') {
     $sourceBuild = $build.sourceBuild
 } else {
     $sourceBuild = [ordered]@{passed=$build.passed; exitCode=$build.exitCode; baseline=$build.baseline;
+        versusV16=$build.versusV16;
         commit=$build.commit; sourceDirty=$build.sourceDirty; sourceManifestSha256=$null}
     if ($build.sourceManifest -and (Test-Path -LiteralPath $build.sourceManifest -PathType Leaf)) {
         $sourceBuild.sourceManifestSha256 = (Get-FileHash -LiteralPath $build.sourceManifest -Algorithm SHA256).Hash.ToLowerInvariant()

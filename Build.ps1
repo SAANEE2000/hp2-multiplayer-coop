@@ -3,11 +3,12 @@ param([string]$GameRoot, [string]$WorkRoot, [switch]$Baseline, [switch]$VersusV1
 $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
 if ($Baseline -and $VersusV16) { throw 'Choose either raw -Baseline or patched -VersusV16.' }
-if (!$WorkRoot) {
-    $WorkRoot = Join-Path $repo $(if ($VersusV16) { '.local\versus-v16-game' } elseif ($Baseline) { '.local\baseline-game' } else { '.local\game' })
-}
+$defaultWorkRoot = Join-Path $repo $(if ($VersusV16) { '.local\versus-v16-game' } elseif ($Baseline) { '.local\baseline-game' } else { '.local\game' })
+if (!$WorkRoot) { $WorkRoot = $defaultWorkRoot }
 & (Join-Path $repo 'scripts\Prepare-LocalGame.ps1') -GameRoot $GameRoot -WorkRoot $WorkRoot | Out-Null
 $WorkRoot = (Resolve-Path -LiteralPath $WorkRoot).Path
+$isDefaultWorkRoot = [string]::Equals($WorkRoot.TrimEnd('\'),
+    [IO.Path]::GetFullPath($defaultWorkRoot).TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)
 if ($VersusV16) {
     $v16MarkerPath = Join-Path $WorkRoot '.hp2-versus-v16-source.json'
     if (!(Test-Path -LiteralPath $v16MarkerPath)) { throw 'Prepare the supplied v16 source in this WorkRoot first.' }
@@ -176,11 +177,15 @@ if (Test-Path -LiteralPath (Join-Path $system 'HGame.u')) { $result.hgameSha256=
 if (Test-Path -LiteralPath (Join-Path $system 'M212Share.u')) { $result.m212ShareSha256=(Get-FileHash -LiteralPath (Join-Path $system 'M212Share.u') -Algorithm SHA256).Hash }
 $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logRoot 'result.json') -Encoding UTF8
 if ($pass) {
-    $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build.json') -Encoding UTF8
-    if ($VersusV16) {
-        $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-v16.json') -Encoding UTF8
-    } elseif (!$Baseline) {
-        $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-coop.json') -Encoding UTF8
+    $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $WorkRoot '.hp2-last-build.json') -Encoding UTF8
+    # A custom test WorkRoot must never point the menu at another game copy.
+    if ($isDefaultWorkRoot) {
+        $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build.json') -Encoding UTF8
+        if ($VersusV16) {
+            $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-v16.json') -Encoding UTF8
+        } elseif (!$Baseline) {
+            $result | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repo '.local\last-build-coop.json') -Encoding UTF8
+        }
     }
 }
 Get-Content -LiteralPath $output -Tail 24

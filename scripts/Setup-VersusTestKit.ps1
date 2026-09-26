@@ -12,7 +12,7 @@ $versusRoot = Join-Path $repo '.local\versus-v16-game'
 
 $expected = [ordered]@{
     $archivePath = 'A2B13B924BF9BBA9F81C6A70E38024657C71F6F1F861FA49BF3F812C86EFB9BF'
-    $artifactPath = 'BE345065756E157085A5322DC71692A9197EA3D2D5320A44FA50FCBEC5862B13'
+    $artifactPath = '0353F5C76257233F016F042F5A4C6CEC08EB8DD5EE21C9D88253EE7B73EE8CB8'
     $arenaPath = '77AA6B898B5297A3663E6A4544CC3A2BE37ACC3CF6F74F55A3FF7C6EBAF9F7B8'
 }
 
@@ -53,8 +53,6 @@ if ((Get-FileHash -LiteralPath $interactionMap -Algorithm SHA256).Hash -ne $expe
 }
 
 & (Join-Path $PSScriptRoot 'Import-TestBuild.ps1') -Artifact $artifactPath -WorkRoot $versusRoot | Out-Null
-Copy-Item -LiteralPath (Join-Path $repo '.local\last-build.json') `
-    -Destination (Join-Path $repo '.local\last-build-v16.json') -Force
 
 Write-Output 'Versus v16 test installation completed successfully.'
 Write-Output "Arena: $destinationMap"

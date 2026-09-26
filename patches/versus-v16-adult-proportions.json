@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-adult-proportions",
+  "description": "Restore intermediate adult roster proportions after user visual feedback; presentation-only scales, unchanged gameplay cylinders.",
+  "source_snapshot": "versus-v16-character-presentation final after 17344a4",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusCharacterProfiles.uc",
+      "source_sha256": "503dd6df8b8429137c387a875437519f3646cb23279af86cfecec91d49efbc56",
+      "result_sha256": "cc78ed60a96ce2b07037953abe84e3ae8a909dab4c482a471c994d9c68aeb327",
+      "replacements": [
+        {
+          "old": "    Profiles(17)=(Id=\"Snape\",DisplayName=\"Snape\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfSnapeMesh',DrawScale=1.0,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "new": "    Profiles(17)=(Id=\"Snape\",DisplayName=\"Snape\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfSnapeMesh',DrawScale=1.12,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "old_sha256": "71b20fab5ac36ac6b374d25975a193027af98927af0be797d1ebc73979a7acfa",
+          "new_sha256": "8883286ff1f954244ccc60b60d0fed65704f4a3b53bc56f15257b2c85c208e60"
+        },
+        {
+          "old": "    Profiles(18)=(Id=\"Lockhart\",DisplayName=\"Lockhart\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfLockhartMesh',DrawScale=1.0,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "new": "    Profiles(18)=(Id=\"Lockhart\",DisplayName=\"Lockhart\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfLockhartMesh',DrawScale=1.12,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "old_sha256": "88ccfe2ac7526d9b61efc43ed89e2cd07a3a8af0c9087104e6342427be1c2736",
+          "new_sha256": "fcaa314ee1a21caf355a1422ca9add73cccb61ca70686d0949d58b5f7118746b"
+        },
+        {
+          "old": "    Profiles(19)=(Id=\"Dumbledore\",DisplayName=\"Dumbledore\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfDumbledoreMesh',DrawScale=1.0,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "new": "    Profiles(19)=(Id=\"Dumbledore\",DisplayName=\"Dumbledore\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfDumbledoreMesh',DrawScale=1.08,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "old_sha256": "88054453d6a0b80bad7c84f999c39b8aa164ef4c678a587c29454ed988c2dd2e",
+          "new_sha256": "9476f840f67cbad76cbc13faacb3b29b1606ddc9140c9d1400249984fe8b79b2"
+        },
+        {
+          "old": "    Profiles(20)=(Id=\"McGonagall\",DisplayName=\"McGonagall\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfMcGonagallMesh',DrawScale=1.0,AnimationStrategy=1,CloakStrategy=0,bFemaleVoice=True,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "new": "    Profiles(20)=(Id=\"McGonagall\",DisplayName=\"McGonagall\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skProfMcGonagallMesh',DrawScale=1.08,AnimationStrategy=1,CloakStrategy=0,bFemaleVoice=True,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "old_sha256": "7fc60ebd917566962f44861422759b997f62061019feee94893940187145bcde",
+          "new_sha256": "b9e48a754ef99f5838ff9ffb4333d22775afbe9967b23b6663084d9ca551a8d1"
+        },
+        {
+          "old": "    Profiles(22)=(Id=\"Lucius\",DisplayName=\"Lucius Malfoy\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skLuciousMalfoyMesh',DrawScale=1.0,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "new": "    Profiles(22)=(Id=\"Lucius\",DisplayName=\"Lucius Malfoy\",GroupName=\"Adults\",BodyMesh=SkeletalMesh'HPModels.skLuciousMalfoyMesh',DrawScale=1.12,AnimationStrategy=1,CloakStrategy=0,WandBone=\"Bip01 R Hand\",Opacity=1.0,bSelectable=True,AuditStatus=\"NEEDS EXTRA CHANNEL\")",
+          "old_sha256": "775b0ff80116f890a847922afe3da28febdc41b61d469bb752d806a5d1ae703e",
+          "new_sha256": "2cbe98296434ddb9731d08bed5d3fb4849c5b76a42b50d357d043618b617cca1"
+        }
+      ]
+    }
+  ]
+}

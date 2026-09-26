@@ -70,7 +70,36 @@ def source_bytes(relative, v16=False):
                 nested = source_path.relative_to(Path("HGame") / "Classes")
             except ValueError:
                 nested = Path(source_path.name)
-            return archive.read("Classes/" + nested.as_posix())
+            archive_name = "Classes/" + nested.as_posix()
+            if archive_name in archive.namelist():
+                return archive.read(archive_name)
+        # Build.ps1 seeds mod-owned classes from the overlay before patching.
+        # Rewind the final overlay through its reversible hash chain to model
+        # the earliest prepared workroot, including a GitHub ZIP checkout.
+        data = (REPO / "mod" / "versus-v16" / relative).read_bytes()
+        seen = set()
+        while digest(data) not in seen:
+            current = digest(data)
+            seen.add(current)
+            predecessors = []
+            for path in V16_RECIPE_PATHS:
+                recipe = json.loads(path.read_text(encoding="utf-8-sig"))
+                predecessors.extend(entry for entry in recipe["files"]
+                                    if entry["path"] == relative
+                                    and entry["result_sha256"] == current)
+            if not predecessors:
+                return data
+            if len(predecessors) != 1:
+                raise AssertionError(f"Ambiguous generated source predecessor: {relative}")
+            entry = predecessors[0]
+            for edit in reversed(entry["replacements"]):
+                before, after = edit["old"].encode("latin-1"), edit["new"].encode("latin-1")
+                if data.count(after) != 1:
+                    raise AssertionError(f"Nonunique reverse fixture anchor: {relative}")
+                data = data.replace(after, before, 1)
+            if digest(data) != entry["source_sha256"]:
+                raise AssertionError(f"Bad reverse fixture output: {relative}")
+        raise AssertionError(f"Generated source fixture cycle: {relative}")
     return (SOURCE_ROOT / relative).read_bytes()
 
 
@@ -286,6 +315,14 @@ class PatchRecipeTests(unittest.TestCase):
                     target = root / "HGame" / "Classes" / item.filename[8:]
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(archive.read(item))
+            # Preparation also supplies classes introduced after the donor ZIP.
+            for recipe_path in V16_RECIPE_PATHS:
+                recipe = json.loads(recipe_path.read_text(encoding="utf-8-sig"))
+                for entry in recipe["files"]:
+                    target = root / entry["path"]
+                    if not target.exists():
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(source_bytes(entry["path"], v16=True))
             return root
 
         key_states = {

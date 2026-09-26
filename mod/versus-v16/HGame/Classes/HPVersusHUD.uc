@@ -56,7 +56,7 @@ simulated function DrawSolidRect(Canvas C, float X, float Y,
     C.DrawColor.R = R;
     C.DrawColor.G = G;
     C.DrawColor.B = B;
-    C.DrawColor.A = 255;
+    C.DrawColor.A = 0;
     C.SetPos(X, Y);
     C.DrawTile(VersusWhiteTexture, W, H, 0.0, 0.0,
         VersusWhiteTexture.USize, VersusWhiteTexture.VSize);
@@ -65,6 +65,7 @@ simulated function DrawSolidRect(Canvas C, float X, float Y,
 simulated function DrawVersusTextTint(Canvas C, float X, float Y,
     string Message, byte R, byte G, byte B)
 {
+    C.DrawColor.A = 0;
     C.DrawColor.R = 0;
     C.DrawColor.G = 0;
     C.DrawColor.B = 0;
@@ -115,7 +116,7 @@ simulated function DrawVersusSpellIcon(Canvas C, byte SpellSlot,
     C.DrawColor.R = 255;
     C.DrawColor.G = 255;
     C.DrawColor.B = 255;
-    C.DrawColor.A = 255;
+    C.DrawColor.A = 0;
     C.SetPos(X, Y);
     C.DrawTile(Icon, Size, Size, 0.0, 0.0, Icon.USize, Icon.VSize);
 }

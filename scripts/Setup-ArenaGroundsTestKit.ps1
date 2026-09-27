@@ -13,6 +13,7 @@ $expected = @{
     $startup = '77AA6B898B5297A3663E6A4544CC3A2BE37ACC3CF6F74F55A3FF7C6EBAF9F7B8'
     $arena = '25A8168CE20520179A24542DC75F0C649B07443BC8450420E176938992659D49'
 }
+$stockStartupHash = '08758E9F109A12D3BB3B4820B583E64E02348380D91CA4F9CA5610F66226534B'
 $GameRoot = (Resolve-Path -LiteralPath $GameRoot).Path
 foreach ($exe in @('Game.exe','UCC.exe')) {
     if (!(Test-Path -LiteralPath (Join-Path $GameRoot "System\$exe") -PathType Leaf)) {
@@ -38,7 +39,17 @@ foreach ($name in @('startup.unr','HPV_Interactions.unr','HPV_HideSeek.unr')) {
     $target = Join-Path $mapRoot $name
     if (Test-Path -LiteralPath $target -PathType Leaf) {
         $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
-        if ($hash -ne $expected[$startup]) {
+        if ($hash -eq $expected[$startup]) { continue }
+        if ($name -eq 'startup.unr' -and $hash -eq $stockStartupHash) {
+            $backup = Join-Path $mapRoot 'startup.original-before-arena-kit.unr'
+            if (Test-Path -LiteralPath $backup -PathType Leaf) {
+                $backupHash = (Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash
+                if ($backupHash -ne $stockStartupHash) { throw "Original startup backup differs: $backup" }
+            } else {
+                Copy-Item -LiteralPath $target -Destination $backup
+            }
+            Copy-Item -LiteralPath $startup -Destination $target -Force
+        } else {
             throw "Existing test map differs: $target. Keep it and prepare a fresh WorkRoot."
         }
     } else {

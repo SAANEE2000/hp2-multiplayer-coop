@@ -114,7 +114,7 @@ Ch1 с GSTATE030 и четырьмя spells после урока. Флаг до
 .\scripts\Launch-Multiplayer.ps1 -CollectSession coop-join-YYYYMMDD-HHMMSS-mmm-abcdef
 ```
 
-Подставить реальный session ID. Команда сохраняет `collectedLogs`, `observedSaveSlotPaths`, `engineLogLocationVerified` в manifest. Отсутствие engine log или завершение лога до engine initialization означает необходимость дальнейшей диагностики. Первый неудачный запуск остановился после Save Slot Path; старый успешный журнал показывал далее frontend M212. `-NOFRONTEND` добавлен на основании наличия этого native switch и этой последовательности; его новый runtime-результат должен быть отмечен отдельно.
+Подставить реальный session ID. Команда сохраняет `collectedLogs`, `capturedStreams`, `observedSaveSlotPaths`, `engineLogLocationVerified` в manifest. Серверный stdout/stderr и клиентский stdout/stderr уже лежат в каталоге сессии; команда не копирует открытый поток поверх самого себя. Отсутствие engine log или завершение лога до engine initialization означает необходимость дальнейшей диагностики. Первый неудачный запуск остановился после Save Slot Path; старый успешный журнал показывал далее frontend M212. `-NOFRONTEND` добавлен на основании наличия этого native switch и этой последовательности; его новый runtime-результат должен быть отмечен отдельно.
 
 Per-process сохранения и повторное использование кампании после полного перезапуска пока не подтверждены. Проверка checkpoint/save в таблице ниже не должна считаться пройденной до подтверждения фактического профиля и корректной политики общего campaign save.
 

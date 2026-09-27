@@ -80,12 +80,18 @@ def main() -> None:
         "Python is not needed when installing the included build. For a source rebuild,\n"
         "install Python 3.9+ and run .\\Build.ps1 -VersusV16 after setup.\n"
         "Keep this kit private; game packages/maps are not published in Git.\n"
+        "For a network bug, close the game and collect each PC's session with:\n"
+        "   .\\scripts\\Launch-Multiplayer.ps1 -CollectSession SESSION_ID\n"
+        "Send the resulting .local/runs/SESSION_ID folders from both PCs.\n"
     ).encode("utf-8")
     payloads["README_FOR_FRIEND.txt"] = readme
     manifest = {
         "kind": "hp2-versus-arena-full-test", "branch": branch, "commit": commit,
         "mapPackage": "Arena_Grounds_hub", "mapModified": False,
         "buildSourceCommit": build_manifest["sourceBuild"].get("commit"),
+        "packages": {entry["name"]: entry["sha256"].upper()
+                     for entry in build_manifest["files"]
+                     if entry["name"] in ("HGame.u", "M212Share.u")},
         "files": {name: {"bytes": len(data), "sha256": digest(data)}
                   for name, data in payloads.items()},
     }

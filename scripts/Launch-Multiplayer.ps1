@@ -63,7 +63,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Collect') {
     $collectionManifest = Join-Path $collectionRoot 'launch.json'
     if (!(Test-Path -LiteralPath $collectionManifest -PathType Leaf)) { throw "Session not found: $CollectSession" }
     $record = Get-Content -LiteralPath $collectionManifest -Raw -Encoding UTF8 | ConvertFrom-Json
-    $logName = "HP2MP-$CollectSession.log"
+    $logName = if ($record.engineLog) { Split-Path $record.engineLog -Leaf } else { "HP2MP-$CollectSession.log" }
     $candidates = @($record.engineLogCandidates) + @(Get-EngineLogCandidates $record.workRoot $logName $record.userFolder $record.engineIni)
     $copied = @()
     $savePaths = @()
@@ -78,6 +78,20 @@ if ($PSCmdlet.ParameterSetName -eq 'Collect') {
         }
     }
     $record | Add-Member -NotePropertyName collectedLogs -NotePropertyValue @($copied) -Force
+    $streams = @()
+    foreach ($name in @('server-stdout.log','server-stderr.log','client-stdout.log',
+            'client-stderr.log','menu-stdout.log','menu-stderr.log')) {
+        $streamPath = Join-Path $collectionRoot $name
+        if (Test-Path -LiteralPath $streamPath -PathType Leaf) {
+            $stream = Get-Item -LiteralPath $streamPath
+            # A running Game/UCC process can hold this stream open without
+            # sharing. Record its presence/size; the file itself stays in the
+            # session folder and can be archived after the process exits.
+            $streams += [PSCustomObject]@{path=$streamPath; bytes=$stream.Length;
+                modified=$stream.LastWriteTimeUtc}
+        }
+    }
+    $record | Add-Member -NotePropertyName capturedStreams -NotePropertyValue @($streams) -Force
     $record | Add-Member -NotePropertyName observedSaveSlotPaths -NotePropertyValue @($savePaths | Select-Object -Unique) -Force
     $record | Add-Member -NotePropertyName lastCollected -NotePropertyValue (Get-Date -Format o) -Force
     if ($copied.Count) {
@@ -235,6 +249,20 @@ if (!$PrepareOnly) {
             !(Test-Path -LiteralPath $sharePackage -PathType Leaf) -or
             (Get-FileHash -LiteralPath $sharePackage -Algorithm SHA256).Hash -ne $build.m212ShareSha256) {
             throw 'M212Share.u does not match the recorded clean build. Rebuild or import the complete test build before launching.'
+        }
+    }
+    if ($Mode -in @('Versus','HideSeek')) {
+        $kitManifestPath = Join-Path $repo 'KIT_MANIFEST.json'
+        if (Test-Path -LiteralPath $kitManifestPath -PathType Leaf) {
+            $kit = Get-Content -LiteralPath $kitManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            foreach ($pair in @(@('HGame.u','hgameSha256'),@('M212Share.u','m212ShareSha256'))) {
+                $expected = $kit.packages.($pair[0])
+                $actual = $build.($pair[1])
+                if ($expected -and ![string]::Equals($expected, $actual,
+                        [StringComparison]::OrdinalIgnoreCase)) {
+                    Write-Warning "Installed $($pair[0]) differs from this test kit: expected=$expected actual=$actual. Both PCs must use the same binary kit."
+                }
+            }
         }
     }
 }
@@ -488,6 +516,10 @@ $logCandidates = @(Get-EngineLogCandidates $WorkRoot $engineLogName "HP2-MP-$ses
 $manifest = [ordered]@{
     status='PREPARED'; session=$session; mode=$Mode; role=$Role; created=(Get-Date -Format o);
     workRoot=$WorkRoot; executable=$executable; arguments=$launchArgs; map=$mapName; server=$Server; port=$Port;
+    localMapSha256=(Get-FileHash -LiteralPath (Join-Path $WorkRoot "Maps\$localMap") -Algorithm SHA256).Hash;
+    arenaMapSha256=$(if (Test-Path -LiteralPath (Join-Path $WorkRoot 'Maps\Arena_Grounds_hub.unr') -PathType Leaf) {
+        (Get-FileHash -LiteralPath (Join-Path $WorkRoot 'Maps\Arena_Grounds_hub.unr') -Algorithm SHA256).Hash
+    } else { $null });
     connectUrl=$(if ($Role -eq 'Join') { $url } else { $null });
     localMap=$localMap; localGameClass=$localGameClass; localPawnClass=$localPawnClass; defaultUrlPort=$defaultUrlPort;
     playerName=$PlayerName; character=$Character; testStage=$TestStage; runtimeProbe=$RuntimeProbe; capturedAuthorityDiagnostic=[bool]$CapturedAuthorityDiagnostic; firstIntroPreflight=[bool]$FirstIntroPreflight; introFault=$IntroFault; versusMechanicsProbe=[bool]$VersusMechanicsProbe; hideSeekProbe=[bool]$HideSeekProbe; engineIni=$engineIni; userIni=$userIni; engineLog=$engineLog;
@@ -501,6 +533,7 @@ $manifest = [ordered]@{
 }
 if (!$PrepareOnly) {
     $manifest.hgameSha256 = $build.hgameSha256
+    $manifest.buildCommit = if ($build.origin -eq 'imported-test-build') { $build.sourceBuild.commit } else { $build.commit }
     if ($null -ne $build.PSObject.Properties['m212ShareSha256']) {
         $manifest.m212ShareSha256 = $build.m212ShareSha256
     }

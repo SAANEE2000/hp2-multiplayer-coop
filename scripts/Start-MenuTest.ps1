@@ -150,6 +150,20 @@ foreach ($name in @('HGame.u', 'M212Share.u')) {
         throw "Test package differs from the verified build: $name"
     }
 }
+if ($isVersusContainer) {
+    $kitManifestPath = Join-Path $repo 'KIT_MANIFEST.json'
+    if (Test-Path -LiteralPath $kitManifestPath -PathType Leaf) {
+        $kit = Get-Content -LiteralPath $kitManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach ($pair in @(@('HGame.u','hgameSha256'),@('M212Share.u','m212ShareSha256'))) {
+            $expected = $kit.packages.($pair[0])
+            $actual = $build.($pair[1])
+            if ($expected -and ![string]::Equals($expected, $actual,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                Write-Warning "Installed $($pair[0]) differs from this test kit: expected=$expected actual=$actual. Both PCs must use the same binary kit."
+            }
+        }
+    }
+}
 
 if ($PlayerName -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,22}$') {
     throw 'Player name must be 1-23 letters, digits, _ or -.'
@@ -172,6 +186,10 @@ if ($LaunchMode -notin @('CoopHost','VersusHost','HideSeekHost')) {
         -WindowX $WindowX -WindowY $WindowY -WindowWidth $WindowWidth -WindowHeight $WindowHeight
     if ($prepared.status -ne 'PREPARED') { throw 'Could not prepare the isolated menu profile.' }
     $runRoot = $prepared.runRoot
+    # Keep the real Game.exe log name aligned with the prepared session so
+    # CollectSession can find it. The old menu generated a second name and
+    # left launch.json permanently marked PREPARED.
+    $logName = Split-Path $prepared.engineLog -Leaf
 }
 $url = switch ($LaunchMode) {
     Original   { 'startup.unr?game=Engine.GameInfo' }
@@ -294,6 +312,21 @@ $windowPositionApplied = Set-ProcessWindowPosition -Process $process `
 if (!$windowPositionApplied) {
     Write-Warning 'The game is windowed, but its window handle was not available for positioning within 12 seconds.'
 }
+$runManifest = Join-Path $runRoot 'launch.json'
+$record = Get-Content -LiteralPath $runManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+$record | Add-Member -NotePropertyName status -NotePropertyValue 'STARTED' -Force
+$record | Add-Member -NotePropertyName processId -NotePropertyValue $process.Id -Force
+$record | Add-Member -NotePropertyName started -NotePropertyValue (Get-Date -Format o) -Force
+$record | Add-Member -NotePropertyName arguments -NotePropertyValue @($arguments) -Force
+$record | Add-Member -NotePropertyName hgameSha256 -NotePropertyValue $build.hgameSha256 -Force
+$record | Add-Member -NotePropertyName m212ShareSha256 -NotePropertyValue $build.m212ShareSha256 -Force
+$record | Add-Member -NotePropertyName buildCommit -NotePropertyValue $(if ($build.origin -eq 'imported-test-build') { $build.sourceBuild.commit } else { $build.commit }) -Force
+$record | Add-Member -NotePropertyName localMapSha256 -NotePropertyValue ((Get-FileHash -LiteralPath (Join-Path $gameRoot "Maps\$mapName") -Algorithm SHA256).Hash) -Force
+$arenaMap = Join-Path $gameRoot 'Maps\Arena_Grounds_hub.unr'
+if (Test-Path -LiteralPath $arenaMap -PathType Leaf) {
+    $record | Add-Member -NotePropertyName arenaMapSha256 -NotePropertyValue ((Get-FileHash -LiteralPath $arenaMap -Algorithm SHA256).Hash) -Force
+}
+$record | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $runManifest -Encoding UTF8
 $documents = [Environment]::GetFolderPath('MyDocuments')
 Write-Output "Test game is running (PID $($process.Id), mode $LaunchMode): $exe"
 Write-Output "Native resizable viewport requested: ${WindowWidth}x${WindowHeight}; window position X=$WindowX, Y=$WindowY applied=$windowPositionApplied"

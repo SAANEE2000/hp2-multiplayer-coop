@@ -11,17 +11,19 @@ var() sound PickupSound;
 var vector BaseLocation;
 var float BobPhase;
 var bool bAvailable;
+var bool bBaseLocationReady;
 
 replication
 {
     reliable if (Role == ROLE_Authority)
-        bAvailable;
+        bAvailable, BaseLocation, bBaseLocationReady;
 }
 
 function PostBeginPlay()
 {
     Super.PostBeginPlay();
     BaseLocation = Location;
+    bBaseLocationReady = True;
     bAvailable = True;
     SetCollision(True, False, False);
     bCollideWorld = False;
@@ -34,7 +36,7 @@ simulated function Tick(float DeltaTime)
 
     Super.Tick(DeltaTime);
     bHidden = !bAvailable;
-    if (!bAvailable)
+    if (!bAvailable || !bBaseLocationReady)
         return;
 
     R = Rotation;

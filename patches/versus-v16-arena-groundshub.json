@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-arena-groundshub",
+  "description": "Supply only the missing eighth Arena Grounds FFA start at runtime without modifying the original map.",
+  "source_snapshot": "network visibility commit 625e996",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "2a4e71db7d6e33ddf376ca97a2c3921153656d9c035c2d70c5a85daed358ef7e",
+      "result_sha256": "8c64e93245ac03ae2df3cc0e02130a3cd0dc73f3269de31c86eb1281980e8d55",
+      "replacements": [
+        {
+          "old": "    Super.PostBeginPlay();\n    bMatchInProgress = False;\n    VersusPhase = 'WaitingForPlayers';\n    SetTimer(0.20, True);\n    CleanupLegacyHarryActors();\n    SpawnVersusDirector();\n    SpawnVersusPickups();\n    SpawnVersusInteractionArena();\n    UpdateVersusGRI();\n}\n\nfunction bool IsVersusInteractionMap()\n{\n    return InStr(Caps(string(Level)), \"HPV_INTERACTIONS\") >= 0;\n",
+          "new": "    Super.PostBeginPlay();\n    bMatchInProgress = False;\n    VersusPhase = 'WaitingForPlayers';\n    SetTimer(0.20, True);\n    CleanupLegacyHarryActors();\n    EnsureArenaGroundsEighthStart();\n    SpawnVersusDirector();\n    SpawnVersusPickups();\n    SpawnVersusInteractionArena();\n    UpdateVersusGRI();\n}\n\n// The supplied arena has only slots 0-6. Add the missing slot on the server\n// without altering or redistributing a modified copy of the original map.\nfunction EnsureArenaGroundsEighthStart()\n{\n    local HPVersusStart S;\n    local HPVersusStart Anchor;\n    local HPVersusArenaStart NewStart;\n    local Vector Candidate;\n    local Vector HitLocation;\n    local Vector HitNormal;\n    local Actor Floor;\n\n    if (Role != ROLE_Authority || MaxPlayers < 8\n        || InStr(Caps(string(Level)), \"ARENA_GROUNDS_HUB\") < 0\n        || VersusStartIndexExists(7))\n        return;\n    foreach AllActors(Class'HPVersusStart', S)\n        if (S.bEnabled && S.VersusSpawnIndex == 0)\n        {\n            Anchor = S;\n            break;\n        }\n    if (Anchor == None)\n    {\n        Log(\"HPVersusArenaStart ERROR: slot 0 anchor is missing\");\n        return;\n    }\n    Candidate = Anchor.Location + vect(0,-224,0);\n    Floor = Trace(HitLocation, HitNormal,\n        Candidate - vect(0,0,512), Candidate + vect(0,0,128), False);\n    if (Floor == None || HitNormal.Z < 0.7)\n    {\n        Log(\"HPVersusArenaStart ERROR: no safe floor at \" $ string(Candidate));\n        return;\n    }\n    Candidate.Z = HitLocation.Z + Anchor.CollisionHeight;\n    NewStart = Spawn(Class'HPVersusArenaStart',,, Candidate, Anchor.Rotation);\n    if (NewStart == None)\n    {\n        Log(\"HPVersusArenaStart ERROR: spawn failed at \" $ string(Candidate));\n        return;\n    }\n    NewStart.VersusSpawnIndex = 7;\n    NewStart.bEnabled = True;\n    Log(\"HPVersusArenaStart added slot=7 start=\" $ string(NewStart)\n        $ \" location=\" $ string(NewStart.Location)\n        $ \" anchor=\" $ string(Anchor));\n}\n\nfunction bool IsVersusInteractionMap()\n{\n    return InStr(Caps(string(Level)), \"HPV_INTERACTIONS\") >= 0;\n",
+          "old_sha256": "82cf5c2e5afb98a6aeb598b901f0872e3d9a5e388487af33f818378667697f90",
+          "new_sha256": "9512f626fa1424cd14c6488ef82033ed0805fad6875f30b20d9ddb07cb31c621"
+        }
+      ]
+    }
+  ]
+}

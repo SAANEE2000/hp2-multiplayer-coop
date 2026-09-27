@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-no-cast-cooldown",
+  "description": "Remove client and server spell-fire cooldown gates and clear the replicated HUD deadline; preserve spell whitelist and debuffs.",
+  "source_snapshot": "network visibility 625e996 plus Arena Grounds runtime start",
+  "string_encoding": "latin-1-byte-preserving",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "13f92843c53c6675729732545cef228cf3631bd90d205767258fe4ec0b603ecd",
+      "result_sha256": "13f86a1501b69d3c3f5a7ab78abb2528d939b39187e83bf0fbcf2cc8ab860a87",
+      "replacements": [
+        {
+          "old": "    if (Level.TimeSeconds < NextVersusClientCastTime || IsVersusSpellLocked())\n        return;\n\n    NextVersusClientCastTime = Level.TimeSeconds\n        + GetVersusSpellCooldown(SelectedVersusSpell);\n    AimRot = GetVersusAimRotation();",
+          "new": "    if (IsVersusSpellLocked())\n        return;\n\n    AimRot = GetVersusAimRotation();",
+          "old_sha256": "c444fea98707337631476c4075ac5a6dc1ee2399b1e39d8ea7e097125c0562c1",
+          "new_sha256": "c3dc1ab8e6e8ae54a9649bf83f04f92899b906df74f1ae8f24495a0dc68f00e5"
+        },
+        {
+          "old": "    if (Level.TimeSeconds < NextVersusServerCastTime)\n    {\n        Log(\"HPVersusCastReject reason=cooldown pawn=\" $ string(self)\n            $ \" slot=\" $ string(VersusSlot));\n        return;\n    }\n\n    if (bVersusDead || Health <= 0)",
+          "new": "    if (bVersusDead || Health <= 0)",
+          "old_sha256": "b7d525bc20c0f065e4fe6ad506032fab00ccb6a526a23d7eaae5ea691b2d0c13",
+          "new_sha256": "6ee887efb29bb5ba1a12e5bb9d804ebe5a9180efaa23775ac107ca4d75c5d407"
+        },
+        {
+          "old": "    NextVersusServerCastTime = Level.TimeSeconds\n        + GetVersusSpellCooldown(SelectedVersusSpell);\n    VersusCooldownEndTime = NextVersusServerCastTime;\n    Charge = FClamp(Charge, 0.0, 1.0);",
+          "new": "    // No fire cooldown. Keep the replicated HUD field clear even if an\n    // older prepared pawn retained a server-time deadline.\n    VersusCooldownEndTime = 0.0;\n    Charge = FClamp(Charge, 0.0, 1.0);",
+          "old_sha256": "5a1e0a03bc83d6869b2fe939d40fcd079e7fd5fe0a05e087368d07b6e3082dca",
+          "new_sha256": "b56f8106beacf5dfa59bb6c9c0a9a43f83ba450a4027f750d54d11014be01eac"
+        }
+      ]
+    },
+    {
+      "path": "HGame/Classes/HPVersusGame.uc",
+      "source_sha256": "8c64e93245ac03ae2df3cc0e02130a3cd0dc73f3269de31c86eb1281980e8d55",
+      "result_sha256": "96e25604b327824bdd5a4adc6dbfbb542f1d651f3341252a61e56d5b8dd25229",
+      "replacements": [
+        {
+          "old": "    local float RemainingCooldown;\n    local HPVersusPRI ProbeAPRI;",
+          "new": "    local byte CastSerialBefore;\n    local byte CastSerialFirst;\n    local HPVersusPRI ProbeAPRI;",
+          "old_sha256": "833fbe61068b2263340d04cec0fa8b1c1f1932ca1f86230017dda4ad3992997e",
+          "new_sha256": "bf83cc919ee23408fba8b81ba66790a8e4182313da8c0e23e8dad29353e7fe50"
+        },
+        {
+          "old": "        A.NextVersusServerCastTime = 0.0;\n        A.ServerRequestCast(1.0, A.Rotation, A.GetVersusFallbackMuzzle(A.Rotation));\n        RemainingCooldown = A.NextVersusServerCastTime - Level.TimeSeconds;\n        VersusProbeResult(RemainingCooldown > 0.60 && RemainingCooldown < 0.80,\n            \"per-spell-server-cooldown\");",
+          "new": "        // A stale deadline from an older build must never suppress fire.\n        A.NextVersusServerCastTime = Level.TimeSeconds + 1400.0;\n        A.VersusCooldownEndTime = A.NextVersusServerCastTime;\n        CastSerialBefore = A.VersusCastSerial;\n        A.ServerRequestCast(1.0, A.Rotation, A.GetVersusFallbackMuzzle(A.Rotation));\n        CastSerialFirst = A.VersusCastSerial;\n        A.ServerRequestCast(1.0, A.Rotation, A.GetVersusFallbackMuzzle(A.Rotation));\n        VersusProbeResult(CastSerialFirst != CastSerialBefore\n            && A.VersusCastSerial != CastSerialFirst\n            && A.VersusCooldownEndTime == 0.0,\n            \"repeat-cast-without-cooldown\");",
+          "old_sha256": "2e39b9d7ea0bcab27353c410b1e7cf8da916ab444c2e931fdd3f6fe77301bd50",
+          "new_sha256": "3e29de2db9c5c3b380db5cd40f663b55cf2e11f50740c9c5b7d77c23999eb2de"
+        }
+      ]
+    }
+  ]
+}

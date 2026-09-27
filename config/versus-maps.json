@@ -20,6 +20,15 @@
       "MaxPlayers": 8
     },
     {
+      "MapId": "ArenaGroundsHub",
+      "DisplayName": "Arena Grounds Hub",
+      "PackageName": "Arena_Grounds_hub",
+      "SupportsFFA": true,
+      "SupportsHideSeek": false,
+      "MinPlayers": 2,
+      "MaxPlayers": 8
+    },
+    {
       "MapId": "HideSeekLab",
       "DisplayName": "Hide & Seek Lab",
       "PackageName": "HPV_HideSeek",

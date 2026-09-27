@@ -148,7 +148,16 @@ if ($RuntimeProbe -in @('MountRootB0','MountRootB1','Travel') -and (!$FirstIntro
     throw 'MountRootB0/B1/Travel requires normal FirstIntroPreflight without an injected fault.'
 }
 if ($Role -eq 'Host' -and !(Test-Path -LiteralPath (Join-Path $WorkRoot "Maps\$mapName.unr") -PathType Leaf)) {
+    if ($mapName -ieq 'Arena_Grounds_hub') {
+        throw "Arena_Grounds_hub.unr is not installed. Run scripts\Prepare-ArenaGroundsHub.ps1 -SourcePath PATH_TO_Maps.zip first."
+    }
     throw "Map is not installed: $mapName.unr"
+}
+if ($Role -eq 'Host' -and $mapName -ieq 'Arena_Grounds_hub') {
+    $arenaHash = (Get-FileHash -LiteralPath (Join-Path $WorkRoot 'Maps\Arena_Grounds_hub.unr') -Algorithm SHA256).Hash
+    if ($arenaHash -ne '25A8168CE20520179A24542DC75F0C649B07443BC8450420E176938992659D49') {
+        throw "Arena_Grounds_hub.unr hash mismatch: $arenaHash. Reinstall it with scripts\Prepare-ArenaGroundsHub.ps1."
+    }
 }
 # Only an address/hostname is accepted, never an Unreal URL or extra URL options.
 if ([Uri]::CheckHostName($Server) -notin @([UriHostNameType]::Dns,[UriHostNameType]::IPv4)) {

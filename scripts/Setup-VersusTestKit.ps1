@@ -3,6 +3,16 @@ param([Parameter(Mandatory=$true)][string]$GameRoot)
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
+$kitManifest = Join-Path $repo 'KIT_MANIFEST.json'
+if (Test-Path -LiteralPath $kitManifest -PathType Leaf) {
+    $kit = Get-Content -LiteralPath $kitManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($kit.kind -eq 'hp2-versus-arena-full-test') {
+        # The full Arena kit contains a newer binary than the legacy v16 fixture
+        # below. Installing that fixture would silently replace the kit build.
+        & (Join-Path $PSScriptRoot 'Setup-ArenaGroundsTestKit.ps1') -GameRoot $GameRoot
+        return
+    }
+}
 $payloadRoot = Join-Path $repo 'private-test'
 $archivePath = Join-Path $repo 'HPVersus_v16_remote_bottom_align_20260905.zip'
 $artifactPath = Join-Path $payloadRoot 'hp2-versus-v16-test-build.zip'

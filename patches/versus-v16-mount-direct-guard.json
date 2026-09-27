@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-mount-direct-guard",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "7756ac12e42971c7e4e538460bf2f826606d8c360184f0e007f1cb206fb42a91",
+      "result_sha256": "0c5c946760f635c1d815987dfc9dda2aca6980c822566d4f21b534abb050016c",
+      "replacements": [
+        {
+          "old": "    if (bUseEngineNetworkMovement)\n        return;\n\n    // Native mounting owns movement and collision until MountFinish ends.",
+          "new": "    if (bUseEngineNetworkMovement || bVersusMountNetActive\n        || bVersusMountAwaitResume)\n        return;\n\n    // Native mounting owns movement and collision until MountFinish ends."
+        }
+      ]
+    }
+  ]
+}

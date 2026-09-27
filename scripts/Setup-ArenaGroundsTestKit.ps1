@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $donor = Join-Path $repo 'HPVersus_v16_remote_bottom_align_20260905.zip'
 $artifact = Join-Path $repo 'private-test\hp2-versus-arena-build.zip'
+$kitManifest = Join-Path $repo 'KIT_MANIFEST.json'
 $startup = Join-Path $repo 'private-test\Maps\startup.unr'
 $arena = Join-Path $repo 'private-test\Maps\Arena_Grounds_hub.unr'
 $versusRoot = Join-Path $repo '.local\versus-v16-game'
@@ -26,6 +27,15 @@ foreach ($path in $expected.Keys) {
     if ($hash -ne $expected[$path]) { throw "Test kit file hash mismatch: $path actual=$hash" }
 }
 if (!(Test-Path -LiteralPath $artifact -PathType Leaf)) { throw "Test build is missing: $artifact" }
+if (Test-Path -LiteralPath $kitManifest -PathType Leaf) {
+    $kit = Get-Content -LiteralPath $kitManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($kit.kind -ne 'hp2-versus-arena-full-test' -or
+        $kit.files.'private-test/hp2-versus-arena-build.zip'.sha256 -notmatch '^[A-Fa-f0-9]{64}$' -or
+        (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash -ne
+            $kit.files.'private-test/hp2-versus-arena-build.zip'.sha256) {
+        throw 'Arena test build does not match KIT_MANIFEST.json.'
+    }
+}
 
 & (Join-Path $PSScriptRoot 'Prepare-LocalGame.ps1') -GameRoot $GameRoot -WorkRoot $menuRoot | Out-Null
 $v16Marker = Join-Path $versusRoot '.hp2-versus-v16-source.json'
@@ -57,7 +67,18 @@ foreach ($name in @('startup.unr','HPV_Interactions.unr','HPV_HideSeek.unr')) {
     }
 }
 & (Join-Path $PSScriptRoot 'Prepare-ArenaGroundsHub.ps1') -SourcePath $arena -WorkRoot $versusRoot | Out-Null
-& (Join-Path $PSScriptRoot 'Import-TestBuild.ps1') -Artifact $artifact -WorkRoot $versusRoot -ValidateOnly | Out-Null
+$validated = & (Join-Path $PSScriptRoot 'Import-TestBuild.ps1') -Artifact $artifact -WorkRoot $versusRoot -ValidateOnly |
+    Out-String | ConvertFrom-Json
+if ($kit) {
+    foreach ($name in @('HGame.u','M212Share.u')) {
+        $record = @($validated.files | Where-Object { $_.name -eq $name })
+        if ($record.Count -ne 1 -or
+            ![string]::Equals($record[0].sha256, $kit.packages.$name,
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Arena test build package $name does not match KIT_MANIFEST.json."
+        }
+    }
+}
 & (Join-Path $PSScriptRoot 'Import-TestBuild.ps1') -Artifact $artifact -WorkRoot $versusRoot | Out-Null
 Write-Output 'Arena Grounds test kit installed. Open Play-Menu-Test.cmd, then Versus > Free For All > Arena Grounds Hub.'
 Write-Output "WorkRoot: $versusRoot"

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "versus-v16-mount-input-guard",
+  "files": [
+    {
+      "path": "HGame/Classes/HPVersusHarry.uc",
+      "source_sha256": "6661b6c07772e975d35d5c9d10700ff261787ad2665b055435eae3e60cf1628f",
+      "result_sha256": "5dddafdd936c9ebd14f84b40f424f3c3478bed71a49a8f7f421783da19639bb9",
+      "replacements": [
+        {
+          "old": "    if (bUseEngineNetworkMovement)\n        return;\n\n    bKeepStationary = False;",
+          "new": "    if (bUseEngineNetworkMovement)\n        return;\n\n    // Native mounting owns movement and collision until MountFinish ends.\n    // The direct fallback must not discard that state on the next input RPC.\n    if (IsInState('Mounting') || IsInState('MountFinish'))\n        return;\n\n    bKeepStationary = False;"
+        },
+        {
+          "old": "    if (bVersusDead || !IsLocalViewportPlayer())\n        return;\n\n    // Keep the pawn in a controllable state.  HP2 single-player cutscene/menu\n    // paths can leave these flags latched after network travel.",
+          "new": "    if (bVersusDead || !IsLocalViewportPlayer())\n        return;\n\n    // Let HP2's Mounting/MountFinish finish the root-motion climb. The input\n    // bootstrap below would otherwise GotoState(PlayerWalking) every frame,\n    // interrupting the climb and its temporary collision-size restoration.\n    if (IsInState('Mounting') || IsInState('MountFinish'))\n    {\n        aForward = 0.0;\n        aStrafe = 0.0;\n        bPressedJump = False;\n        bVersusJumpWasDown = bVersusJump;\n        return;\n    }\n\n    // Keep the pawn in a controllable state.  HP2 single-player cutscene/menu\n    // paths can leave these flags latched after network travel."
+        }
+      ]
+    }
+  ]
+}
